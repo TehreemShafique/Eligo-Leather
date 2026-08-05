@@ -23,47 +23,47 @@ APP_DEFINITIONS: list[dict] = [
     # ------------------------------------------------------------------
     # SMS providers
     # ------------------------------------------------------------------
-    {
-        "code": "twilio_sms",
-        "name": "Twilio SMS",
-        "category": "sms",
-        "description": "Send order status updates and promotional texts.",
-        "actions": ["send_sms"],
-        "credential_fields": [
-            {"name": "account_sid", "label": "Account SID", "type": "password"},
-            {"name": "auth_token", "label": "Auth Token", "type": "password"},
-            {"name": "from_number", "label": "From Phone Number", "type": "text"},
-        ],
-        "config_fields": [],
-    },
-    {
-        "code": "viro_sms",
-        "name": "Viro SMS",
-        "category": "sms",
-        "description": "Pakistani SMS gateway for order alerts and OTPs.",
-        "actions": ["send_sms"],
-        "credential_fields": [
-            {"name": "api_key", "label": "API Key", "type": "password"},
-            {"name": "sender_id", "label": "Sender ID / Mask", "type": "text"},
-        ],
-        "config_fields": [],
-    },
+    # {
+    #     "code": "twilio_sms",
+    #     "name": "Twilio SMS",
+    #     "category": "sms",
+    #     "description": "Send order status updates and promotional texts.",
+    #     "actions": ["send_sms"],
+    #     "credential_fields": [
+    #         {"name": "account_sid", "label": "Account SID", "type": "password"},
+    #         {"name": "auth_token", "label": "Auth Token", "type": "password"},
+    #         {"name": "from_number", "label": "From Phone Number", "type": "text"},
+    #     ],
+    #     "config_fields": [],
+    # },
+    # {
+    #     "code": "viro_sms",
+    #     "name": "Viro SMS",
+    #     "category": "sms",
+    #     "description": "Pakistani SMS gateway for order alerts and OTPs.",
+    #     "actions": ["send_sms"],
+    #     "credential_fields": [
+    #         {"name": "api_key", "label": "API Key", "type": "password"},
+    #         {"name": "sender_id", "label": "Sender ID / Mask", "type": "text"},
+    #     ],
+    #     "config_fields": [],
+    # },
     # ------------------------------------------------------------------
     # Email providers
     # ------------------------------------------------------------------
-    {
-        "code": "sendgrid_email",
-        "name": "SendGrid Email",
-        "category": "email",
-        "description": "Transactional and marketing email delivery.",
-        "actions": ["send_email"],
-        "credential_fields": [
-            {"name": "api_key", "label": "API Key", "type": "password"},
-            {"name": "from_email", "label": "From Email", "type": "text"},
-            {"name": "from_name", "label": "From Name", "type": "text"},
-        ],
-        "config_fields": [],
-    },
+    # {
+    #     "code": "sendgrid_email",
+    #     "name": "SendGrid Email",
+    #     "category": "email",
+    #     "description": "Transactional and marketing email delivery.",
+    #     "actions": ["send_email"],
+    #     "credential_fields": [
+    #         {"name": "api_key", "label": "API Key", "type": "password"},
+    #         {"name": "from_email", "label": "From Email", "type": "text"},
+    #         {"name": "from_name", "label": "From Name", "type": "text"},
+    #     ],
+    #     "config_fields": [],
+    # },
     {
         "code": "resend_email",
         "name": "Resend Email",
@@ -79,19 +79,19 @@ APP_DEFINITIONS: list[dict] = [
     # ------------------------------------------------------------------
     # Payments
     # ------------------------------------------------------------------
-    {
-        "code": "stripe_payments",
-        "name": "Stripe Payments",
-        "category": "payments",
-        "description": "Accept card payments via Stripe.",
-        "actions": ["create_payment_intent", "capture_payment"],
-        "credential_fields": [
-            {"name": "secret_key", "label": "Secret Key", "type": "password"},
-            {"name": "publishable_key", "label": "Publishable Key", "type": "text"},
-            {"name": "webhook_secret", "label": "Webhook Secret", "type": "password"},
-        ],
-        "config_fields": [],
-    },
+    # {
+    #     "code": "stripe_payments",
+    #     "name": "Stripe Payments",
+    #     "category": "payments",
+    #     "description": "Accept card payments via Stripe.",
+    #     "actions": ["create_payment_intent", "capture_payment"],
+    #     "credential_fields": [
+    #         {"name": "secret_key", "label": "Secret Key", "type": "password"},
+    #         {"name": "publishable_key", "label": "Publishable Key", "type": "text"},
+    #         {"name": "webhook_secret", "label": "Webhook Secret", "type": "password"},
+    #     ],
+    #     "config_fields": [],
+    # },
     # ------------------------------------------------------------------
     # Shipping / tracking
     # ------------------------------------------------------------------
@@ -120,35 +120,35 @@ APP_DEFINITIONS: list[dict] = [
         ],
         "config_fields": [],
     },
-    {
-        "code": "seventeen_track",
-        "name": "17TRACK",
-        "category": "tracking",
-        "description": "Track orders across hundreds of carriers.",
-        "actions": ["track_shipment"],
-        "credential_fields": [
-            {"name": "api_key", "label": "API Key", "type": "password"},
-        ],
-        "config_fields": [],
-    },
+    # {
+    #     "code": "seventeen_track",
+    #     "name": "17TRACK",
+    #     "category": "tracking",
+    #     "description": "Track orders across hundreds of carriers.",
+    #     "actions": ["track_shipment"],
+    #     "credential_fields": [
+    #         {"name": "api_key", "label": "API Key", "type": "password"},
+    #     ],
+    #     "config_fields": [],
+    # },
     # ------------------------------------------------------------------
     # Marketing / reviews / analytics
     # ------------------------------------------------------------------
+    # {
+    #     "code": "klaviyo_marketing",
+    #     "name": "Klaviyo Marketing",
+    #     "category": "marketing",
+    #     "description": "Email/SMS marketing flows and segmentation.",
+    #     "actions": ["sync_profile", "trigger_flow"],
+    #     "credential_fields": [
+    #         {"name": "private_api_key", "label": "Private API Key", "type": "password"},
+    #         {"name": "public_api_key", "label": "Public API Key", "type": "text"},
+    #     ],
+    #     "config_fields": [],
+    # },
     {
-        "code": "klaviyo_marketing",
-        "name": "Klaviyo Marketing",
-        "category": "marketing",
-        "description": "Email/SMS marketing flows and segmentation.",
-        "actions": ["sync_profile", "trigger_flow"],
-        "credential_fields": [
-            {"name": "private_api_key", "label": "Private API Key", "type": "password"},
-            {"name": "public_api_key", "label": "Public API Key", "type": "text"},
-        ],
-        "config_fields": [],
-    },
-    {
-        "code": "judgeme_reviews",
-        "name": "Judge.me Reviews",
+        "code": "supabase_reviews",
+        "name": "Supabase Reviews",
         "category": "reviews",
         "description": "Collect and display product reviews.",
         "actions": ["fetch_reviews", "post_review"],

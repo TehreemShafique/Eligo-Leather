@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.discounts.model import (
     DiscountStatus,
@@ -55,3 +55,26 @@ class DiscountOut(BaseModel):
     updated_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------------------
+# Welcome Discount
+# ---------------------------------------------------------------------------
+
+class WelcomeDiscountOut(BaseModel):
+    discount_percentage: float
+    is_active: bool
+    updated_by: int | None
+    updated_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WelcomeDiscountUpdate(BaseModel):
+    discount_percentage: float | None = Field(default=None, ge=0, le=100)
+    is_active: bool | None = None
+
+
+class WelcomeDiscountResult(BaseModel):
+    show_welcome_discount: bool = False
+    discount_percentage: float | None = None

@@ -1,314 +1,325 @@
 """Third-party provider adapters for installed apps.
 
-Every installed app's actions are dispatched here. Each adapter receives:
+ENV-BASED CREDENTIAL LOGIC
+---------------------------------------------------------------------
+This module assumes a single store / single set of provider accounts.
+Every adapter reads its own credentials straight from os.environ - no
+credentials dict is passed in from the caller anymore. Make sure your
+.env is loaded before this module's functions are called (e.g. via
+python-dotenv's load_dotenv() at your app's entrypoint, or your
+framework's own settings loader) - this file does NOT call load_dotenv()
+itself, to avoid double-loading or clashing with your app's existing
+config setup.
 
-    credentials  - decrypted dict of the provider's API keys/tokens
-    settings     - plugin-specific config stored on the app row
-    payload      - the request payload from the action endpoint
+Each adapter receives only:
+    payload  - the request payload from the action endpoint
 
-The real provider SDK / REST calls go inside the marked sections below.
-Until they are wired up, actions return a clear "not wired" message so the
-frontend can show that the integration is configured but not yet connected.
-
------centralized dispatcher and registry for all third-party integrations (such as SMS gateways, email providers, payment processors, and couriers)----
+Required env vars per provider are listed above each adapter.
 """
 
-# =====================================================================
-# WHERE TO ADD YOUR PROVIDER APIS
-# ---------------------------------------------------------------------
-# SMS   : pip install twilio   -> app.modules.settings.apps.adapters._twilio_*
-#         pip install viro     -> app.modules.settings.apps.adapters._viro_*
-# EMAIL : pip install sendgrid -> app.modules.settings.apps.adapters._sendgrid_*
-#         pip install resend   -> app.modules.settings.apps.adapters._resend_*
-# PAYMENTS : pip install stripe -> app.modules.settings.apps.adapters._stripe_* not needed bcz payment is cod
-# SHIPPING : call Leopards / Sonic-Trax REST endpoints directly.
-# TRACKING : call 17TRACK REST endpoint directly.
-# =====================================================================
+import os
 
+import httpx
 
 class AdapterError(Exception):
-    """Raised when an adapter call fails (bad creds, provider error, etc.)."""
+    """Raised when an adapter call fails (missing env var, bad creds, provider error, etc.)."""
+    pass
 
 
-# ============================ SMS =====================================
+def _require_env(key: str) -> str:
+    """Fetch a required env var, or raise a clear AdapterError instead of a bare KeyError."""
+    value = os.environ.get(key)
+    if not value:
+        raise AdapterError(
+            f"Missing required env var '{key}'. Add it to your .env file."
+        )
+    return value
 
 
-async def _twilio_send_sms(credentials: dict, settings: dict, payload: dict) -> dict:
-    """Twilio SMS - action: send_sms. Payload: {to, body}"""
-    # =================================================================
-    # ADD TWILIO SMS API HERE
-    # from twilio.rest import Client
-    # client = Client(credentials["account_sid"], credentials["auth_token"])
-    # message = client.messages.create(
-    #     body=payload["body"],
-    #     from_=credentials["from_number"],
-    #     to=payload["to"],
-    # )
-    # return {"success": True, "message_sid": message.sid}
-    # =================================================================
-    return {
-        "success": False,
-        "message": "Twilio SMS API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
-    }
+# ============================ EMAIL (Resend) ===========================
+# Required env: RESEND_API_KEY, RESEND_FROM_EMAIL
+# Get the API key from Resend Dashboard -> API Keys. RESEND_FROM_EMAIL
+# must be an address on a domain you've verified in Resend -> Domains,
+# otherwise sends will fail (or be restricted to their sandbox address).
+
+RESEND_SEND_URL = "https://api.resend.com/emails"
 
 
-# async def _viro_send_sms(credentials: dict, settings: dict, payload: dict) -> dict:
-#     """Viro SMS - action: send_sms. Payload: {to, body}"""
-#     # =================================================================
-#     # ADD VIRO SMS API HERE (Pakistani gateway, use their REST endpoint)
-#     # url = "https://www.viro.com.pk/api/sms.php"
-#     # params = {
-#     #     "apikey": credentials["api_key"],
-#     #     "senderid": credentials["sender_id"],
-#     #     "number": payload["to"],
-#     #     "message": payload["body"],
-#     # }
-#     # async with httpx.AsyncClient() as client:
-#     #     resp = await client.get(url, params=params)
-#     #     resp.raise_for_status()
-#     # return {"success": True, "response": resp.json()}
-#     # =================================================================
-#     return {
-#         "success": False,
-#         "message": "Viro SMS API not wired yet - add it in "
-#         "app/modules/settings/apps/adapters/__init__.py",
-#     }
-
-
-# ============================ EMAIL ===================================
-# 100 emails/day for 60 days free .... $19.95 per month
-
-async def _sendgrid_send_email(credentials: dict, settings: dict, payload: dict) -> dict:
-    """SendGrid Email - action: send_email. Payload: {to, subject, html}"""
-    # =================================================================
-    # ADD SENDGRID EMAIL API HERE
-    # from sendgrid import SendGridAPIClient
-    # from sendgrid.helpers.mail import Mail
-    # message = Mail(
-    #     from_email=credentials["from_email"],
-    #     to_emails=payload["to"],
-    #     subject=payload["subject"],
-    #     html_content=payload["html"],
-    # )
-    # response = SendGridAPIClient(credentials["api_key"]).send(message)
-    # return {"success": response.status_code in (200, 202), "status_code": response.status_code}
-    # =================================================================
-    return {
-        "success": False,
-        "message": "SendGrid Email API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
-    }
-
-
-# async def _resend_send_email(credentials: dict, settings: dict, payload: dict) -> dict:
-#     """Resend Email - action: send_email. Payload: {to, subject, html}"""
-#     # =================================================================
-#     # ADD RESEND EMAIL API HERE
-#     # import resend
-#     # resend.api_key = credentials["api_key"]
-#     # response = resend.Emails.send({
-#     #     "from": credentials["from_email"],
-#     #     "to": payload["to"],
-#     #     "subject": payload["subject"],
-#     #     "html": payload["html"],
-#     # })
-#     # return {"success": bool(response.get("id")), "message_id": response.get("id")}
-#     # =================================================================
-#     return {
-#         "success": False,
-#         "message": "Resend Email API not wired yet - add it in "
-#         "app/modules/settings/apps/adapters/__init__.py",
-#     }
-
-
-# ============================ PAYMENTS ================================
-
-
-# async def _stripe_create_payment_intent(credentials: dict, settings: dict, payload: dict) -> dict:
-#     """Stripe Payments - action: create_payment_intent. Payload: {amount_cents, currency}"""
-#     # =================================================================
-#     # ADD STRIPE PAYMENT INTENT API HERE
-#     # import stripe
-#     # stripe.api_key = credentials["secret_key"]
-#     # intent = stripe.PaymentIntent.create(
-#     #     amount=payload["amount_cents"],
-#     #     currency=payload["currency"],
-#     #     automatic_payment_methods={"enabled": True},
-#     # )
-#     # return {"success": True, "client_secret": intent.client_secret, "id": intent.id}
-#     # =================================================================
-#     return {
-#         "success": False,
-#         "message": "Stripe API not wired yet - add it in "
-#         "app/modules/settings/apps/adapters/__init__.py",
-#     }
-
-
-# async def _stripe_capture_payment(credentials: dict, settings: dict, payload: dict) -> dict:
-#     """Stripe Payments - action: capture_payment. Payload: {payment_intent_id}"""
-#     # =================================================================
-#     # ADD STRIPE CAPTURE API HERE
-#     # import stripe
-#     # stripe.api_key = credentials["secret_key"]
-#     # intent = stripe.PaymentIntent.capture(payload["payment_intent_id"])
-#     # return {"success": intent.status == "succeeded", "status": intent.status}
-#     # =================================================================
-#     return {
-#         "success": False,
-#         "message": "Stripe API not wired yet - add it in "
-#         "app/modules/settings/apps/adapters/__init__.py",
-#     }
+async def _resend_send_email(payload: dict) -> dict:
+    """Resend - action: send_email. Payload: {to, subject, html}"""
+    api_key = _require_env("RESEND_API_KEY")
+    from_email = _require_env("RESEND_FROM_EMAIL")
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                RESEND_SEND_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "from": from_email,
+                    "to": [payload["to"]] if isinstance(payload["to"], str) else payload["to"],
+                    "subject": payload["subject"],
+                    "html": payload["html"],
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return {"success": True, "id": data.get("id")}
+    except httpx.HTTPError as exc:
+        raise AdapterError(f"Resend send_email failed: {exc}")
 
 
 # ============================ SHIPPING / TRACKING ====================
 
+# ---- Leopards Courier ----
+# Required env: LEOPARDS_API_KEY, LEOPARDS_API_PASSWORD
+# Get these from your Leopards merchant portal / account manager - not
+# self-generated. Endpoint paths below are placeholders - confirm exact
+# paths and field names against your Leopards API docs before relying
+# on this in production.
 
-async def _leopards_create_shipment(credentials: dict, settings: dict, payload: dict) -> dict:
-    """Leopards Courier - action: create_shipment."""
-    # =================================================================
-    # ADD LEOPARDS BOOKING API HERE (REST, JSON)
-    # url = "https://leopardscourier.com/api/create-order"
-    # headers = {"Authorization": f"Bearer {credentials['api_key']}"}
-    # ... POST payload["order"] ... return consignment number
-    # =================================================================
+LEOPARDS_BOOK_URL = "https://merchantapi.leopardscourier.com/api/bookPacket/format/json/"
+LEOPARDS_TRACK_URL = "https://merchantapi.leopardscourier.com/api/trackBookedPacket/format/json/"
+
+
+async def _leopards_create_shipment(payload: dict) -> dict:
+    """Leopards Courier - action: create_shipment. Payload: {order: {...}}"""
+    api_key = _require_env("LEOPARDS_API_KEY")
+    api_password = _require_env("LEOPARDS_API_PASSWORD")
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                LEOPARDS_BOOK_URL,
+                data={"api_key": api_key, "api_password": api_password, **payload.get("order", {})},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return {"success": True, "raw": data}
+    except httpx.HTTPError as exc:
+        raise AdapterError(f"Leopards create_shipment failed: {exc}")
+
+
+async def _leopards_track_shipment(payload: dict) -> dict:
+    """Leopards Courier - action: track_shipment. Payload: {waybill}"""
+    api_key = _require_env("LEOPARDS_API_KEY")
+    api_password = _require_env("LEOPARDS_API_PASSWORD")
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                LEOPARDS_TRACK_URL,
+                data={
+                    "api_key": api_key,
+                    "api_password": api_password,
+                    "track_numbers": payload["waybill"],
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return {"success": True, "raw": data}
+    except httpx.HTTPError as exc:
+        raise AdapterError(f"Leopards track_shipment failed: {exc}")
+
+
+# ---- Sonic-Trax ----
+# Required env: SONIC_TRAX_API_KEY, SONIC_TRAX_BASE_URL
+# You have the API key but not the base URL yet - these functions will
+# raise a clear AdapterError ("Missing required env var 'SONIC_TRAX_BASE_URL'")
+# if called before you fill it in. That's intentional - better a clear
+# error now than a silent failure hitting the wrong host later.
+# Endpoint paths below are placeholders - replace once Trax confirms
+# their exact contract.
+
+async def _sonic_trax_create_shipment(payload: dict) -> dict:
+    """Sonic-Trax - action: create_shipment. Payload: {order: {...}}"""
+    api_key = _require_env("SONIC_TRAX_API_KEY")
+    base_url = _require_env("SONIC_TRAX_BASE_URL")
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                base_url.rstrip("/") + "/create-order",  # TODO: confirm real path with Trax
+                headers={"Authorization": f"Bearer {api_key}"},
+                json=payload.get("order", {}),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return {"success": True, "raw": data}
+    except httpx.HTTPError as exc:
+        raise AdapterError(f"Sonic-Trax create_shipment failed: {exc}")
+
+
+async def _sonic_trax_track_shipment(payload: dict) -> dict:
+    """Sonic-Trax - action: track_shipment. Payload: {waybill}"""
+    api_key = _require_env("SONIC_TRAX_API_KEY")
+    base_url = _require_env("SONIC_TRAX_BASE_URL")
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(
+                base_url.rstrip("/") + "/track",  # TODO: confirm real path with Trax
+                headers={"Authorization": f"Bearer {api_key}"},
+                params={"waybill": payload["waybill"]},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return {"success": True, "raw": data}
+    except httpx.HTTPError as exc:
+        raise AdapterError(f"Sonic-Trax track_shipment failed: {exc}")
+
+
+
+async def _supabase_headers() -> dict:
+    key = _require_env("NEXT_PUBLIC_SUPABASE_SECRET_KEY")
     return {
-        "success": False,
-        "message": "Leopards API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
     }
 
 
-async def _leopards_track_shipment(credentials: dict, settings: dict, payload: dict) -> dict:
-    """Leopards Courier - action: track_shipment."""
-    # =================================================================
-    # ADD LEOPARDS TRACKING API HERE (REST)
-    # ... GET /track?waybill={payload["waybill"]} ... return status
-    # =================================================================
-    return {
-        "success": False,
-        "message": "Leopards tracking API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
-    }
+def _supabase_reviews_url() -> str:
+    base_url = _require_env("NEXT_PUBLIC_SUPABASE_URL").rstrip("/")
+    table = os.environ.get("SUPABASE_REVIEWS_TABLE", "reviews")
+    return f"{base_url}/rest/v1/{table}"
 
 
-async def _sonic_trax_create_shipment(credentials: dict, settings: dict, payload: dict) -> dict:
-    """Sonic-Trax Courier - action: create_shipment."""
-    # =================================================================
-    # ADD SONIC-TRAX BOOKING API HERE
-    # =================================================================
-    return {
-        "success": False,
-        "message": "Sonic-Trax API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
-    }
+async def _supabase_fetch_reviews(payload: dict) -> dict:
+    """Supabase Reviews - action: fetch_reviews. Payload: {external_id?, page?, per_page?}"""
+    try:
+        per_page = payload.get("per_page", 20)
+        page = payload.get("page", 1)
+        offset = (page - 1) * per_page
+
+        params = {
+            "select": "*",
+            "order": "created_at.desc",
+            "limit": str(per_page),
+            "offset": str(offset),
+        }
+        if payload.get("external_id"):
+            params["product_id"] = f"eq.{payload['external_id']}"
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                _supabase_reviews_url(),
+                headers=await _supabase_headers(),
+                params=params,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        return {"success": True, "reviews": data}
+    except httpx.HTTPError as exc:
+        raise AdapterError(f"Supabase fetch_reviews failed: {exc}")
 
 
-async def _sonic_trax_track_shipment(credentials: dict, settings: dict, payload: dict) -> dict:
-    """Sonic-Trax Courier - action: track_shipment."""
-    # =================================================================
-    # ADD SONIC-TRAX TRACKING API HERE
-    # =================================================================
-    return {
-        "success": False,
-        "message": "Sonic-Trax tracking API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
-    }
+async def _supabase_post_review(payload: dict) -> dict:
+    """Supabase Reviews - action: post_review.
+    Payload: {external_id, reviewer_name, reviewer_email, rating, title, body}
+    """
+    try:
+        body = {
+            "product_id": payload["external_id"],
+            "reviewer_name": payload["reviewer_name"],
+            "reviewer_email": payload["reviewer_email"],
+            "rating": payload["rating"],
+            "title": payload.get("title", ""),
+            "body": payload["body"],
+        }
+        headers = await _supabase_headers()
+        headers["Prefer"] = "return=representation"  # ask PostgREST to return the created row
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(_supabase_reviews_url(), headers=headers, json=body)
+            resp.raise_for_status()
+            data = resp.json()
+
+        return {"success": True, "review": data[0] if isinstance(data, list) and data else data}
+    except httpx.HTTPError as exc:
+        raise AdapterError(f"Supabase post_review failed: {exc}")
+
+#   FOR FRONTEND  LOGIC
+# function timeAgo(createdAt) {
+#   const diffDays = Math.floor((Date.now() - new Date(createdAt)) / 86400000);
+#   if (diffDays < 1) return "today";
+#   if (diffDays < 30) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+#   const months = Math.floor(diffDays / 30);
+#   return `${months} month${months === 1 ? "" : "s"} ago`;
+
+# const initials = reviewerName.split(" ").map(n => n[0]).join("").toUpperCase();
+# // render a circle div with `initials` if avatar_url is falsy, else an <img src={avatar_url}>
+
+# Array.from({ length: 5 }, (_, i) => i < rating ? "★" : "☆").join("")
+# }
+# ============================ ANALYTICS (Microsoft Clarity) ===========
+# Required env: CLARITY_API_TOKEN
+# Optional env: CLARITY_PROJECT_ID (kept for your own reference/logging;
+# not required by this particular endpoint)
+# Not in your current .env yet - left wired here so it's a one-line
+# env addition later rather than rewriting code. Get the token from
+# your Clarity project -> Settings -> Data Export -> Generate new API
+# token. Free, but capped at 10 requests/day per project, max 3 days
+# of data and 3 dimensions per request - poll sparingly (e.g. once
+# daily via a cron job).
+
+CLARITY_EXPORT_URL = "https://www.clarity.ms/export-data/api/v1/project-live-insights"
 
 
-# async def _seventeen_track_track_shipment(credentials: dict, settings: dict, payload: dict) -> dict:
-#     """17TRACK - action: track_shipment."""
-#     # =================================================================
-#     # ADD 17TRACK TRACKING API HERE
-#     # url = "https://api.17track.net/track/v2.2"
-#     # headers = {"17token": credentials["api_key"]}
-#     # ... POST {"tracking_number": payload["tracking_number"]} ... return status
-#     # =================================================================
-#     return {
-#         "success": False,
-#         "message": "17TRACK API not wired yet - add it in "
-#         "app/modules/settings/apps/adapters/__init__.py",
-#     }
+async def _clarity_fetch_insights(payload: dict) -> dict:
+    """Microsoft Clarity - action: fetch_insights.
+    Payload: {num_of_days?: 1|2|3, dimension1?, dimension2?, dimension3?}
+    """
+    api_token = _require_env("CLARITY_API_TOKEN")
+    try:
+        params = {"numOfDays": payload.get("num_of_days", 1)}
+        for key in ("dimension1", "dimension2", "dimension3"):
+            if payload.get(key):
+                params[key] = payload[key]
 
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                CLARITY_EXPORT_URL,
+                headers={"Authorization": f"Bearer {api_token}"},
+                params=params,
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-# ============================ MARKETING / REVIEWS ====================
-
-
-async def _klaviyo_sync_profile(credentials: dict, settings: dict, payload: dict) -> dict:
-    """Klaviyo Marketing - action: sync_profile."""
-    # =================================================================
-    # ADD KLAVIYO PROFILE SYNC API HERE
-    # =================================================================
-    return {
-        "success": False,
-        "message": "Klaviyo API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
-    }
-
-
-async def _klaviyo_trigger_flow(credentials: dict, settings: dict, payload: dict) -> dict:
-    """Klaviyo Marketing - action: trigger_flow."""
-    # =================================================================
-    # ADD KLAVIYO FLOW TRIGGER API HERE
-    # =================================================================
-    return {
-        "success": False,
-        "message": "Klaviyo API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
-    }
-
-
-async def _judgeme_fetch_reviews(credentials: dict, settings: dict, payload: dict) -> dict:
-    """Judge.me Reviews - action: fetch_reviews."""
-    # =================================================================
-    # ADD JUDGE.ME REVIEWS API HERE
-    # =================================================================
-    return {
-        "success": False,
-        "message": "Judge.me API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
-    }
-
-
-async def _judgeme_post_review(credentials: dict, settings: dict, payload: dict) -> dict:
-    """Judge.me Reviews - action: post_review."""
-    # =================================================================
-    # ADD JUDGE.ME POST REVIEW API HERE
-    # =================================================================
-    return {
-        "success": False,
-        "message": "Judge.me API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
-    }
-
-
-async def _google_analytics_verify_property(credentials: dict, settings: dict, payload: dict) -> dict:
-    """Google Analytics 4 - action: verify_property."""
-    # =================================================================
-    # ADD GOOGLE ANALYTICS VERIFY API HERE
-    # =================================================================
-    return {
-        "success": False,
-        "message": "Google Analytics API not wired yet - add it in "
-        "app/modules/settings/apps/adapters/__init__.py",
-    }
+        return {"success": True, "insights": data}
+    except httpx.HTTPError as exc:
+        raise AdapterError(f"Clarity fetch_insights failed: {exc}")
 
 
 # =====================================================================
-# ADAPTER REGISTRY
-# Maps app_code -> { action_name: adapter_callable }
-# When you add a new app, register its adapter here as well.
+# SKIPPED FOR NOW - SMS
 # =====================================================================
+
+# async def _twilio_send_sms(payload: dict) -> dict:
+#     """Twilio SMS - action: send_sms. Payload: {to, body}"""
+#     account_sid = _require_env("TWILIO_ACCOUNT_SID")
+#     auth_token = _require_env("TWILIO_AUTH_TOKEN")
+#     from_number = _require_env("TWILIO_FROM_NUMBER")
+#     from twilio.rest import Client
+#     client = Client(account_sid, auth_token)
+#     message = client.messages.create(body=payload["body"], from_=from_number, to=payload["to"])
+#     return {"success": True, "message_sid": message.sid}
+
+
+# =====================================================================
+# NOT WIRED - Klaviyo (not needed while flows are built manually)
+# =====================================================================
+
+# async def _klaviyo_sync_profile(payload: dict) -> dict:
+#     """Klaviyo Marketing - action: sync_profile."""
+#     ...
+#
+# async def _klaviyo_trigger_flow(payload: dict) -> dict:
+#     """Klaviyo Marketing - action: trigger_flow."""
+#     ...
+
 
 ADAPTERS: dict[str, dict[str, callable]] = {
-    "twilio_sms": {"send_sms": _twilio_send_sms},
-    # "viro_sms": {"send_sms": _viro_send_sms},
-    "sendgrid_email": {"send_email": _sendgrid_send_email},
-    # "resend_email": {"send_email": _resend_send_email},
-    # "stripe_payments": {
-    #     "create_payment_intent": _stripe_create_payment_intent,
-    #     "capture_payment": _stripe_capture_payment,
-    # },
+    "resend_email": {"send_email": _resend_send_email},
     "leopards_shipping": {
         "create_shipment": _leopards_create_shipment,
         "track_shipment": _leopards_track_shipment,
@@ -317,24 +328,27 @@ ADAPTERS: dict[str, dict[str, callable]] = {
         "create_shipment": _sonic_trax_create_shipment,
         "track_shipment": _sonic_trax_track_shipment,
     },
-    # "seventeen_track": {"track_shipment": _seventeen_track_track_shipment},
-    # "klaviyo_marketing": {
+    "supabase_reviews": {
+        "fetch_reviews": _supabase_fetch_reviews,
+        "post_review": _supabase_post_review,
+    },
+    "clarity_analytics": {"fetch_insights": _clarity_fetch_insights},
+    # "twilio_sms": {"send_sms": _twilio_send_sms},           # skipped
+    # "klaviyo_marketing": {                                   # not needed yet
     #     "sync_profile": _klaviyo_sync_profile,
     #     "trigger_flow": _klaviyo_trigger_flow,
     # },
-    "judgeme_reviews": {
-        "fetch_reviews": _judgeme_fetch_reviews,
-        "post_review": _judgeme_post_review,
-    },
-    "google_analytics": {"verify_property": _google_analytics_verify_property},
 }
 
 
-async def run(app_code: str, action: str, credentials: dict, settings: dict, payload: dict) -> dict:
+async def run(app_code: str, action: str, payload: dict) -> dict:
+    """Dispatch to the right adapter. Credentials are read from env inside
+    each adapter, so callers only need to pass app_code, action, and payload.
+    """
     adapter = ADAPTERS.get(app_code, {}).get(action)
     if adapter is None:
         raise AdapterError(
             f"No adapter registered for app '{app_code}' action '{action}'. "
             "Add it in app/modules/settings/apps/adapters/__init__.py"
         )
-    return await adapter(credentials, settings, payload)
+    return await adapter(payload)

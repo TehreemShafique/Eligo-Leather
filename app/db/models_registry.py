@@ -21,7 +21,9 @@ from app.modules.catalog.model import (          # noqa: F401
 from app.modules.growth.model import (            # noqa: F401
     Attribution, Campaign,
 )
-from app.modules.discounts.model import Discount  # noqa: F401
+from app.modules.discounts.model import (  # noqa: F401
+    Discount, WelcomeDiscountSettings, WelcomeDiscountLog,
+)
 from app.modules.content.model import (           # noqa: F401
     MetaobjectDefinition, MetaobjectEntry, File,
     Menu, MenuItem, UrlRedirect, BlogPost, BlogComment,
@@ -29,6 +31,7 @@ from app.modules.content.model import (           # noqa: F401
 from app.modules.markets.model import (            # noqa: F401
     Market, Catalog, CatalogProduct, Rollout, RolloutChange,
 )
+from app.modules.store.model import StoreHeaderScript  # noqa: F401
 from app.modules.analytics.model import (          # noqa: F401
     DailySnapshot, Report, Exploration,
     LiveVisitor, LiveActivity, CohortRetention,

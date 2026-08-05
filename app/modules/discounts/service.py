@@ -3,8 +3,19 @@ from datetime import datetime
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.discounts.model import Discount
-from app.modules.discounts.schema import DiscountCreate, DiscountUpdate
+from app.modules.discounts.model import (
+    Discount,
+    WelcomeDiscountLog,
+    WelcomeDiscountSettings,
+)
+from app.modules.discounts.schema import (
+    DiscountCreate,
+    DiscountUpdate,
+    WelcomeDiscountResult,
+    WelcomeDiscountUpdate,
+)
+
+DEFAULT_WELCOME_DISCOUNT_PERCENTAGE = 10
 
 
 async def create_discount(
@@ -85,3 +96,73 @@ async def delete_discount(db: AsyncSession, discount_id: int) -> bool:
     await db.delete(discount)
     await db.commit()
     return True
+
+
+# =====================================================================
+# Welcome Discount
+# =====================================================================
+
+async def get_welcome_settings(db: AsyncSession) -> WelcomeDiscountSettings:
+    """Return the global welcome-discount row, creating a disabled default
+    on first access so the table always has exactly one active config."""
+    result = await db.execute(
+        select(WelcomeDiscountSettings).order_by(WelcomeDiscountSettings.id).limit(1),
+    )
+    settings = result.scalar_one_or_none()
+    if settings is None:
+        settings = WelcomeDiscountSettings(
+            discount_percentage=DEFAULT_WELCOME_DISCOUNT_PERCENTAGE,
+            is_active=False,
+        )
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+    return settings
+
+
+async def update_welcome_settings(
+    db: AsyncSession,
+    data: WelcomeDiscountUpdate,
+    updated_by: int | None,
+) -> WelcomeDiscountSettings:
+    settings = await get_welcome_settings(db)
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(settings, field, value)
+    settings.updated_by = updated_by
+    await db.commit()
+    await db.refresh(settings)
+    return settings
+
+
+async def evaluate_welcome_discount(
+    db: AsyncSession,
+    user_email: str,
+    ip_address: str,
+) -> WelcomeDiscountResult:
+    """Run the one-time welcome-discount check on login.
+
+    If the email OR the IP is already in the claim log, the offer is
+    suppressed. Otherwise the offer is shown (when globally enabled) and the
+    email + IP combination is recorded immediately so it is never shown again.
+    """
+    already_claimed = await db.execute(
+        select(WelcomeDiscountLog.id).where(
+            or_(
+                WelcomeDiscountLog.user_email == user_email,
+                WelcomeDiscountLog.ip_address == ip_address,
+            ),
+        ).limit(1),
+    )
+    if already_claimed.scalar_one_or_none() is not None:
+        return WelcomeDiscountResult(show_welcome_discount=False)
+
+    settings = await get_welcome_settings(db)
+    if not settings.is_active:
+        return WelcomeDiscountResult(show_welcome_discount=False)
+
+    db.add(WelcomeDiscountLog(user_email=user_email, ip_address=ip_address))
+    await db.commit()
+    return WelcomeDiscountResult(
+        show_welcome_discount=True,
+        discount_percentage=float(settings.discount_percentage),
+    )

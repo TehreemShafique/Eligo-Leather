@@ -5,7 +5,8 @@ from app.modules.auth.schema import User_out, UserCreate, Token, LoginRequest
 from app.modules.auth import service
 from app.core.security import create_access_token
 from app.core.dependencies import get_current_user
-from app.modules.settings.account.service import record_login_session
+from app.modules.settings.account.service import record_login_session, _client_ip
+from app.modules.discounts.service import evaluate_welcome_discount
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -24,7 +25,13 @@ async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends
 
     token = create_access_token(data= {"sub": user.email})
     await record_login_session(db, user, token, request)
-    return Token(access_token=token)
+
+    welcome = await evaluate_welcome_discount(db, user.email, _client_ip(request))
+    return Token(
+        access_token=token,
+        show_welcome_discount=welcome.show_welcome_discount,
+        welcome_discount_percentage=welcome.discount_percentage,
+    )
 
 @router.get("/me", response_model=User_out)
 async def read_current_user(current_user= Depends(get_current_user)):

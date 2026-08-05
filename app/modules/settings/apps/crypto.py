@@ -3,6 +3,17 @@
 Uses Fernet (AES-128-CBC + HMAC) with a key derived from the app SECRET_KEY,
 so no extra secrets need to be managed. Swap this module for a KMS / vault if
 credentials must be stored in a more hardened environment.
+Why use Fernet?
+
+Fernet provides several security features automatically:
+
+✅ AES-128 encryption (CBC mode)
+✅ HMAC authentication (detects tampering)
+✅ Random initialization vector (IV)
+✅ Timestamp embedded in the token
+✅ URL-safe Base64 encoding
+
+You don't have to implement these details yourself.
 """
 
 import base64

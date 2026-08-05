@@ -45,6 +45,7 @@ from app.modules.analytics.router import (
     live_view_router,
 )
 from app.modules.settings.router import router as settings_router
+from app.modules.store.router import router as store_router
 
 app = FastAPI(title="Eligo Backend")
 
@@ -90,6 +91,7 @@ app.include_router(reports_router, prefix="/api/v1")
 app.include_router(explorations_router, prefix="/api/v1")
 app.include_router(live_view_router, prefix="/api/v1")
 app.include_router(settings_router, prefix="/api/v1")
+app.include_router(store_router, prefix="/api/v1")
 
 
 @app.get("/")

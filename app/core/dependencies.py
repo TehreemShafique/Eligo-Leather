@@ -1,12 +1,14 @@
 from datetime import datetime, timedelta, timezone
 from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from fastapi import Depends, HTTPException
 from app.db.session import get_db
 from app.core.security import decode_access_token
 from jose import JWTError
 from sqlalchemy import Select
 from app.modules.auth.model import User
+from app.modules.settings.roles.model import RoleDomain
 from app.modules.settings.account.model import UserSession
 
 oauth2_scheme =  HTTPBearer()
@@ -64,3 +66,28 @@ async def require_admin(current_user: User = Depends(get_current_user)):
         return current_user
 
     raise HTTPException(status_code=404, detail="User is Not admin")
+
+
+async def require_discount_manager(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admins and internal staff roles (store / organization domains) may
+    manage the welcome-discount configuration; POS and customer accounts may
+    not."""
+    if current_user.is_admin:
+        return current_user
+
+    result = await db.execute(
+        Select(User)
+        .where(User.id == current_user.id)
+        .options(selectinload(User.role)),
+    )
+    user = result.scalar_one_or_none()
+    if user is not None and user.role is not None and user.role.domain in (
+        RoleDomain.store,
+        RoleDomain.organization,
+    ):
+        return user
+
+    raise HTTPException(status_code=404, detail="User is not allowed to manage discounts")

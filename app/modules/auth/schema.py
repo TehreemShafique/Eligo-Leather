@@ -18,6 +18,8 @@ class User_out(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    show_welcome_discount: bool = False
+    welcome_discount_percentage: float | None = None
 
 class LoginRequest(BaseModel):
     email: EmailStr

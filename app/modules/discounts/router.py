@@ -4,12 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, require_discount_manager
+from app.modules.auth.model import User
 from app.modules.discounts import service
 from app.modules.discounts.schema import (
     DiscountCreate,
     DiscountUpdate,
     DiscountOut,
+    WelcomeDiscountOut,
+    WelcomeDiscountUpdate,
 )
 
 router = APIRouter(
@@ -52,6 +55,27 @@ async def list_discounts(
         skip=skip,
         limit=limit,
     )
+
+
+# =====================================================================
+# Welcome Discount config (admin / staff only)
+# =====================================================================
+
+@router.get("/welcome", response_model=WelcomeDiscountOut)
+async def get_welcome_discount_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_discount_manager),
+):
+    return await service.get_welcome_settings(db)
+
+
+@router.patch("/welcome", response_model=WelcomeDiscountOut)
+async def update_welcome_discount_settings(
+    data: WelcomeDiscountUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_discount_manager),
+):
+    return await service.update_welcome_settings(db, data, current_user.id)
 
 
 @router.get("/{discount_id}", response_model=DiscountOut)

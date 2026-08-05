@@ -1,8 +1,9 @@
 import enum
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
-    String, Integer, DateTime, Text, Index,
+    String, Integer, Numeric, Boolean, DateTime, Text, Index, ForeignKey,
     Enum as SAEnum, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -76,4 +77,49 @@ class Discount(Base):
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True,
+    )
+
+
+# ===========================================================================
+# Welcome Discount
+# ===========================================================================
+
+class WelcomeDiscountSettings(Base):
+    """Global welcome-discount configuration. Single active row: the
+    percentage shown to first-time users and the enable/disable flag."""
+
+    __tablename__ = "welcome_discount_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    discount_percentage: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=10,
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True,
+    )
+
+
+class WelcomeDiscountLog(Base):
+    """Tracks which email/IP combinations already claimed the offer. A user
+    is ineligible if either their email OR their IP appears here."""
+
+    __tablename__ = "welcome_discount_logs"
+    __table_args__ = (
+        Index("ix_welcome_discount_logs_user_email", "user_email"),
+        Index("ix_welcome_discount_logs_ip_address", "ip_address"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_email: Mapped[str] = mapped_column(String, nullable=False)
+    ip_address: Mapped[str] = mapped_column(String, nullable=False)
+    claimed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
     )

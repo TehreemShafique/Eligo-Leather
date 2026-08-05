@@ -7,6 +7,8 @@ import secrets
 import struct
 import time
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
+from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo, available_timezones
 
 import httpx
@@ -121,6 +123,23 @@ def _initials(user: User) -> str:
     return (user.email[:2].upper()) if user.email else "?"
 
 
+_AVATAR_COLORS = ["#5B8DEF", "#F2994A", "#27AE60", "#9B51E0", "#EB5757", "#2D9CDB"]
+
+
+def _default_avatar(user: User) -> str:
+    """SVG data-URI initials avatar, shown when no picture is uploaded."""
+    initials = escape(_initials(user))
+    color = _AVATAR_COLORS[(user.id or 0) % len(_AVATAR_COLORS)]
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80">'
+        f'<rect width="80" height="80" rx="40" fill="{color}"/>'
+        '<text x="50%" y="50%" dy=".35em" text-anchor="middle" '
+        f'fill="#FFFFFF" font-family="Arial, sans-serif" font-size="28" '
+        f'font-weight="600">{initials}</text></svg>'
+    )
+    return "data:image/svg+xml;utf8," + quote(svg)
+
+
 def _profile_out(user: User) -> AccountProfileOut:
     return AccountProfileOut(
         id=user.id,
@@ -129,7 +148,7 @@ def _profile_out(user: User) -> AccountProfileOut:
         full_name=user.full_name,
         first_name=user.first_name,
         last_name=user.last_name,
-        avatar_url=user.avatar_url,
+        avatar_url=user.avatar_url or _default_avatar(user),
         initials=_initials(user),
         phone=user.phone,
         preferred_language=user.preferred_language,
