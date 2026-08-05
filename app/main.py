@@ -1,0 +1,97 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.db import models_registry 
+from app.modules.auth.router import router as auth_router
+from app.modules.orders.router import router as orders_router
+from app.modules.customers.router import router as customers_router
+from app.modules.catalog.router import (
+    catalog_overview_router,
+    product_router,
+    collection_router,
+    location_router,
+    inventory_router,
+    purchase_order_router,
+    transfer_router,
+    gift_card_router,
+)
+from app.modules.companies.router import router as companies_router
+from app.modules.segments.router import router as segments_router
+from app.modules.growth.router import (
+    growth_router,
+    attribution_router,
+    campaign_router,
+)
+from app.modules.discounts.router import router as discounts_router
+from app.modules.content.router import (
+    content_router,
+    metaobject_definition_router,
+    metaobject_entry_router,
+    files_router,
+    menus_router,
+    url_redirects_router,
+    blog_posts_router,
+    blog_comments_router,
+)
+from app.modules.markets.router import (
+    markets_overview_router,
+    market_router,
+    market_catalog_router,
+    rollout_router,
+)
+from app.modules.analytics.router import (
+    analytics_router,
+    reports_router,
+    explorations_router,
+    live_view_router,
+)
+from app.modules.settings.router import router as settings_router
+
+app = FastAPI(title="Eligo Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth_router, prefix="/api/v1")
+app.include_router(orders_router, prefix="/api/v1")
+app.include_router(customers_router, prefix="/api/v1")
+app.include_router(catalog_overview_router, prefix="/api/v1")
+app.include_router(product_router, prefix="/api/v1")
+app.include_router(collection_router, prefix="/api/v1")
+app.include_router(location_router, prefix="/api/v1")
+app.include_router(inventory_router, prefix="/api/v1")
+app.include_router(purchase_order_router, prefix="/api/v1")
+app.include_router(transfer_router, prefix="/api/v1")
+app.include_router(gift_card_router, prefix="/api/v1")
+app.include_router(companies_router, prefix="/api/v1")
+app.include_router(segments_router, prefix="/api/v1")
+app.include_router(growth_router, prefix="/api/v1")
+app.include_router(attribution_router, prefix="/api/v1")
+app.include_router(campaign_router, prefix="/api/v1")
+app.include_router(discounts_router, prefix="/api/v1")
+app.include_router(content_router, prefix="/api/v1")
+app.include_router(metaobject_definition_router, prefix="/api/v1")
+app.include_router(metaobject_entry_router, prefix="/api/v1")
+app.include_router(files_router, prefix="/api/v1")
+app.include_router(menus_router, prefix="/api/v1")
+app.include_router(url_redirects_router, prefix="/api/v1")
+app.include_router(blog_posts_router, prefix="/api/v1")
+app.include_router(blog_comments_router, prefix="/api/v1")
+app.include_router(markets_overview_router, prefix="/api/v1")
+app.include_router(market_router, prefix="/api/v1")
+app.include_router(market_catalog_router, prefix="/api/v1")
+app.include_router(rollout_router, prefix="/api/v1")
+app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(reports_router, prefix="/api/v1")
+app.include_router(explorations_router, prefix="/api/v1")
+app.include_router(live_view_router, prefix="/api/v1")
+app.include_router(settings_router, prefix="/api/v1")
+
+
+@app.get("/")
+async def read_root():
+    return {"message":"hello"}
