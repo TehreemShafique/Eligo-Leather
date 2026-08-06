@@ -1,91 +1,145 @@
 name: CI/CD Pipeline
 
 on:
-  push: 
+  push:
     branches: [main]
   pull_request:
     branches: [main]
 
 concurrency:
-  group: ci-${{git.ref}}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # ======= CHANGES JOB =======
   changes:
     name: Detect the change
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{steps.filter.outputs.backend}}
+      backend: ${{ steps.filter.outputs.backend }}
       # add for frontend also
     steps:
       - uses: actions/checkout@v7
-        with: 
+        with:
           fetch-depth: 0
       - id: filter
         run: |
-          if ["${{github.event_name}}" = "pull-request"];
-            then git fetch --no-tags origin \
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin \
               "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
-            BASE = "$(git merge-base "origin\${{ github.base_ref}}" HEAD)"
-          else BASE = "${{github.event.before}}"
-            if [ -z "$BASE"] || ["$BASE" = "0000000000000000000000000000000000000000"]; then 
-              BASE = "HEAD~1"
+            BASE="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+          else
+            BASE="${{ github.event.before }}"
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+              BASE="HEAD~1"
             fi
           fi
 
-          CHANGED = "$(git diff --name-only "$BASE" HEAD)"
+          CHANGED="$(git diff --name-only "$BASE" HEAD)"
           echo "$CHANGED"
 
-          for svc in backend; do      # frontend write in this loop when frontend complete
-            if echo "$CHANGED" || grep -qE "^$svc/"; then
-              echo "$svc==true" >> "$GITHUB_OUTPUT"
-            then
-              echo "$svc==false" >> "$GITHUB_OUTPUT"
-            fi
+          # The backend lives at the repo root. Mark it as changed whenever
+          # any changed file is NOT under eligo-frontend/ (drop the check
+          # below if this repo stays backend-only).
+          if [ -n "$CHANGED" ] && echo "$CHANGED" | grep -qvE '^eligo-frontend/'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+          fi
 
-          done
-
-
+  # ======= BUILD AND TEST JOB =======
   build-test:
     name: Build and Test
     needs: changes
-    runs-on: ubuuntu-latest
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_DB: postgres
-          POSTGRES_PASSWORD: founderflow_test
-          # check and change according to neondb username and password
-        
-        ports: 
-          - 5432:5432
-
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-
-        options: >-
-          --health-cmd "redis cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+    runs-on: ubuntu-latest
     env:
-      TEST_DATABASE_URL:sqlite+aiosqlite:///:memory:
+      TEST_DATABASE_URL: "sqlite+aiosqlite:///:memory:"
     steps:
       - uses: actions/checkout@v7
-      - if: ${{needs.changes.outputs.backend == 'true'}}
-        uses: astral-sh/setup-uv@v7
+
+      - name: Setup uv
+        if: ${{ needs.changes.outputs.backend == 'true' }}
+        uses: astral-sh/setup-uv@v9
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      # === BACKEND STEPS ===
+      - name: Eligo-Leather-Backend-Tests
+        if: ${{ needs.changes.outputs.backend == 'true' }}
+        run: uv run pytest -q
+
+      - name: Eligo-Ruff (lint)
+        if: ${{ needs.changes.outputs.backend == 'true' }}
+        run: uvx ruff check . || true
+
+      - name: Eligo-Ruff (format)
+        if: ${{ needs.changes.outputs.backend == 'true' }}
+        run: uvx ruff format --check . || true
+
+      - name: Eligo-Mypy (type-check)
+        if: ${{ needs.changes.outputs.backend == 'true' }}
+        run: uvx mypy . || true
+
+  # ======= SECURITY JOB =======
+  security:
+    name: Eligo-Security
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v9
         with:
           python-version: "3.13"
 
-        
+      - name: Secret scan - fail on hardcoded private keys (tracked files)
+        run: |
+          if git grep -nIE 'sk-or-v1-[A-Za-z0-9]{32,}|sk-proj-[A-Za-z0-9]{16,}|sk_live_[0-9a-zA-Z]{16,}|rk_live_[0-9a-zA-Z]{16,}' -- . ':(exclude)*.lock'; then
+            echo "::error::Potential hardcoded private key found in tracked files. Move it to an env var."
+            exit 1
+          fi
+          echo "No hardcoded private keys found in tracked files."
+
+      - name: Secret-Scan (trufflehog)
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --results=verified,unknown
+
+      - name: Gitleaks - scan new commits only
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin \
+              "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+            BASE_SHA="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+            RANGE="$BASE_SHA..HEAD"
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              RANGE="HEAD~1..HEAD"
+            else
+              RANGE="$BEFORE..HEAD"
+            fi
+          fi
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            detect --source /repo --log-opts="$RANGE" --redact --exit-code 1
+
+      - name: Bandit (security audit)
+        run: uvx bandit -r app
+
+      - name: Pip-audit (dependency scan)
+        run: |
+          uv sync --all-groups
+          uv run --with pip-audit pip-audit
+
+      - name: SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: sbom-backend.cyclonedx.json
+
+      # make sbom for frontend separately, and just change path to eligo-frontend
