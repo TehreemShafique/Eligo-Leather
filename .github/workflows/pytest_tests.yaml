@@ -59,7 +59,7 @@ jobs:
 
       - name: Setup uv
         if: ${{ needs.changes.outputs.backend == 'true' }}
-        uses: astral-sh/setup-uv@v9
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
           enable-cache: true

@@ -16,7 +16,7 @@ class NotificationEventType(str, enum.Enum):
     order_cancelled = "order_cancelled"
     return_requested = "return_requested"
     abandoned_checkout = "abandoned_checkout"
-    password_reset = "password_reset"
+    password_reset = "password_reset"  # nosec B105 - event code, not a secret
     low_stock = "low_stock"
     admin_notification = "admin_notification"
 

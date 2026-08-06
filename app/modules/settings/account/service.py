@@ -8,7 +8,7 @@ import struct
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
-from xml.sax.saxutils import escape
+from html import escape
 from zoneinfo import ZoneInfo, available_timezones
 
 import httpx
@@ -94,7 +94,7 @@ def list_timezones() -> list[dict]:
             tz = ZoneInfo(zone)
             offset = now.astimezone(tz).utcoffset() or timedelta(0)
             total_minutes = int(offset.total_seconds() // 60)
-        except Exception:
+        except (KeyError, ValueError):
             continue
         sign = "+" if total_minutes >= 0 else "-"
         abs_m = abs(total_minutes)
