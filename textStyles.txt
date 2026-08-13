@@ -1,0 +1,376 @@
+// Home
+text-amber-800
+text-sm
+font-semibold
+font-['Manrope']
+leading-5
+---
+// Contact Us
+text-black
+text-sm
+font-semibold
+font-['Manrope']
+leading-5
+---
+// Our Product
+text-black
+text-sm
+font-semibold
+font-['Manrope']
+leading-5
+---
+// Free Shipping on above 2000/- PKR Order
+text-white
+text-sm
+font-semibold
+font-['Manrope']
+---
+// Sales
+text-amber-800
+text-6xl
+font-bold
+font-['Manrope']
+leading-[70px]
+---
+// Current Sales and Offers
+text-black
+text-4xl
+font-bold
+font-['Manrope']
+leading-10
+---
+// At 
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Eligoleather,
+text-black
+text-xl
+font-bold
+font-['Manrope']
+---
+//  we believe that luxury and affordability can go hand in hand. We’re committed to offering you exclusive deals and seasonal promotions on our finest leather goods, so you can enjoy premium wallets, belts, and keychain covers without compromising on quality or style.
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Seasonal Sales:
+text-black
+text-xl
+font-bold
+font-['Manrope']
+---
+// Explore our exclusive seasonal sales for limited-time discounts on a selection of our bestselling leather products. Whether you’re looking for a classic leather wallet or a stylish belt, our seasonal promotions make it easier to upgrade your collection.<br/>
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Clearance Deals:
+text-black
+text-xl
+font-bold
+font-['Manrope']
+---
+// Don’t miss out on our Clearance Section where you’ll find discounted items, including past collections and final-sale pieces. These products are limited in stock, so act fast before they’re gone!<br/>
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Bundle Offers:
+text-black
+text-xl
+font-bold
+font-['Manrope']
+---
+// Shop our Bundle Offers to save more! Combine your favorite leather wallet, belt, and keychain cover for a special discounted rate. Bundling is the perfect way to enjoy multiple products while saving money.<br/>
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Free Shipping:
+text-black
+text-xl
+font-bold
+font-['Manrope']
+---
+// For a limited time, we’re offering Free Shipping on all orders over [amount]. Shop now and take advantage of this offer to get your favorite leather goods delivered straight to your doorstep without extra shipping costs.
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Quick Links
+text-amber-800
+text-lg
+font-bold
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Home 
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// About Us 
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Contact Us 
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Our Categories
+text-amber-800
+text-lg
+font-bold
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Wallets 
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Belts
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Key Chain 
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Cases 
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Our Polices
+text-amber-800
+text-lg
+font-bold
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Privacy Policy 
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Refund Policy 
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Terms of Service 
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Blog
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Sale
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Find Us
+text-amber-800
+text-lg
+font-bold
+font-['Manrope']
+leading-6
+tracking-wide
+---
+// Office # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad<br/>
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-7
+tracking-wide
+---
+// 051-2745781<br/>0334-5399470
+text-white/75
+text-sm
+font-normal
+font-['Manrope']
+leading-7
+tracking-wide
+---
+// © 2026, Eligo Leather, Design &amp; Develop By BitBlazeTec
+text-white
+text-sm
+font-normal
+font-['Manrope']
+leading-5
+tracking-wide
+---
+// Sign Up for Exclusive Discounts
+text-black
+text-4xl
+font-bold
+font-['Manrope']
+leading-10
+---
+// Join our 
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Eligoleather VIP 
+text-black
+text-xl
+font-bold
+font-['Manrope']
+---
+// List to receive:
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Sign up today and be the first to know about exciting deals and new product releases!
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Exclusive discount codes
+text-black
+text-xl
+font-bold
+font-['Manrope']
+---
+//  delivered directly to your inbox.<br/>Early access to new collections and sales events.<br/>Special offers and promotions tailored to your shopping preferences.
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Gift Cards
+text-black
+text-4xl
+font-bold
+font-['Manrope']
+leading-10
+---
+// Referral Program
+text-black
+text-4xl
+font-bold
+font-['Manrope']
+leading-10
+---
+// Upcoming Sales Events
+text-black
+text-4xl
+font-bold
+font-['Manrope']
+leading-10
+---
+// Give the gift of timeless style with our 
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Eligoleather Gift Cards.
+text-black
+text-xl
+font-bold
+font-['Manrope']
+---
+//  Available in various denominations, our gift cards are perfect for birthdays, holidays, or special occasions. They never expire and can be used toward any item on our website, including sale products.
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Do you love your Eligoleather products? Refer a friend and both of you can enjoy savings! For every successful referral, you and your friend will receive
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+//  [percentage]% off
+text-black
+text-xl
+font-bold
+font-['Manrope']
+---
+//  your next purchase. Share the elegance of leather craftsmanship and earn rewards for spreading the word.
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Keep an eye on our website for special sale events during:
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// We regularly host flash sales and limited-time offers, so be sure to check back often and take advantage of these incredible deals.
+text-black
+text-xl
+font-normal
+font-['Manrope']
+---
+// Black Friday<br/>Cyber Monday<br/>Holiday Sales<br/>New Year’s Sales
+text-black
+text-xl
+font-bold
+font-['Manrope']

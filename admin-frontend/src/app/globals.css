@@ -1,0 +1,181 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --eligo-ink: #1a1a1a;
+    --eligo-accent: #92400e;
+    --eligo-accent-strong: #78350f;
+    --eligo-canvas: #f4f4f4;
+    --eligo-line: #e5e0d5;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(146, 64, 14, 0.35) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgba(146, 64, 14, 0.3);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(146, 64, 14, 0.5);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--eligo-canvas);
+    color: var(--eligo-ink);
+    font-family: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* Global rule: nothing should ever scroll horizontally in this admin */
+  body,
+  #__next {
+    overflow-x: hidden;
+  }
+}
+
+@layer components {
+  /* Interactive card base */
+  .eligo-card {
+    @apply bg-white rounded-2xl border border-[#e5e0d5] shadow-sm transition-all duration-200;
+  }
+
+  .eligo-card-hover {
+    @apply hover:shadow-md hover:-translate-y-0.5 hover:border-[#d4c9b4];
+  }
+
+  /* Primary action button */
+  .eligo-btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl shadow-sm transition-all duration-200 active:scale-[0.97] cursor-pointer;
+  }
+
+  /* Secondary action button */
+  .eligo-btn-secondary {
+    @apply inline-flex items-center gap-2 px-3.5 py-2.5 bg-white hover:bg-amber-50 text-gray-800 text-xs font-semibold rounded-xl border border-gray-300 hover:border-amber-300 transition-all duration-200 active:scale-[0.97] cursor-pointer;
+  }
+
+  /* Input field */
+  .eligo-input {
+    @apply w-full h-9 px-3 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-800/30 focus:border-amber-800 transition-all;
+  }
+
+  /* Badge pill */
+  .eligo-badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border;
+  }
+
+  /* Compact data table that never overflows */
+  .eligo-table-wrap {
+    @apply w-full min-w-0 overflow-hidden;
+  }
+
+  .eligo-table {
+    @apply w-full text-left text-xs text-gray-700 border-collapse table-fixed;
+  }
+
+  .eligo-th {
+    @apply px-3 py-2.5 bg-[#faf9f7] text-gray-500 uppercase font-bold text-[10px] tracking-wide border-b border-gray-200 whitespace-normal;
+  }
+
+  .eligo-td {
+    @apply px-3 py-3 border-b border-gray-100 align-middle break-words min-w-0;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.35s ease-out both;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out both;
+  }
+
+  .animate-pulse-soft {
+    animation: pulseSoft 2.2s ease-in-out infinite;
+  }
+
+  .text-accent {
+    color: var(--eligo-accent);
+  }
+
+  .bg-accent {
+    background-color: var(--eligo-accent);
+  }
+
+  .delay-75 {
+    animation-delay: 75ms;
+  }
+  .delay-150 {
+    animation-delay: 150ms;
+  }
+  .delay-225 {
+    animation-delay: 225ms;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulseSoft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.font-sans {
+  font-family: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}

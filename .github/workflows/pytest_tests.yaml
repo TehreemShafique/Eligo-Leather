@@ -1,0 +1,345 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================
+  # CHANGES JOB
+  # Detect which part of the monorepo has changed
+  # ============================================================
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      admin: ${{ steps.filter.outputs.admin }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed projects
+        id: filter
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin \
+              "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+
+            BASE="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+          else
+            BASE="${{ github.event.before }}"
+
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+              BASE="HEAD~1"
+            fi
+          fi
+
+          CHANGED="$(git diff --name-only "$BASE" HEAD)"
+
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          # ----------------------------------------------------
+          # Backend
+          # ----------------------------------------------------
+          if echo "$CHANGED" | grep -qE '^eligo-backend/'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # ----------------------------------------------------
+          # Frontend
+          # ----------------------------------------------------
+          if echo "$CHANGED" | grep -qE '^eligo-frontend/'; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # ----------------------------------------------------
+          # Admin Frontend
+          # ----------------------------------------------------
+          if echo "$CHANGED" | grep -qE '^admin-frontend/'; then
+            echo "admin=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "admin=false" >> "$GITHUB_OUTPUT"
+          fi
+
+
+  # ============================================================
+  # BACKEND BUILD AND TEST
+  # ============================================================
+  backend-build-test:
+    name: Backend Build and Test
+    needs: changes
+
+    if: ${{ needs.changes.outputs.backend == 'true' }}
+
+    runs-on: ubuntu-latest
+
+    env:
+      TEST_DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+
+      # app.db.session builds a real engine at import time,
+      # so a non-empty DATABASE_URL is required even though
+      # tests override get_db with SQLite.
+      DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      # --------------------------------------------------------
+      # Install backend dependencies
+      # --------------------------------------------------------
+      - name: Install Backend Dependencies
+        working-directory: eligo-backend
+        run: uv sync --all-groups
+
+      # --------------------------------------------------------
+      # Pytest
+      # --------------------------------------------------------
+      - name: Eligo Leather Backend Tests
+        working-directory: eligo-backend
+        run: uv run pytest -q
+
+      # --------------------------------------------------------
+      # Ruff Lint
+      # --------------------------------------------------------
+      - name: Eligo Ruff - Lint
+        working-directory: eligo-backend
+        run: uvx ruff check . || true
+
+      # --------------------------------------------------------
+      # Ruff Format
+      # --------------------------------------------------------
+      - name: Eligo Ruff - Format
+        working-directory: eligo-backend
+        run: uvx ruff format --check . || true
+
+      # --------------------------------------------------------
+      # Mypy
+      # --------------------------------------------------------
+      - name: Eligo Mypy - Type Check
+        working-directory: eligo-backend
+        run: uvx mypy . || true
+
+
+  # ============================================================
+  # FRONTEND BUILD
+  # ============================================================
+  frontend-build:
+    name: Frontend Build
+    needs: changes
+
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: eligo-frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: eligo-frontend
+        run: npm ci
+
+      - name: Build Frontend
+        working-directory: eligo-frontend
+        run: npm run build
+
+
+  # ============================================================
+  # ADMIN FRONTEND BUILD
+  # ============================================================
+  admin-build:
+    name: Admin Frontend Build
+    needs: changes
+
+    if: ${{ needs.changes.outputs.admin == 'true' }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: admin-frontend/package-lock.json
+
+      - name: Install Admin Frontend Dependencies
+        working-directory: admin-frontend
+        run: npm ci
+
+      - name: Build Admin Frontend
+        working-directory: admin-frontend
+        run: npm run build
+
+
+  # ============================================================
+  # SECURITY JOB
+  # ============================================================
+  security:
+    name: Eligo Security
+    needs: changes
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # --------------------------------------------------------
+      # Setup uv
+      # --------------------------------------------------------
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+
+      # --------------------------------------------------------
+      # Secret Scan
+      # --------------------------------------------------------
+      - name: Secret Scan - Private Keys
+        run: |
+          if git grep -nIE \
+            'sk-or-v1-[A-Za-z0-9]{32,}|sk-proj-[A-Za-z0-9]{16,}|sk_live_[0-9a-zA-Z]{16,}|rk_live_[0-9a-zA-Z]{16,}' \
+            -- . ':(exclude)*.lock'; then
+
+            echo "::error::Potential hardcoded private key found in tracked files."
+            echo "Move secrets to environment variables."
+
+            exit 1
+          fi
+
+          echo "No hardcoded private keys found in tracked files."
+
+      # --------------------------------------------------------
+      # TruffleHog
+      # --------------------------------------------------------
+      - name: Secret Scan - TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --results=verified,unknown
+
+      # --------------------------------------------------------
+      # Gitleaks
+      # --------------------------------------------------------
+      - name: Gitleaks - Scan New Commits
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+
+            git fetch --no-tags origin \
+              "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+
+            BASE_SHA="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+            RANGE="$BASE_SHA..HEAD"
+
+          else
+
+            BEFORE="${{ github.event.before }}"
+
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              RANGE="HEAD~1..HEAD"
+            else
+              RANGE="$BEFORE..HEAD"
+            fi
+
+          fi
+
+          docker run --rm \
+            -v "$PWD:/repo" \
+            ghcr.io/gitleaks/gitleaks:latest \
+            detect \
+            --source /repo \
+            --log-opts="$RANGE" \
+            --redact \
+            --exit-code 1
+
+      # --------------------------------------------------------
+      # Backend Bandit
+      # --------------------------------------------------------
+      - name: Bandit - Backend Security Audit
+        if: ${{ needs.changes.outputs.backend == 'true' }}
+        working-directory: eligo-backend
+        run: uvx bandit -r app
+
+      # --------------------------------------------------------
+      # Pip Audit
+      # --------------------------------------------------------
+      - name: Pip Audit - Backend Dependencies
+        if: ${{ needs.changes.outputs.backend == 'true' }}
+        working-directory: eligo-backend
+        run: |
+          uv sync --all-groups
+
+          # PYSEC-2026-1325 (ecdsa 0.19.2) has no fixed release yet.
+          # Re-check on the next dependency bump.
+          uv run --with pip-audit pip-audit \
+            --ignore-vuln PYSEC-2026-1325
+
+      # --------------------------------------------------------
+      # Backend SBOM
+      # --------------------------------------------------------
+      - name: SBOM - Backend
+        if: ${{ needs.changes.outputs.backend == 'true' }}
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./eligo-backend
+          format: cyclonedx-json
+          artifact-name: sbom-backend.cyclonedx.json
+
+      # --------------------------------------------------------
+      # Frontend SBOM
+      # --------------------------------------------------------
+      - name: SBOM - Frontend
+        if: ${{ needs.changes.outputs.frontend == 'true' }}
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./eligo-frontend
+          format: cyclonedx-json
+          artifact-name: sbom-frontend.cyclonedx.json
+
+      # --------------------------------------------------------
+      # Admin Frontend SBOM
+      # --------------------------------------------------------
+      - name: SBOM - Admin Frontend
+        if: ${{ needs.changes.outputs.admin == 'true' }}
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./admin-frontend
+          format: cyclonedx-json
+          artifact-name: sbom-admin-frontend.cyclonedx.json
