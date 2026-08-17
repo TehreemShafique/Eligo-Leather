@@ -13,6 +13,7 @@ from app.modules.content.model import (
     UrlRedirect,
     BlogPost,
     BlogComment,
+    Page,
 )
 from app.modules.content.schema import (
     MetaobjectDefinitionCreate,
@@ -31,6 +32,8 @@ from app.modules.content.schema import (
     BlogPostUpdate,
     BlogCommentCreate,
     BlogCommentUpdate,
+    PageCreate,
+    PageUpdate,
     ContentOverview,
     MetaobjectSummary,
     MetaobjectDefinitionSummary,
@@ -725,3 +728,102 @@ async def get_content_overview(db: AsyncSession) -> ContentOverview:
             total_comments=int(comment_row.total),
         ),
     )
+
+
+# ===========================================================================
+# Pages – CRUD
+# ===========================================================================
+
+async def create_page(db: AsyncSession, data: PageCreate) -> Page:
+    payload = data.model_dump()
+    if not payload.get("handle"):
+        payload["handle"] = payload["title"].lower().replace(" ", "-")
+    obj = Page(**payload)
+    db.add(obj)
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+async def get_page(db: AsyncSession, page_id: int) -> Page | None:
+    result = await db.execute(select(Page).where(Page.id == page_id))
+    return result.scalar_one_or_none()
+
+
+async def get_page_by_handle(db: AsyncSession, handle: str) -> Page | None:
+    result = await db.execute(select(Page).where(Page.handle == handle))
+    return result.scalar_one_or_none()
+
+
+async def list_pages(
+    db: AsyncSession,
+    search: str | None = None,
+    visibility: str | None = None,
+    skip: int = 0,
+    limit: int = 100,
+) -> list[Page]:
+    query = select(Page)
+    if search:
+        query = query.where(
+            or_(
+                Page.title.ilike(f"%{search}%"),
+                Page.handle.ilike(f"%{search}%"),
+                Page.content.ilike(f"%{search}%"),
+            )
+        )
+    if visibility:
+        query = query.where(Page.visibility == visibility)
+    query = query.order_by(Page.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    pages = list(result.scalars().all())
+
+    # Auto-seed standard pages if DB table is empty
+    if not pages and not search and not visibility:
+        seed_data = [
+            {"title": "Terms of Service", "handle": "terms-of-service", "visibility": "Visible", "content": "Review Eligo Leather Terms of Service.", "template": "terms-of-service", "seo_title": "Terms & Conditions – Eligo Leather Official"},
+            {"title": "Refund Policy", "handle": "refund-policy", "visibility": "Visible", "content": "We have a 30-day return policy for handcrafted leather goods.", "template": "Default page", "seo_title": "Refund & Return Policy – Eligo Leather"},
+            {"title": "Contact Us", "handle": "contact-us", "visibility": "Visible", "content": "Contact Eligo Leather customer support team at eligoleather9@gmail.com.", "template": "contact-us", "seo_title": "Contact Us – Eligo Leather Official"},
+            {"title": "Track Your Order", "handle": "track-order", "visibility": "Visible", "content": "Track your domestic leather order delivery status across Pakistan.", "template": "Default page", "seo_title": "Track Your Order – Eligo Leather"},
+            {"title": "Privacy Policy", "handle": "privacy-policy", "visibility": "Visible", "content": "Privacy Policy describing how Eligo Leather processes customer data.", "template": "Default page", "seo_title": "Privacy Policy – Eligo Leather"},
+            {"title": "About Us", "handle": "about-us", "visibility": "Visible", "content": "Learn about Eligo Leather craftsmanship and heritage.", "template": "about-us", "seo_title": "About Us – Eligo Leather Handcrafted Goods"},
+            {"title": "Sales", "handle": "sales", "visibility": "Visible", "content": "Special store discounts and sales events at Eligo Leather.", "template": "Default page", "seo_title": "Sales & Offers – Eligo Leather"},
+            {"title": "HTML sitemap for blogs", "handle": "avada-sitemap-blogs", "visibility": "Hidden", "content": "<h3>Blogs</h3><ul><li><a href='/blogs/news'>Blog</a></li><li><a href='/blogs/news'>News</a></li><li><a href='/blogs/news/leather-grades'>Different Leather Grades & Leather Quality</a></li><li><a href='/blogs/news/sewing-leather'>Sewing of Leather: The Art and Craft Behind Handcrafted Leather</a></li><li><a href='/blogs/news/ideal-wallet-guide'>Guide to Choosing the Ideal Leather Goods</a></li></ul>", "template": "Default page", "seo_title": "HTML sitemap for blogs – Eligo Leather"},
+            {"title": "HTML sitemap for articles", "handle": "avada-sitemap-articles", "visibility": "Hidden", "content": "<h3>Articles</h3><ul><li><a href='/blogs/news/sewing-leather'>Sewing of Leather: The Art and Craft Behind Leather Products</a></li><li><a href='/blogs/news/eco-wallets'>Eco-Friendly Leather Wallets: A Wise Choice for Conscious Shoppers</a></li></ul>", "template": "Default page", "seo_title": "HTML sitemap for articles – Eligo Leather"},
+            {"title": "HTML sitemap for collections", "handle": "avada-sitemap-collections", "visibility": "Hidden", "content": "<h3>Collections</h3><ul><li><a href='/collections/accessories'>Accessories</a></li><li><a href='/collections/keychains'>Keychain</a></li><li><a href='/collections/belts'>All Belts</a></li><li><a href='/collections/wallets'>All Wallets</a></li><li><a href='/collections/bags'>Ladies Wear</a></li><li><a href='/collections/long-wallets'>Long Wallet</a></li><li><a href='/collections/men'>Men</a></li><li><a href='/collections/rfid'>RFID Wallets</a></li></ul>", "template": "Default page", "seo_title": "HTML sitemap for collections – Eligo Leather"},
+            {"title": "HTML sitemap for products", "handle": "avada-sitemap-products", "visibility": "Hidden", "content": "<h3>Products</h3><ul><li><a href='/products/rosy-leather-handbag'>Rosy Leather Handbag</a></li><li><a href='/products/vintage-brown-wallet'>Vintage Dark Brown Bifold Leather Wallet</a></li><li><a href='/products/maroon-tan-wallet'>Maroon Tan Leather Wallet</a></li></ul>", "template": "Default page", "seo_title": "HTML sitemap for products – Eligo Leather"},
+            {"title": "HTML sitemap", "handle": "avada-sitemap", "visibility": "Hidden", "content": "<h3>HTML Sitemap Master Index</h3><p>Master HTML sitemap index for search engines.</p>", "template": "Default page", "seo_title": "HTML sitemap – Eligo Leather"},
+            {"title": "HTML sitemap for pages", "handle": "avada-sitemap-pages", "visibility": "Hidden", "content": "<h3>Pages Sitemap</h3><ul><li><a href='/pages/terms-of-service'>Terms of Service</a></li><li><a href='/pages/privacy-policy'>Privacy Policy</a></li><li><a href='/pages/about-us'>About Us</a></li><li><a href='/pages/contact-us'>Contact Us</a></li></ul>", "template": "Default page", "seo_title": "HTML sitemap for pages – Eligo Leather"},
+        ]
+
+        for p_dict in seed_data:
+            p_obj = Page(**p_dict)
+            db.add(p_obj)
+        await db.commit()
+
+        res_new = await db.execute(query)
+        pages = list(res_new.scalars().all())
+
+    return pages
+
+
+async def update_page(
+    db: AsyncSession, page_id: int, data: PageUpdate,
+) -> Page | None:
+    obj = await get_page(db, page_id)
+    if not obj:
+        return None
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(obj, field, value)
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+async def delete_page(db: AsyncSession, page_id: int) -> bool:
+    obj = await get_page(db, page_id)
+    if not obj:
+        return False
+    await db.delete(obj)
+    await db.commit()
+    return True
+

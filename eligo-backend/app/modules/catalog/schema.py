@@ -132,6 +132,8 @@ class ProductCreate(BaseModel):
     shipping_return_policy: str | None = None
     url_handle: str | None = None
     tags: str | None = None
+    categories: str | None = None
+    category_list: list[str] = []
     variants: list[VariantCreate] = []
     images: list[ProductImageCreate] = []
 
@@ -153,6 +155,8 @@ class ProductUpdate(BaseModel):
     shipping_return_policy: str | None = None
     url_handle: str | None = None
     tags: str | None = None
+    categories: str | None = None
+    category_list: list[str] = []
 
 
 class ProductOut(BaseModel):
@@ -173,6 +177,8 @@ class ProductOut(BaseModel):
     shipping_return_policy: str | None = None
     url_handle: str | None
     tags: str | None
+    categories: str | None = None
+    category_list: list[str] = []
     created_at: datetime
     updated_at: datetime
     variants: list[VariantOut] = []
@@ -189,6 +195,8 @@ class ProductListOut(BaseModel):
     product_type: str | None
     vendor: str
     tags: str | None
+    categories: str | None = None
+    category_list: list[str] = []
     url_handle: str | None = None
     price: Decimal | None = None
     compare_at_price: Decimal | None = None
@@ -214,6 +222,7 @@ class CollectionCreate(BaseModel):
     theme_template: str = "Default collection"
     seo_title: str | None = Field(None, max_length=70)
     seo_description: str | None = Field(None, max_length=160)
+    meta_description: str | None = None
     url_handle: str | None = None
 
 
@@ -226,6 +235,7 @@ class CollectionUpdate(BaseModel):
     theme_template: str | None = None
     seo_title: str | None = Field(None, max_length=70)
     seo_description: str | None = Field(None, max_length=160)
+    meta_description: str | None = None
     url_handle: str | None = None
 
 
@@ -239,6 +249,7 @@ class CollectionOut(BaseModel):
     theme_template: str
     seo_title: str | None
     seo_description: str | None
+    meta_description: str | None = None
     url_handle: str | None
     created_at: datetime
     updated_at: datetime

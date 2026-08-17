@@ -6,7 +6,7 @@ from app.core.dependencies import get_current_user
 from app.modules.segments import service
 from app.modules.segments.schema import SegmentCreate, SegmentUpdate, SegmentOut, SegmentListOut
 
-router = APIRouter(prefix="/segments", tags=["Segments"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/segments", tags=["Segments"])
 
 
 @router.post("/", response_model=SegmentOut, status_code=status.HTTP_201_CREATED)

@@ -89,7 +89,7 @@ export default function AdminProductsPage() {
             const mapped: ProductItem[] = data.map((p: any) => ({
               id: p.id,
               title: p.title,
-              category: p.category || "Wallets",
+              category: p.categories || (p.category_list && p.category_list.length > 0 ? p.category_list.join(", ") : p.category || "Wallets"),
               price: p.price ? `Rs. ${p.price}` : "Rs. 2,799",
               status: p.status || "Active",
               inventory: "In stock",

@@ -154,7 +154,7 @@ collection_router = APIRouter(
 )
 
 
-@collection_router.post("/", response_model=CollectionOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_user)])
+@collection_router.post("/", response_model=CollectionOut, status_code=status.HTTP_201_CREATED)
 async def create_collection(data: CollectionCreate, db: AsyncSession = Depends(get_db)):
     return await service.create_collection(db, data)
 
@@ -177,7 +177,7 @@ async def get_collection(col_id: int, db: AsyncSession = Depends(get_db)):
     return obj
 
 
-@collection_router.patch("/{col_id}", response_model=CollectionOut, dependencies=[Depends(get_current_user)])
+@collection_router.patch("/{col_id}", response_model=CollectionOut)
 async def update_collection(col_id: int, data: CollectionUpdate, db: AsyncSession = Depends(get_db)):
     obj = await service.update_collection(db, col_id, data)
     if not obj:
@@ -185,7 +185,7 @@ async def update_collection(col_id: int, data: CollectionUpdate, db: AsyncSessio
     return obj
 
 
-@collection_router.delete("/{col_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_current_user)])
+@collection_router.delete("/{col_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_collection(col_id: int, db: AsyncSession = Depends(get_db)):
     deleted = await service.delete_collection(db, col_id)
     if not deleted:

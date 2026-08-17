@@ -31,6 +31,9 @@ from app.modules.content.schema import (
     BlogCommentCreate,
     BlogCommentUpdate,
     BlogCommentOut,
+    PageCreate,
+    PageUpdate,
+    PageOut,
     ContentOverview,
 )
 
@@ -57,7 +60,6 @@ async def get_content_overview(db: AsyncSession = Depends(get_db)):
 metaobject_definition_router = APIRouter(
     prefix="/metaobject-definitions",
     tags=["Metaobject Definitions"],
-    dependencies=[Depends(get_current_user)],
 )
 
 
@@ -324,7 +326,7 @@ menus_router = APIRouter(
 )
 
 
-@menus_router.post("/", response_model=MenuOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_user)])
+@menus_router.post("/", response_model=MenuOut, status_code=status.HTTP_201_CREATED)
 async def create_menu(
     data: MenuCreate,
     db: AsyncSession = Depends(get_db),
@@ -356,7 +358,7 @@ async def get_menu(
     return obj
 
 
-@menus_router.patch("/{menu_id}", response_model=MenuOut, dependencies=[Depends(get_current_user)])
+@menus_router.patch("/{menu_id}", response_model=MenuOut)
 async def update_menu(
     menu_id: int,
     data: MenuUpdate,
@@ -371,7 +373,7 @@ async def update_menu(
     return obj
 
 
-@menus_router.delete("/{menu_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_current_user)])
+@menus_router.delete("/{menu_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_menu(
     menu_id: int,
     db: AsyncSession = Depends(get_db),
@@ -389,7 +391,6 @@ async def delete_menu(
 @menus_router.post(
     "/{menu_id}/items", response_model=MenuItemOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(get_current_user)],
 )
 async def create_menu_item(
     menu_id: int,
@@ -539,7 +540,6 @@ blog_posts_router = APIRouter(
 
 @blog_posts_router.post(
     "/", response_model=BlogPostOut, status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(get_current_user)],
 )
 async def create_blog_post(
     data: BlogPostCreate,
@@ -583,7 +583,7 @@ async def get_blog_post(
     return obj
 
 
-@blog_posts_router.patch("/{post_id}", response_model=BlogPostOut, dependencies=[Depends(get_current_user)])
+@blog_posts_router.patch("/{post_id}", response_model=BlogPostOut)
 async def update_blog_post(
     post_id: int,
     data: BlogPostUpdate,
@@ -600,7 +600,6 @@ async def update_blog_post(
 
 @blog_posts_router.delete(
     "/{post_id}", status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(get_current_user)],
 )
 async def delete_blog_post(
     post_id: int,
@@ -690,3 +689,121 @@ async def delete_blog_comment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Blog comment not found",
         )
+
+
+# ===========================================================================
+# Pages Router
+# ===========================================================================
+
+pages_router = APIRouter(
+    prefix="/pages",
+    tags=["Pages"],
+)
+
+
+@pages_router.post("/", response_model=PageOut, status_code=status.HTTP_201_CREATED)
+async def create_page(data: PageCreate, db: AsyncSession = Depends(get_db)):
+    return await service.create_page(db, data)
+
+
+@pages_router.get("/", response_model=list[PageOut])
+async def list_pages(
+    search: str | None = Query(None),
+    visibility: str | None = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.list_pages(db, search=search, visibility=visibility, skip=skip, limit=limit)
+
+
+@pages_router.get("/{page_id_or_handle}", response_model=PageOut)
+async def get_page(page_id_or_handle: str, db: AsyncSession = Depends(get_db)):
+    if page_id_or_handle.isdigit():
+        obj = await service.get_page(db, int(page_id_or_handle))
+    else:
+        obj = await service.get_page_by_handle(db, page_id_or_handle)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return obj
+
+
+@pages_router.patch("/{page_id}", response_model=PageOut)
+async def update_page(page_id: int, data: PageUpdate, db: AsyncSession = Depends(get_db)):
+    obj = await service.update_page(db, page_id, data)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return obj
+
+
+@pages_router.delete("/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_page(page_id: int, db: AsyncSession = Depends(get_db)):
+    deleted = await service.delete_page(db, page_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Page not found")
+
+
+@pages_router.get("/robots.txt/raw")
+async def get_robots_txt_raw(db: AsyncSession = Depends(get_db)):
+    obj = await service.get_page_by_handle(db, "robots-txt")
+    default_text = (
+        "# Eligo Leather Storefront robots.txt\n"
+        "# Controls search engine crawler indexing (Googlebot, Bingbot, YandexBot)\n\n"
+        "User-agent: *\n"
+        "Disallow: /admin/\n"
+        "Disallow: /checkout/\n"
+        "Disallow: /cart/\n"
+        "Disallow: /account/\n"
+        "Disallow: /api/\n"
+        "Allow: /\n\n"
+        "# XML Sitemap Index for Search Engines\n"
+        "Sitemap: https://eligoleather.com/sitemap.xml\n"
+    )
+    if not obj:
+        return Response(content=default_text, media_type="text/plain")
+    return Response(content=obj.content or default_text, media_type="text/plain")
+
+
+@pages_router.get("/robots.txt/content")
+async def get_robots_txt_content(db: AsyncSession = Depends(get_db)):
+    obj = await service.get_page_by_handle(db, "robots-txt")
+    default_text = (
+        "# Eligo Leather Storefront robots.txt\n"
+        "# Controls search engine crawler indexing (Googlebot, Bingbot, YandexBot)\n\n"
+        "User-agent: *\n"
+        "Disallow: /admin/\n"
+        "Disallow: /checkout/\n"
+        "Disallow: /cart/\n"
+        "Disallow: /account/\n"
+        "Disallow: /api/\n"
+        "Allow: /\n\n"
+        "# XML Sitemap Index for Search Engines\n"
+        "Sitemap: https://eligoleather.com/sitemap.xml\n"
+    )
+    if not obj:
+        return {"content": default_text}
+    return {"content": obj.content or default_text}
+
+
+@pages_router.put("/robots.txt/content")
+async def save_robots_txt_content(payload: dict, db: AsyncSession = Depends(get_db)):
+    content_val = payload.get("content", "")
+    obj = await service.get_page_by_handle(db, "robots-txt")
+    if not obj:
+        from app.modules.content.schema import PageCreate
+        obj = await service.create_page(
+            db,
+            PageCreate(
+                title="robots.txt",
+                handle="robots-txt",
+                content=content_val,
+                visibility="Visible",
+                template="Default page",
+            ),
+        )
+    else:
+        from app.modules.content.schema import PageUpdate
+        obj = await service.update_page(db, obj.id, PageUpdate(content=content_val))
+    return {"status": "success", "content": obj.content}
+
+

@@ -66,11 +66,8 @@ async def update_profile(
 
 @router.get("/languages", response_model=list[LanguageOptionOut])
 async def list_languages():
-    from app.modules.settings.languages.service import get_available_languages
-
     return [
-        LanguageOptionOut(code=l["code"], name=l["name"], native_name=l.get("native_name"))
-        for l in get_available_languages()
+        LanguageOptionOut(code="en-US", name="English", native_name="English")
     ]
 
 

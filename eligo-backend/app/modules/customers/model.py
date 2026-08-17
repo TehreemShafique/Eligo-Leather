@@ -34,7 +34,7 @@ class Customer(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     first_name: Mapped[str | None] = mapped_column(String, nullable=True)
     last_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
     phone: Mapped[str | None] = mapped_column(String, nullable=True)
     phone_country_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     location: Mapped[str | None] = mapped_column(String, nullable=True)

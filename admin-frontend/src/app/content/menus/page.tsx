@@ -1,13 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { List, Plus, ArrowSquareOut, PencilSimple, Trash } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
 
+interface MenuRecord {
+  id: number
+  title: string
+  handle: string
+  items: string[]
+}
+
 export default function AdminMenusPage() {
-  const menus = [
+  const [menus, setMenus] = useState<MenuRecord[]>([
     {
       id: 1,
       title: "Quick Links",
@@ -38,7 +45,70 @@ export default function AdminMenusPage() {
       handle: "customer-account-menu",
       items: ["Orders", "Profile"],
     },
-  ]
+  ])
+
+  // Fetch live menus from DB & LocalStorage
+  useEffect(() => {
+    let isMounted = true
+
+    // Check local storage for created menus
+    try {
+      const stored = localStorage.getItem("eligo_created_menus")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0 && isMounted) {
+          setMenus((prev) => {
+            const combined = [...parsed, ...prev]
+            const uniqueMap = new Map()
+            combined.forEach((item) => {
+              if (!uniqueMap.has(item.handle)) {
+                uniqueMap.set(item.handle, item)
+              }
+            })
+            return Array.from(uniqueMap.values())
+          })
+        }
+      }
+    } catch (e) {
+      console.log("localStorage read error", e)
+    }
+
+    // Fetch from Backend PostgreSQL DB
+    const fetchMenusFromDB = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/v1/menus/")
+        if (res.ok) {
+          const data = await res.json()
+          if (isMounted && Array.isArray(data) && data.length > 0) {
+            const mapped: MenuRecord[] = data.map((m: any) => ({
+              id: m.id,
+              title: m.title,
+              handle: m.handle,
+              items: (m.items || []).map((it: any) => it.title || it.url),
+            }))
+
+            setMenus((prev) => {
+              const combined = [...mapped, ...prev]
+              const uniqueMap = new Map()
+              combined.forEach((item) => {
+                if (!uniqueMap.has(item.handle)) {
+                  uniqueMap.set(item.handle, item)
+                }
+              })
+              return Array.from(uniqueMap.values())
+            })
+          }
+        }
+      } catch (err) {
+        console.log("Menus DB API offline, rendering local list.")
+      }
+    }
+
+    fetchMenusFromDB()
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   return (
     <div className="space-y-5">
@@ -54,13 +124,13 @@ export default function AdminMenusPage() {
               <ArrowSquareOut className="w-4 h-4 text-amber-800" />
               <span>URL redirects</span>
             </button>
-            <button
-              onClick={() => toast.success("Create menu drawer opened!")}
+            <Link
+              href="/content/menus/new"
               className="eligo-btn-primary"
             >
               <Plus className="w-4 h-4" />
               <span>Create menu</span>
-            </button>
+            </Link>
           </>
         }
       />
@@ -84,8 +154,8 @@ export default function AdminMenusPage() {
               </tr>
             </thead>
             <tbody>
-              {menus.map((menu) => (
-                <tr key={menu.id} className="hover:bg-[#faf9f7] transition-colors">
+              {menus.map((menu, idx) => (
+                <tr key={menu.id ? `menu-${menu.id}-${idx}` : `menu-${idx}`} className="hover:bg-[#faf9f7] transition-colors">
                   <td className="eligo-td font-bold text-gray-900">
                     <div className="flex items-center gap-2">
                       <List className="w-4 h-4 text-amber-800 shrink-0" />
@@ -95,14 +165,18 @@ export default function AdminMenusPage() {
                   <td className="eligo-td font-mono text-gray-500">{menu.handle}</td>
                   <td className="eligo-td">
                     <div className="flex flex-wrap gap-1.5">
-                      {menu.items.map((item, idx) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-0.5 bg-gray-100 border border-gray-200 text-gray-800 font-medium rounded-md text-[11px]"
-                        >
-                          {item}
-                        </span>
-                      ))}
+                      {menu.items.length > 0 ? (
+                        menu.items.map((item, itemIdx) => (
+                          <span
+                            key={itemIdx}
+                            className="px-2 py-0.5 bg-gray-100 border border-gray-200 text-gray-800 font-medium rounded-md text-[11px]"
+                          >
+                            {item}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-gray-400 italic text-[11px]">No items added</span>
+                      )}
                     </div>
                   </td>
                   <td className="eligo-td text-right font-bold text-gray-900">

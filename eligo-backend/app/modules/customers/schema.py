@@ -60,7 +60,7 @@ class CustomerAddressOut(BaseModel):
 # ========== Customer Schemas ==========
 
 class CustomerCreate(BaseModel):
-    email: EmailStr
+    email: str | None = None
     first_name: str | None = None
     last_name: str | None = None
     phone: str | None = None
@@ -81,6 +81,7 @@ class CustomerCreate(BaseModel):
 
 
 class CustomerUpdate(BaseModel):
+    email: str | None = None
     first_name: str | None = None
     last_name: str | None = None
     phone: str | None = None
@@ -105,7 +106,7 @@ class CustomerUpdate(BaseModel):
 
 class CustomerOut(BaseModel):
     id: int
-    email: EmailStr
+    email: str | None
     first_name: str | None
     last_name: str | None
     phone: str | None
@@ -137,7 +138,7 @@ class CustomerOut(BaseModel):
 
 class CustomerListOut(BaseModel):
     id: int
-    email: EmailStr
+    email: str | None
     first_name: str | None
     last_name: str | None
     phone: str | None

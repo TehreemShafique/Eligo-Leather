@@ -43,10 +43,11 @@ export default function AdminSettingsAppsPage() {
       name: "Supabase Customer Reviews",
       category: "Reviews & Ratings",
       status: "Active",
-      description: "Supabase database engine for customer product reviews, ratings, and feedback moderation.",
+      description: "Supabase database engine for customer product reviews, ratings, photo uploads, and admin approval moderation.",
       icon: Star,
       color: "text-emerald-800 bg-emerald-50 border-emerald-200",
-      actions: ["fetch_reviews", "post_review"],
+      actions: ["fetch_reviews", "post_review", "update_review_status"],
+      portalUrl: "/settings/apps/supabase",
     },
     {
       code: "clarity_analytics",
@@ -116,7 +117,7 @@ export default function AdminSettingsAppsPage() {
                     href={app.portalUrl}
                     className="w-full py-2 bg-amber-800 hover:bg-amber-900 text-white rounded-xl font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-2"
                   >
-                    <span>Open Leopards Manual Booking Portal</span>
+                    <span>Open {app.name} Portal</span>
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                 ) : (

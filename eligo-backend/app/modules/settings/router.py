@@ -15,7 +15,6 @@ from app.modules.settings.sales_channels.router import webhook_router as sales_c
 from app.modules.settings.customer_events.router import router as customer_events_router
 from app.modules.settings.customer_events.router import public_router as customer_events_public_router
 from app.modules.settings.notifications.router import router as notifications_router
-from app.modules.settings.languages.router import router as languages_router
 from app.modules.settings.metafields_and_metaobjects.router import router as metafields_router
 from app.modules.settings.legal_privacy.router import router as legal_privacy_router
 from app.modules.settings.legal_privacy.router import public_router as legal_privacy_public_router
@@ -37,7 +36,6 @@ router.include_router(sales_channels_webhook_router)
 router.include_router(customer_events_router)
 router.include_router(customer_events_public_router)
 router.include_router(notifications_router)
-router.include_router(languages_router)
 router.include_router(metafields_router)
 router.include_router(legal_privacy_router)
 router.include_router(legal_privacy_public_router)

@@ -113,6 +113,7 @@ class Product(Base):
     shipping_return_policy: Mapped[str | None] = mapped_column(Text, nullable=True)
     url_handle: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
     tags: Mapped[str | None] = mapped_column(String, nullable=True)
+    categories: Mapped[str | None] = mapped_column(String, nullable=True)
 
     variants = relationship(
         "ProductVariant", back_populates="product",
@@ -225,6 +226,7 @@ class Collection(Base):
     theme_template: Mapped[str] = mapped_column(String, default="Default collection")
     seo_title: Mapped[str | None] = mapped_column(String(70), nullable=True)
     seo_description: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    meta_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     url_handle: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
 
     created_at: Mapped[datetime] = mapped_column(

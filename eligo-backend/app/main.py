@@ -32,6 +32,7 @@ from app.modules.content.router import (
     url_redirects_router,
     blog_posts_router,
     blog_comments_router,
+    pages_router,
 )
 from app.modules.markets.router import (
     markets_overview_router,
@@ -74,7 +75,7 @@ async def add_performance_and_cache_headers(request: Request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -107,6 +108,7 @@ app.include_router(menus_router, prefix="/api/v1")
 app.include_router(url_redirects_router, prefix="/api/v1")
 app.include_router(blog_posts_router, prefix="/api/v1")
 app.include_router(blog_comments_router, prefix="/api/v1")
+app.include_router(pages_router, prefix="/api/v1")
 app.include_router(markets_overview_router, prefix="/api/v1")
 app.include_router(market_router, prefix="/api/v1")
 app.include_router(market_catalog_router, prefix="/api/v1")

@@ -21,20 +21,20 @@ export default function AdminMetaobjectsPage() {
         icon={<Browsers className="w-5 h-5" />}
         actions={
           <>
-            <button
-              onClick={() => toast.info("Opening Metaobject Definitions manager...")}
+            <Link
+              href="/settings/custom_data/metaobjects"
               className="eligo-btn-secondary"
             >
               <Gear className="w-4 h-4 text-amber-800" />
-              <span>Manage</span>
-            </button>
-            <button
-              onClick={() => toast.success("Add definition drawer opened!")}
+              <span>Manage Definitions</span>
+            </Link>
+            <Link
+              href="/content/metaobjects/new"
               className="eligo-btn-primary"
             >
               <Plus className="w-4 h-4" />
               <span>Add definition</span>
-            </button>
+            </Link>
           </>
         }
       />

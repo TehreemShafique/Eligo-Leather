@@ -306,3 +306,33 @@ class BlogComment(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Pages
+# ---------------------------------------------------------------------------
+
+class Page(Base):
+    __tablename__ = "pages"
+    __table_args__ = (
+        Index("ix_pages_handle", "handle"),
+        Index("ix_pages_visibility", "visibility"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    handle: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    visibility: Mapped[str] = mapped_column(String, default="Visible")
+    template: Mapped[str | None] = mapped_column(String, default="Default page")
+    metafields: Mapped[str | None] = mapped_column(Text, nullable=True)
+    seo_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    seo_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
+

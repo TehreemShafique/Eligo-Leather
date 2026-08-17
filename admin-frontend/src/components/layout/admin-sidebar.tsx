@@ -123,7 +123,7 @@ export function AdminSidebar() {
       active: pathname.startsWith("/products"),
       items: [
         { name: "All products", href: "/products" },
-        { name: "Collections", href: "/products/collections" },
+        { name: "Categories", href: "/products/collections" },
         { name: "Inventory", href: "/products/inventory" },
         { name: "Purchase orders", href: "/products/purchase-orders" },
         { name: "Transfers", href: "/products/transfers" },
@@ -363,7 +363,7 @@ export function AdminSidebar() {
               )}
             >
               <div className="min-h-0 pl-4 space-y-0.5">
-                <SubItem href="/online-store/themes" label="Themes" active={pathname === "/online-store/themes"} />
+                <SubItem href="/online-store/pages" label="Pages" active={pathname.startsWith("/online-store/pages")} />
               </div>
             </div>
           </div>

@@ -14,7 +14,7 @@ from app.modules.customers.schema import (
     ExportCustomersRequest, ImportCustomersRequest, ImportCustomersResponse,
 )
 
-router = APIRouter(prefix="/customers", tags=["Customers"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/customers", tags=["Customers"])
 
 
 # ================================================================
@@ -23,9 +23,10 @@ router = APIRouter(prefix="/customers", tags=["Customers"], dependencies=[Depend
 
 @router.post("/", response_model=CustomerOut, status_code=status.HTTP_201_CREATED)
 async def create_customer(data: CustomerCreate, db: AsyncSession = Depends(get_db)):
-    existing = await service.get_by_email(db, data.email)
-    if existing:
-        raise HTTPException(status_code=400, detail="Customer with this email already exists")
+    if data.email:
+        existing = await service.get_by_email(db, data.email)
+        if existing:
+            raise HTTPException(status_code=400, detail="Customer with this email already exists")
     return await service.create_customer(db, data)
 
 
@@ -189,3 +190,11 @@ async def remove_segments(customer_id: int, segment_ids: list[int], db: AsyncSes
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer
+
+
+@router.post("/merge", response_model=CustomerOut)
+async def merge_customers(primary_id: int, secondary_id: int, db: AsyncSession = Depends(get_db)):
+    merged = await service.merge_customers(db, primary_id, secondary_id)
+    if not merged:
+        raise HTTPException(status_code=400, detail="Failed to merge customers or customer not found")
+    return merged

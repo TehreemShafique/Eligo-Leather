@@ -86,8 +86,6 @@ from app.modules.settings.notifications.model import (  # noqa: F401
     NotificationLog,
 )
 
-from app.modules.settings.languages.model import StoreLanguage  # noqa: F401
-
 from app.modules.settings.metafields_and_metaobjects.model import (  # noqa: F401
     MetafieldDefinition, MetafieldValue, MetafieldScope,
 )

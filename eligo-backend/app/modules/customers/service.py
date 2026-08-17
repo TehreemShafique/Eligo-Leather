@@ -411,3 +411,34 @@ async def remove_segments(db: AsyncSession, customer_id: int, segment_ids: list[
     await db.commit()
     await db.refresh(customer, attribute_names=["segments"])
     return customer
+
+
+async def merge_customers(db: AsyncSession, primary_id: int, secondary_id: int) -> Customer | None:
+    primary = await get_customer(db, primary_id)
+    secondary = await get_customer(db, secondary_id)
+    if not primary or not secondary:
+        return None
+
+    # Merge totals
+    primary.total_orders += secondary.total_orders
+    primary.amount_spent += secondary.amount_spent
+
+    # Merge contact details if missing
+    if not primary.phone and secondary.phone:
+        primary.phone = secondary.phone
+    if not primary.email and secondary.email:
+        primary.email = secondary.email
+    if not primary.location and secondary.location:
+        primary.location = secondary.location
+
+    # Merge tags
+    p_tags = set(t.strip() for t in (primary.tags or "").split(",") if t.strip())
+    s_tags = set(t.strip() for t in (secondary.tags or "").split(",") if t.strip())
+    combined_tags = list(p_tags.union(s_tags))
+    primary.tags = ", ".join(combined_tags) if combined_tags else None
+
+    # Delete secondary record
+    await db.delete(secondary)
+    await db.commit()
+    await db.refresh(primary)
+    return primary

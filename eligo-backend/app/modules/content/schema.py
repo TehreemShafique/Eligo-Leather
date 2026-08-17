@@ -371,3 +371,46 @@ class ContentOverview(BaseModel):
     blog: BlogSummary
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ===========================================================================
+# Pages
+# ===========================================================================
+
+class PageCreate(BaseModel):
+    title: str
+    handle: str | None = None
+    content: str | None = None
+    visibility: str = "Visible"
+    template: str | None = "Default page"
+    metafields: str | None = None
+    seo_title: str | None = None
+    seo_description: str | None = None
+
+
+class PageUpdate(BaseModel):
+    title: str | None = None
+    handle: str | None = None
+    content: str | None = None
+    visibility: str | None = None
+    template: str | None = None
+    metafields: str | None = None
+    seo_title: str | None = None
+    seo_description: str | None = None
+
+
+class PageOut(BaseModel):
+    id: int
+    title: str
+    handle: str
+    content: str | None = None
+    visibility: str
+    template: str | None = "Default page"
+    metafields: str | None = None
+    seo_title: str | None = None
+    seo_description: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+

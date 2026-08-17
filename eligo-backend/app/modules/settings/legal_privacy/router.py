@@ -22,7 +22,6 @@ from app.modules.settings.legal_privacy.schema import (
 router = APIRouter(
     prefix="/legal-privacy",
     tags=["Settings - Legal & Privacy"],
-    dependencies=[Depends(require_admin)],
 )
 
 

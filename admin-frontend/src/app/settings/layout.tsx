@@ -61,9 +61,7 @@ export default function SettingsLayout({
     { name: "Customer events", href: "/settings/customer_events", icon: Sliders },
     { name: "Notifications", href: "/settings/notifications", icon: Bell },
     { name: "Metafields and metaobjects", href: "/settings/custom_data", icon: Database },
-    { name: "Languages", href: "/settings/languages", icon: Translate },
-    { name: "Customer privacy", href: "/settings/privacy", icon: Cookie },
-    { name: "Policies", href: "/settings/legal", icon: ShieldCheck },
+    { name: "Policies & Privacy", href: "/settings/legal", icon: ShieldCheck },
   ]
 
   const filteredNavItems = settingsNavItems.filter((item) =>

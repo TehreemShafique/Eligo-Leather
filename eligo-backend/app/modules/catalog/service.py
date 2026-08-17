@@ -30,6 +30,7 @@ from app.modules.catalog.schema import (
 # ===========================================================================
 
 async def create_product(db: AsyncSession, data: ProductCreate) -> Product:
+    categories_str = data.categories or (",".join(data.category_list) if data.category_list else None)
     product = Product(
         title=data.title,
         description=data.description,
@@ -47,6 +48,7 @@ async def create_product(db: AsyncSession, data: ProductCreate) -> Product:
         shipping_return_policy=data.shipping_return_policy,
         url_handle=data.url_handle,
         tags=data.tags,
+        categories=categories_str,
         variants=[ProductVariant(**v.model_dump()) for v in data.variants],
         images=[ProductImage(**img.model_dump()) for img in data.images],
     )
@@ -70,6 +72,7 @@ def to_product_list_out(product: Product) -> ProductListOut:
     prices = [v.price for v in active_variants]
     compare_prices = [v.compare_at_price for v in active_variants if v.compare_at_price is not None]
     images = sorted(product.images, key=lambda img: img.position)
+    cat_list = [c.strip() for c in product.categories.split(",") if c.strip()] if product.categories else []
     return ProductListOut(
         id=product.id,
         title=product.title,
@@ -78,6 +81,8 @@ def to_product_list_out(product: Product) -> ProductListOut:
         product_type=product.product_type,
         vendor=product.vendor,
         tags=product.tags,
+        categories=product.categories,
+        category_list=cat_list,
         url_handle=product.url_handle,
         price=min(prices) if prices else None,
         compare_at_price=min(compare_prices) if compare_prices else None,

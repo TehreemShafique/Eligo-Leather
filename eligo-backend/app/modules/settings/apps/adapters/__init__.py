@@ -238,6 +238,43 @@ async def _supabase_post_review(payload: dict) -> dict:
     except httpx.HTTPError as exc:
         raise AdapterError(f"Supabase post_review failed: {exc}")
 
+
+async def _supabase_update_review_status(payload: dict) -> dict:
+    """Supabase Reviews - action: update_review_status.
+    Payload: {review_id, status} ('approved' | 'rejected' | 'pending')
+    """
+    try:
+        review_id = payload["review_id"]
+        status = payload["status"]
+        url = f"{_supabase_reviews_url()}?id=eq.{review_id}"
+        headers = await _supabase_headers()
+        headers["Prefer"] = "return=representation"
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.patch(url, headers=headers, json={"status": status})
+            resp.raise_for_status()
+            data = resp.json()
+
+        return {"success": True, "review": data[0] if isinstance(data, list) and data else data}
+    except httpx.HTTPError as exc:
+        raise AdapterError(f"Supabase update_review_status failed: {exc}")
+
+
+async def _supabase_delete_review(payload: dict) -> dict:
+    """Supabase Reviews - action: delete_review. Payload: {review_id}"""
+    try:
+        review_id = payload["review_id"]
+        url = f"{_supabase_reviews_url()}?id=eq.{review_id}"
+        headers = await _supabase_headers()
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.delete(url, headers=headers)
+            resp.raise_for_status()
+
+        return {"success": True, "message": f"Review {review_id} deleted successfully"}
+    except httpx.HTTPError as exc:
+        raise AdapterError(f"Supabase delete_review failed: {exc}")
+
 #   FOR FRONTEND  LOGIC
 # function timeAgo(createdAt) {
 #   const diffDays = Math.floor((Date.now() - new Date(createdAt)) / 86400000);
@@ -331,6 +368,8 @@ ADAPTERS: dict[str, dict[str, callable]] = {
     "supabase_reviews": {
         "fetch_reviews": _supabase_fetch_reviews,
         "post_review": _supabase_post_review,
+        "update_review_status": _supabase_update_review_status,
+        "delete_review": _supabase_delete_review,
     },
     "clarity_analytics": {"fetch_insights": _clarity_fetch_insights},
     # "twilio_sms": {"send_sms": _twilio_send_sms},           # skipped
