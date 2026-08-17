@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { BlogCard, BlogPostItem } from "./blog-card"
 
 const DEFAULT_BLOG_POSTS: BlogPostItem[] = Array.from({ length: 9 }, (_, idx) => ({
@@ -22,8 +22,39 @@ const DEFAULT_BLOG_POSTS: BlogPostItem[] = Array.from({ length: 9 }, (_, idx) =>
 }))
 
 export function BlogGrid({ initialPosts = DEFAULT_BLOG_POSTS }: { initialPosts?: BlogPostItem[] }) {
-  const postsList = initialPosts.length > 0 ? initialPosts : DEFAULT_BLOG_POSTS
+  const [dbPosts, setDbPosts] = useState<BlogPostItem[] | null>(null)
   const [visibleCount, setVisibleCount] = useState(6)
+
+  useEffect(() => {
+    let isMounted = true
+    const fetchDbBlogs = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/v1/blog-posts/")
+        if (res.ok) {
+          const data = await res.json()
+          if (isMounted && Array.isArray(data) && data.length > 0) {
+            const mapped: BlogPostItem[] = data.map((p: any) => ({
+              id: p.id,
+              slug: p.handle || `blog-post-${p.id}`,
+              title: p.title,
+              excerpt: p.excerpt || (p.body ? p.body.replace(/<[^>]+>/g, '').slice(0, 140) + '...' : p.title),
+              image: p.featured_image_url || p.thumbnail_url || "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=600",
+              date: p.published_at ? new Date(p.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Feb 4, 2026"
+            }))
+            setDbPosts(mapped)
+          }
+        }
+      } catch (err) {
+        console.log("Blog posts DB API offline, using default sample posts.")
+      }
+    }
+    fetchDbBlogs()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const postsList = dbPosts && dbPosts.length > 0 ? dbPosts : (initialPosts.length > 0 ? initialPosts : DEFAULT_BLOG_POSTS)
 
   const handleLoadMore = () => {
     setVisibleCount((prev) => Math.min(prev + 3, postsList.length))

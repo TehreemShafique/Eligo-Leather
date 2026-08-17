@@ -114,7 +114,7 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(blogJsonLd) }}
       />
-      <BlogDetailContent article={articleData} />
+      <BlogDetailContent article={articleData} slug={slug} />
     </>
   )
 }

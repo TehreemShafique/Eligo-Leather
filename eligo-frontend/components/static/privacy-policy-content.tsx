@@ -1,9 +1,29 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 
 export function PrivacyPolicyContent() {
+  const [dbPolicyHtml, setDbPolicyHtml] = useState<string | null>(null)
+
+  useEffect(() => {
+    let isMounted = true
+    fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/policies")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isMounted && Array.isArray(data)) {
+          const found = data.find((p: any) => p.policy_type === "privacy_policy")
+          if (found && found.body) {
+            setDbPolicyHtml(found.body)
+          }
+        }
+      })
+      .catch(() => null)
+    return () => {
+      isMounted = false
+    }
+  }, [])
   return (
     <div className="py-8 bg-slate-50 min-h-screen font-['Manrope']">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -18,11 +38,18 @@ export function PrivacyPolicyContent() {
           </h1>
         </div>
 
-        {/* Intro Box */}
-        <div className="bg-white p-8 sm:p-10 rounded-2xl border border-gray-100 shadow-xs mb-12 text-lg text-black font-normal leading-relaxed">
-          At Eligoleather, we are committed to protecting your privacy and ensuring the security of your personal information. This Privacy Policy outlines how we collect, use, and protect the data you provide when using our website,{" "}
-          <strong className="font-bold text-amber-800">Eligoleather.com</strong>, and our services. By accessing and using our website, you agree to the terms of this Privacy Policy.
-        </div>
+        {dbPolicyHtml ? (
+          <div
+            className="bg-white p-8 sm:p-10 rounded-2xl border border-gray-100 shadow-xs mb-12 text-base sm:text-lg text-gray-800 leading-relaxed space-y-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-amber-800 [&_h3]:text-xl [&_h3]:font-bold [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_a]:text-amber-800 [&_a]:underline"
+            dangerouslySetInnerHTML={{ __html: dbPolicyHtml }}
+          />
+        ) : (
+          <>
+            {/* Intro Box */}
+            <div className="bg-white p-8 sm:p-10 rounded-2xl border border-gray-100 shadow-xs mb-12 text-lg text-black font-normal leading-relaxed">
+              At Eligoleather, we are committed to protecting your privacy and ensuring the security of your personal information. This Privacy Policy outlines how we collect, use, and protect the data you provide when using our website,{" "}
+              <strong className="font-bold text-amber-800">Eligoleather.com</strong>, and our services. By accessing and using our website, you agree to the terms of this Privacy Policy.
+            </div>
 
         {/* Policy Sections */}
         <div className="space-y-12 text-black font-['Manrope']">
@@ -193,7 +220,9 @@ export function PrivacyPolicyContent() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </>
+    )}
+  </div>
+</div>
   )
 }

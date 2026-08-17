@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Calendar } from "@phosphor-icons/react"
@@ -11,15 +12,47 @@ interface BlogArticle {
   title?: string
   date?: string
   image?: string
+  slug?: string
+  contentHtml?: string
 }
 
-export function BlogDetailContent({ article }: { article?: BlogArticle }) {
-  const title =
-    article?.title || "Luxury Leather Glasses Case: A Touch of Elegance for Everyday Use"
-  const date = article?.date || "Feb 4, 2026"
-  const image =
-    article?.image ||
-    "https://images.unsplash.com/photo-1591561954557-26941169b49e?auto=format&fit=crop&q=80&w=1200"
+export function BlogDetailContent({ article, slug }: { article?: BlogArticle; slug?: string }) {
+  const [dbArticle, setDbArticle] = useState<{ title: string; date: string; image: string; contentHtml?: string } | null>(null)
+
+  useEffect(() => {
+    if (!slug) return
+    let isMounted = true
+    const fetchSingleBlog = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/v1/blog-posts/")
+        if (res.ok) {
+          const data = await res.json()
+          if (isMounted && Array.isArray(data)) {
+            const found = data.find((p: any) => p.handle === slug || p.id.toString() === slug)
+            if (found) {
+              setDbArticle({
+                title: found.title,
+                date: found.published_at ? new Date(found.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Feb 4, 2026",
+                image: found.featured_image_url || found.thumbnail_url || "https://images.unsplash.com/photo-1591561954557-26941169b49e?auto=format&fit=crop&q=80&w=1200",
+                contentHtml: found.body,
+              })
+            }
+          }
+        }
+      } catch (err) {
+        console.log("Blog post detail DB API offline, using fallback template.")
+      }
+    }
+    fetchSingleBlog()
+    return () => {
+      isMounted = false
+    }
+  }, [slug])
+
+  const title = dbArticle?.title || article?.title || "Luxury Leather Glasses Case: A Touch of Elegance for Everyday Use"
+  const date = dbArticle?.date || article?.date || "Feb 4, 2026"
+  const image = dbArticle?.image || article?.image || "https://images.unsplash.com/photo-1591561954557-26941169b49e?auto=format&fit=crop&q=80&w=1200"
+  const contentHtml = dbArticle?.contentHtml
 
   return (
     <article className="py-8 bg-slate-50 min-h-screen font-['Manrope']">
@@ -53,18 +86,25 @@ export function BlogDetailContent({ article }: { article?: BlogArticle }) {
 
         {/* Article Body */}
         <div className="max-w-4xl mx-auto space-y-10 text-black text-lg sm:text-xl font-normal leading-relaxed">
-          {/* Intro Section */}
-          <div className="space-y-4">
-            <p>
-              Protecting your eyewear can be a real challenge, especially when most cases on the market are either bulky or made from low-quality materials. A poorly designed case not only compromises the safety of your glasses but also detracts from your personal style.
-            </p>
-            <p>
-              The solution lies in investing in a luxury leather glasses case. These cases are designed to offer the perfect blend of durability, protection, and style. Crafted from high-quality leather, they keep your glasses safe while adding a touch of elegance to your accessories.
-            </p>
-            <p>
-              In this guide, we’ll explore the benefits of using a leather glasses case, its different types, and why brands like Eligo Leather are the go-to choice in Pakistan for luxury leather goods.
-            </p>
-          </div>
+          {contentHtml ? (
+            <div
+              className="space-y-6 [&_h2]:text-3xl [&_h2]:sm:text-4xl [&_h2]:font-bold [&_h2]:text-black [&_h3]:text-2xl [&_h3]:font-bold [&_p]:mb-4 [&_ul]:list-disc [&_ul]:pl-5 [&_a]:text-amber-800 [&_a]:underline"
+              dangerouslySetInnerHTML={{ __html: contentHtml }}
+            />
+          ) : (
+            <>
+              {/* Intro Section */}
+              <div className="space-y-4">
+                <p>
+                  Protecting your eyewear can be a real challenge, especially when most cases on the market are either bulky or made from low-quality materials. A poorly designed case not only compromises the safety of your glasses but also detracts from your personal style.
+                </p>
+                <p>
+                  The solution lies in investing in a luxury leather glasses case. These cases are designed to offer the perfect blend of durability, protection, and style. Crafted from high-quality leather, they keep your glasses safe while adding a touch of elegance to your accessories.
+                </p>
+                <p>
+                  In this guide, we’ll explore the benefits of using a leather glasses case, its different types, and why brands like Eligo Leather are the go-to choice in Pakistan for luxury leather goods.
+                </p>
+              </div>
 
           {/* Section 1 */}
           <div className="space-y-4">
@@ -223,7 +263,9 @@ export function BlogDetailContent({ article }: { article?: BlogArticle }) {
               </Link>
               . Crafted with the same attention to detail and timeless design, it’s the perfect complement for those who value both sophistication and quality in their everyday carry.
             </p>
-          </div>
+            </div>
+          </>
+        )}
         </div>
 
         {/* FAQ Accordion Section */}
