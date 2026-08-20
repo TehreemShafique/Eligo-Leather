@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { COOKIE_KEYS } from "./lib/constants";
+import { COOKIE_KEYS } from "./src/lib/constants";
 
 const PROTECTED_PREFIXES = ["/account"];
 const AUTH_PAGES = ["/login", "/register"];
