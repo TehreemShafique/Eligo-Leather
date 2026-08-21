@@ -85,6 +85,7 @@ export function ProductBuyBox({
   const handleAddToCart = () => {
     addToCart({
       id,
+      variantId: selectedColor?.variantId,
       title,
       price,
       originalPrice,
@@ -98,6 +99,7 @@ export function ProductBuyBox({
   const handleBuyItNow = () => {
     addToCart({
       id,
+      variantId: selectedColor?.variantId,
       title,
       price,
       originalPrice,

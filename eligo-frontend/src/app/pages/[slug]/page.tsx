@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { api } from "@/lib/api-client"
+import { sanitizeCmsHtml } from "@/lib/sanitize-html"
 import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
 
 interface CmsPageRecord {
@@ -86,7 +87,7 @@ export default async function CustomerStorefrontPage({ params }: PageProps) {
         </h1>
         <article
           className="prose prose-neutral max-w-none prose-headings:font-semibold prose-a:text-amber-800"
-          dangerouslySetInnerHTML={{ __html: page.content }}
+          dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(page.content) }}
         />
         <div className="border-t border-gray-100 pt-8 text-sm text-gray-500">
           Last updated: {page.updated_at ? new Date(page.updated_at).toLocaleDateString() : "Recently"}

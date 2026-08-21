@@ -1,6 +1,7 @@
 ﻿import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { getBlogPostByHandle } from "@/modules/content/api"
+import { sanitizeCmsHtml } from "@/lib/sanitize-html"
 import { truncate } from "@/lib/utils"
 import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
 import { BlogDetailContent } from "@/components/blog/blog-detail-content"
@@ -97,7 +98,7 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(blogJsonLd).replace(/</g, "\\u003c") }}
       />
-      <BlogDetailContent post={post} />
+      <BlogDetailContent post={{ ...post, body: sanitizeCmsHtml(post.body ?? "") }} />
     </>
   )
 }

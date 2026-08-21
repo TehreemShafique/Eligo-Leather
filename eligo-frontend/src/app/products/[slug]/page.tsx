@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { listProducts, getProduct } from "@/modules/catalog/api"
+import { sanitizeCmsHtml } from "@/lib/sanitize-html"
 import { truncate } from "@/lib/utils"
 import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
 import { ProductDetailView } from "@/components/product/product-detail-view"
@@ -159,7 +160,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdSchema).replace(/</g, "\\u003c") }}
         />
       )}
-      <ProductDetailView product={product} relatedProducts={relatedProducts} />
+      <ProductDetailView
+        product={{
+          ...product,
+          description: product.description ? sanitizeCmsHtml(product.description) : product.description,
+        }}
+        relatedProducts={relatedProducts}
+      />
     </>
   )
 }

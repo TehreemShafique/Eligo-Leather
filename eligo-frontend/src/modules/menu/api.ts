@@ -55,9 +55,12 @@ export const DEFAULT_HEADER_NAV: Array<{
   { label: "Contact Us", url: "/contact" },
 ]
 
+// Public navigation content: safe to cache at the edge for a short window.
+const MENUS_CACHE = { next: { revalidate: 60, tags: ["menus"] } }
+
 export async function listMenus(): Promise<Menu[]> {
   try {
-    const data = await api.get("/menus", { auth: false })
+    const data = await api.get("/menus", { auth: false, ...MENUS_CACHE })
     return Array.isArray(data) ? data : []
   } catch {
     console.warn("Backend API offline or unreachable, falling back to default navigation menu.")
@@ -67,7 +70,7 @@ export async function listMenus(): Promise<Menu[]> {
 
 export async function getMenu(menuId: number): Promise<Menu | null> {
   try {
-    const data = await api.get(`/menus/${menuId}`, { auth: false })
+    const data = await api.get(`/menus/${menuId}`, { auth: false, ...MENUS_CACHE })
     return data as Menu
   } catch (error) {
     console.error(`Failed to fetch menu ${menuId}:`, error)
