@@ -8,7 +8,7 @@ from app.modules.catalog.schema import (
     ProductCreate, ProductUpdate, ProductOut, ProductListOut,
     VariantCreate, VariantUpdate, VariantOut,
     ProductImageCreate, ProductImageUpdate, ProductImageOut,
-    CollectionCreate, CollectionUpdate, CollectionOut,
+    CollectionCreate, CollectionUpdate, CollectionOut, CollectionType,
     LocationCreate, LocationUpdate, LocationOut,
     InventoryItemCreate, InventoryItemUpdate, InventoryItemOut,
     PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderOut, PurchaseOrderWithItems,
@@ -162,11 +162,15 @@ async def create_collection(data: CollectionCreate, db: AsyncSession = Depends(g
 @collection_router.get("/", response_model=list[CollectionOut])
 async def list_collections(
     search: str | None = Query(None),
+    collection_type: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.list_collections(db, search=search, skip=skip, limit=limit)
+    return await service.list_collections(
+        db, search=search, collection_type=collection_type,
+        skip=skip, limit=limit,
+    )
 
 
 @collection_router.get("/{col_id}", response_model=CollectionOut)

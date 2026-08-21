@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   CheckCircle,
   Clock,
-  Printer,
   X,
   FileText,
   ShieldCheck,
@@ -85,16 +84,33 @@ function LeopardsCourierFormContent() {
   const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("Any")
   const [logTypeFilter, setLogTypeFilter] = useState("All")
   const [logStatusFilter, setLogStatusFilter] = useState("All")
-  const [datePreset, setDatePreset] = useState("All Time")
-  const [dateRangeText, setDateRangeText] = useState("")
-  const dateRange = dateRangeText
-  const setDateRange = setDateRangeText
-  const [selectedCity, setSelectedCity] = useState("Select Cities")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [cityFilter, setCityFilter] = useState("")
   const [tagsFilter, setTagsFilter] = useState("")
   const [serviceTypeFilter, setServiceTypeFilter] = useState("Select Service Type")
   const [selectedWarehouse, setSelectedWarehouse] = useState(
     "Office # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad"
   )
+
+  // Manual Date Range Filters (From/To)
+  const [fulfilledDateFrom, setFulfilledDateFrom] = useState("")
+  const [fulfilledDateTo, setFulfilledDateTo] = useState("")
+  const [dispatchedDateFrom, setDispatchedDateFrom] = useState("")
+  const [dispatchedDateTo, setDispatchedDateTo] = useState("")
+  const [logsDateFrom, setLogsDateFrom] = useState("")
+  const [logsDateTo, setLogsDateTo] = useState("")
+
+  // Fulfilled Tab - Payment Filter Options
+  const [fulfilledPaymentFilter, setFulfilledPaymentFilter] = useState("All")
+  const [fulfilledDeliveryFilter, setFulfilledDeliveryFilter] = useState("Any")
+
+  // Dispatch Tab - Filter Options
+  const [dispatchedPaymentFilter, setDispatchedPaymentFilter] = useState("All")
+  const [dispatchedDeliveryFilter, setDispatchedDeliveryFilter] = useState("Any")
+
+  // Action Dropdown State
+  const [actionDropdownOpen, setActionDropdownOpen] = useState(false)
 
   // Inline Search Filters
   const [searchOrderNo, setSearchOrderNo] = useState("")
@@ -104,9 +120,7 @@ function LeopardsCourierFormContent() {
   const [searchAmount, setSearchAmount] = useState("")
 
   // Modals & Menu State
-  const [selectedSlip, setSelectedSlip] = useState<any>(null)
   const [selectedChallan, setSelectedChallan] = useState<any>(null)
-  const [openActionMenuId, setOpenActionMenuId] = useState<number | null>(null)
   const [syncModalOpen, setSyncModalOpen] = useState(false)
   const [syncChallansInput, setSyncChallansInput] = useState("")
 
@@ -136,7 +150,6 @@ function LeopardsCourierFormContent() {
   const [manualSpecialInstructions, setManualSpecialInstructions] = useState(
     "GRACIOUS - Handmade Trifold Leather Wallet - Black(LW007) Qty=1"
   )
-  const [bookingResultModal, setBookingResultModal] = useState<any>(null)
 
   // Fetch single order details when redirected with ?order_id=
   useEffect(() => {
@@ -180,6 +193,7 @@ function LeopardsCourierFormContent() {
       consignee_address: manualConsigneeAddress,
       destination_city: manualDestinationCity,
       special_instructions: manualSpecialInstructions,
+      weight: manualWeightGrams || "500",
       weight_grams: parseInt(manualWeightGrams) || 500,
       pieces: parseInt(manualPieces) || 1,
       shipment_type: manualShipmentType,
@@ -195,44 +209,156 @@ function LeopardsCourierFormContent() {
       const data = await res.json()
       if (res.ok && data.status === "success") {
         toast.success(`Packet ${data.cn_number} booked successfully with Leopards API!`)
-        setBookingResultModal(data)
+        if (data.cn_number) {
+          handleDownloadCnPdf(data.cn_number)
+        }
+        fetchOrdersFromAPI()
+        fetchDispatchedFromAPI()
       } else {
-        toast.error(data.message || "Failed to book packet with Leopards API")
+        const errMsg = data.message || data.detail || "Failed to book packet"
+        toast.error(`Booking failed: ${errMsg}`)
       }
-    } catch (e) {
-      toast.success(`Order ${manualOrderId} manually booked! CN #ID7540816875`)
-      setBookingResultModal({
-        status: "success",
-        cn_number: "ID7540816875",
-        booking_details: {
-          track_number: "ID7540816875",
-          order_id: manualOrderId,
-          cod_amount: manualCodAmount,
-          consignee_name: manualConsigneeName,
-          consignee_address: manualConsigneeAddress,
-          destination_city: manualDestinationCity,
-          booking_date: "08/12/2026",
-          status: "Booked",
-        },
-      })
+    } catch (e: any) {
+      toast.error(`Network error: Could not reach backend server. ${e?.message || ""}`)
     } finally {
       setLoading(false)
     }
   }
 
-  // 1. FETCH ORDERS API
+  // 0. SYNC ALL FROM LEOPARDS API (auto-discovers all CNs via cnList)
+  const [syncing, setSyncing] = useState(false)
+  const handleSyncAll = async () => {
+    setSyncing(true)
+    toast.info("Connecting to Leopards API & syncing all CNs...")
+    try {
+      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/sync-all", { cache: "no-store" })
+      const data = await res.json()
+      if (res.ok && data.status === "success") {
+        const s = data.summary || {}
+        toast.success(
+          `Sync complete: ${s.total_tracked || 0} shipments tracked | ` +
+          `Known: ${s.total_cns_known || 0} CNs | COD: Rs ${(s.total_cod || 0).toLocaleString()}`
+        )
+        if (data.orders && Array.isArray(data.orders)) setOrders(data.orders)
+        if (data.dispatched && Array.isArray(data.dispatched)) setDispatchedList(data.dispatched)
+        fetchLoadSheetsFromAPI()
+        fetchLogsFromAPI()
+      } else {
+        toast.error(data.message || "Sync failed")
+      }
+    } catch (err: any) {
+      toast.error(`Sync failed: ${err?.message || "Network error"}`)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // 0b. HISTORICAL CSV IMPORT
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImportCsvClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleImportCsvFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ""
+
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      toast.error("Please select a CSV file")
+      return
+    }
+
+    setLoading(true)
+    toast.info(`Importing historical data from ${file.name}...`)
+
+    try {
+      const csvContent = await file.text()
+      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/import-csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv_content: csvContent }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data.imported > 0) {
+          toast.success(data.message || `Imported ${data.imported} shipment(s) successfully!`)
+        } else {
+          const headers = data.debug_headers || []
+          const sample = data.debug_sample_row || {}
+          const headerList = headers.join(", ")
+          toast.warning(
+            `No shipments imported (0 CN found). CSV headers: ${headerList}`,
+            { duration: 10000 }
+          )
+          console.log("CSV Debug - Headers:", headers)
+          console.log("CSV Debug - Sample row (no CN):", sample)
+        }
+        fetchOrdersFromAPI()
+        fetchLogsFromAPI()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        toast.error(err.detail || "Failed to import CSV")
+      }
+    } catch (err: any) {
+      toast.error(`Import error: ${err?.message || "Network error"}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Direct PDF download for any CN number (replaces printable modal)
+  const handleDownloadCnPdf = async (cnNumber: string) => {
+    if (!cnNumber) {
+      toast.error("No CN number available for this order")
+      return
+    }
+    toast.info(`Downloading airway bill PDF for CN #${cnNumber} from Leopards API...`)
+    try {
+      const res = await fetch(`http://localhost:8000/api/v1/orders/leopard/cn/${cnNumber}/download-pdf`)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.detail || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      if (blob.size === 0) {
+        throw new Error("Received empty PDF from Leopards API")
+      }
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `leopard_airway_bill_${cnNumber}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success(`Airway bill ${cnNumber}.pdf downloaded!`)
+    } catch (err: any) {
+      console.error("Failed to download airway bill PDF:", err)
+      toast.error(`Failed to download PDF: ${err?.message || "Leopards API did not return a PDF. Try generating a load sheet first."}`)
+    }
+  }
+
+  // 1. FETCH ALL ORDERS FROM LEOPARDS API (primary endpoint for Orders tab)
   const fetchOrdersFromAPI = async () => {
     setLoading(true)
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/list", { cache: "no-store" })
+      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/all-orders", { cache: "no-store" })
       if (res.ok) {
         const data = await res.json()
         if (data.orders && Array.isArray(data.orders)) {
           setOrders(data.orders)
         }
+        if (data.dispatched && Array.isArray(data.dispatched)) {
+          setDispatchedList(data.dispatched)
+        }
+      } else {
+        console.warn("Leopard all-orders API returned", res.status)
       }
     } catch (err) {
-      console.warn("Using local orders list:", err)
+      console.error("Failed to fetch leopard orders:", err)
     } finally {
       setLoading(false)
     }
@@ -240,7 +366,6 @@ function LeopardsCourierFormContent() {
 
   // 2. FETCH DISPATCHED PARCELS API
   const fetchDispatchedFromAPI = async () => {
-    setLoading(true)
     try {
       const res = await fetch("http://localhost:8000/api/v1/orders/leopard/dispatched", { cache: "no-store" })
       if (res.ok) {
@@ -248,17 +373,16 @@ function LeopardsCourierFormContent() {
         if (data.dispatched && Array.isArray(data.dispatched)) {
           setDispatchedList(data.dispatched)
         }
+      } else {
+        console.warn("Leopard dispatched API returned", res.status)
       }
     } catch (err) {
-      console.warn("Using local dispatched list:", err)
-    } finally {
-      setLoading(false)
+      console.error("Failed to fetch dispatched parcels:", err)
     }
   }
 
   // 3. FETCH GENERATED LOAD SHEETS API
   const fetchLoadSheetsFromAPI = async () => {
-    setLoading(true)
     try {
       const res = await fetch("http://localhost:8000/api/v1/orders/leopard/load-sheets", { cache: "no-store" })
       if (res.ok) {
@@ -266,11 +390,11 @@ function LeopardsCourierFormContent() {
         if (data.load_sheets && Array.isArray(data.load_sheets)) {
           setLoadSheetsList(data.load_sheets)
         }
+      } else {
+        console.warn("Leopard load-sheets API returned", res.status)
       }
     } catch (err) {
-      console.warn("Failed to fetch load sheets list from API:", err)
-    } finally {
-      setLoading(false)
+      console.error("Failed to fetch load sheets from API:", err)
     }
   }
 
@@ -336,7 +460,6 @@ function LeopardsCourierFormContent() {
 
   // 4. FETCH LOGS API
   const fetchLogsFromAPI = async () => {
-    setLoading(true)
     try {
       const res = await fetch("http://localhost:8000/api/v1/orders/leopard/logs", { cache: "no-store" })
       if (res.ok) {
@@ -344,17 +467,16 @@ function LeopardsCourierFormContent() {
         if (data.logs && Array.isArray(data.logs)) {
           setLogsList(data.logs)
         }
+      } else {
+        console.warn("Leopard logs API returned", res.status)
       }
     } catch (err) {
-      console.warn("Using local logs list:", err)
-    } finally {
-      setLoading(false)
+      console.error("Failed to fetch leopard logs:", err)
     }
   }
 
   // 5. FETCH SETTINGS API
   const fetchSettingsFromAPI = async () => {
-    setLoading(true)
     try {
       const res = await fetch("http://localhost:8000/api/v1/orders/leopard/settings", { cache: "no-store" })
       if (res.ok) {
@@ -362,21 +484,20 @@ function LeopardsCourierFormContent() {
         if (data.settings) {
           setSettingsData(data.settings)
         }
+      } else {
+        console.warn("Leopard settings API returned", res.status)
       }
     } catch (err) {
-      console.warn("Using local settings:", err)
-    } finally {
-      setLoading(false)
+      console.warn("Failed to fetch leopard settings (backend may be offline):", err)
     }
   }
 
-  // Initial Data Load based on Active Tab
+  // Initial Data Load - Auto-sync all data from Leopards API on mount
   useEffect(() => {
     fetchOrdersFromAPI()
-    fetchDispatchedFromAPI()
+    fetchSettingsFromAPI()
     fetchLoadSheetsFromAPI()
     fetchLogsFromAPI()
-    fetchSettingsFromAPI()
   }, [])
 
   // BATCH CN GENERATION
@@ -398,25 +519,46 @@ function LeopardsCourierFormContent() {
 
       if (res.ok) {
         const data = await res.json()
-        toast.success(`Leopards Consignment CN generated successfully for selected orders!`)
-        setOrders((prev) =>
-          prev.map((o) => {
-            if (selectedOrderIds.includes(o.id)) {
-              const matched = data.results?.find((r: any) => r.order_id === o.id)
-              return {
-                ...o,
-                cn_number: matched ? matched.cn_number : `ID7536${Math.floor(100000 + Math.random() * 800000)}`,
-                fulfillment: "fulfilled",
-                tags: "Dispatched, leopards",
+        if (data.results && Array.isArray(data.results)) {
+          const successes = data.results.filter((r: any) => r.status === "CN_GENERATED_SUCCESSFULLY")
+          const booked = data.results.filter((r: any) => r.status === "CN_GENERATED_SUCCESSFULLY" && r.cn_number)
+          const failures = data.results.filter((r: any) => r.status === "NO_CN_AVAILABLE" || r.status === "CN_GENERATED_BOOK_FAILED" || r.status === "CN_GENERATED_NO_ORDER_DATA")
+          if (successes.length > 0) {
+            toast.success(`CN generated & booked successfully for ${successes.length} order(s)! Shipment is now live on Leopards.`)
+          }
+          if (failures.length > 0) {
+            const noCn = failures.filter((r: any) => r.status === "NO_CN_AVAILABLE")
+            const bookFail = failures.filter((r: any) => r.status === "CN_GENERATED_BOOK_FAILED")
+            const noOrder = failures.filter((r: any) => r.status === "CN_GENERATED_NO_ORDER_DATA")
+            if (noCn.length > 0) toast.warning(`${noCn.length} order(s) — no available CNs in pool`)
+            if (bookFail.length > 0) toast.warning(`${bookFail.length} order(s) — CN assigned but Leopards booking failed (check logs)`)
+            if (noOrder.length > 0) toast.warning(`${noOrder.length} order(s) — CN assigned but order not found in local DB`)
+          }
+          setOrders((prev) =>
+            prev.map((o) => {
+              const matched = successes.find((r: any) => r.order_id === o.id)
+              if (matched) {
+                return {
+                  ...o,
+                  cn_number: matched.cn_number,
+                  fulfillment: "fulfilled",
+                  tags: "Dispatched, leopards",
+                }
               }
-            }
-            return o
-          })
-        )
+              return o
+            })
+          )
+        } else {
+          toast.success(data.message || "CN generation completed")
+        }
         setSelectedOrderIds([])
+        fetchOrdersFromAPI()
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        toast.error(errData.detail || errData.message || "Failed to generate CN")
       }
-    } catch (err) {
-      toast.success(`Generated CN Number for selected order(s) via Leopards API!`)
+    } catch (err: any) {
+      toast.error(`Network error: Could not reach backend server. ${err?.message || ""}`)
     } finally {
       setLoading(false)
     }
@@ -467,14 +609,9 @@ function LeopardsCourierFormContent() {
     updateSettings(updated)
   }
 
-  // Date Filtering Helper (Defaults to "All Time" -> shows ALL records)
+  // Date Filtering Helper — manual From/To date range
   const matchDateFilter = (itemDateStr?: string) => {
-    const activeText = dateRangeText || dateRange
-    if (activeText && itemDateStr && !itemDateStr.toLowerCase().includes(activeText.toLowerCase())) {
-      return false
-    }
-
-    if (datePreset === "All Time") return true
+    if (!dateFrom && !dateTo) return true
     if (!itemDateStr) return true
 
     let itemDate: Date | null = null
@@ -502,23 +639,17 @@ function LeopardsCourierFormContent() {
 
     if (!itemDate || isNaN(itemDate.getTime())) return true
 
-    const now = new Date()
-    const diffMs = now.getTime() - itemDate.getTime()
-    const diffDays = diffMs / (1000 * 60 * 60 * 24)
-
-    if (datePreset === "Today") return diffDays >= -1 && diffDays <= 1.5
-    if (datePreset === "Last 7 Days") return diffDays >= -1 && diffDays <= 7.5
-    if (datePreset === "Last 30 Days") return diffDays >= -1 && diffDays <= 30.5
-    if (datePreset === "Last 90 Days") return diffDays >= -1 && diffDays <= 90.5
-
+    const itemStr = itemDate.toISOString().split("T")[0]
+    if (dateFrom && itemStr < dateFrom) return false
+    if (dateTo && itemStr > dateTo) return false
     return true
   }
 
-  // Filtered Orders Logic
+  // Filtered Orders Logic — show ALL shipments from Leopard API, apply user filters
   const filteredOrders = orders.filter((o) => {
     if (fulfillmentFilter !== "All" && (o.fulfillment || "").toLowerCase() !== fulfillmentFilter.toLowerCase()) return false
     if (paymentFilter !== "All" && (o.payment || "").toLowerCase() !== paymentFilter.toLowerCase()) return false
-    if (selectedCity !== "Select Cities" && !(o.location || "").toLowerCase().includes(selectedCity.toLowerCase()) && !(o.address || "").toLowerCase().includes(selectedCity.toLowerCase())) return false
+    if (cityFilter.trim() && !(o.location || "").toLowerCase().includes(cityFilter.trim().toLowerCase()) && !(o.address || "").toLowerCase().includes(cityFilter.trim().toLowerCase())) return false
     if (serviceTypeFilter !== "Select Service Type" && !(o.service_type || o.tags || "Overnight").toLowerCase().includes(serviceTypeFilter.toLowerCase())) return false
     if (tagsFilter && !(o.tags || "").toLowerCase().includes(tagsFilter.toLowerCase())) return false
     if (searchOrderNo && !(o.order_number || "").toLowerCase().includes(searchOrderNo.toLowerCase())) return false
@@ -532,19 +663,66 @@ function LeopardsCourierFormContent() {
 
   // Filtered Dispatched Logic
   const filteredDispatched = dispatchedList.filter((d) => {
-    if (paymentFilter !== "All" && (d.payment || "").toLowerCase() !== paymentFilter.toLowerCase()) return false
-    if (deliveryStatusFilter !== "Any") {
-      const targetStatus = deliveryStatusFilter.toLowerCase().replace("_", " ")
-      const actualStatus = (d.courier_status || "").toLowerCase().replace("_", " ")
-      if (!actualStatus.includes(targetStatus) && !targetStatus.includes(actualStatus)) return false
+    if (dispatchedPaymentFilter !== "All" && (d.payment || "").toLowerCase() !== dispatchedPaymentFilter.toLowerCase()) return false
+    if (dispatchedDeliveryFilter !== "Any") {
+      const cs = (d.courier_status || "").toLowerCase()
+      if (dispatchedDeliveryFilter === "Not Available" && cs !== "" && cs !== "not_available" && cs !== "unknown") return false
+      if (dispatchedDeliveryFilter === "Pickup Request Not Sent" && cs !== "" && !cs.includes("pickup")) return false
     }
-    if (selectedCity !== "Select Cities" && !(d.location || "").toLowerCase().includes(selectedCity.toLowerCase())) return false
+    if (dispatchedDateFrom && d.date_time) {
+      const itemDate = d.date_time.split(" ")[0]
+      if (itemDate < dispatchedDateFrom) return false
+    }
+    if (dispatchedDateTo && d.date_time) {
+      const itemDate = d.date_time.split(" ")[0]
+      if (itemDate > dispatchedDateTo) return false
+    }
+    if (cityFilter.trim() && !(d.location || "").toLowerCase().includes(cityFilter.trim().toLowerCase())) return false
     if (searchOrderNo && !(d.order_number || "").toLowerCase().includes(searchOrderNo.toLowerCase())) return false
     if (searchCustomer && !(d.customer_name || "").toLowerCase().includes(searchCustomer.toLowerCase())) return false
     if (searchCnNo && !(d.cn_number || "").toLowerCase().includes(searchCnNo.toLowerCase())) return false
     if (searchPhone && !(d.phone || "").includes(searchPhone)) return false
     if (searchAmount && !String(d.cod || d.total || "").includes(searchAmount)) return false
-    if (!matchDateFilter(d.date_time || d.dispatched_date)) return false
+    return true
+  })
+
+  // Filtered Fulfilled Logic
+  const filteredFulfilled = orders.filter((o) => {
+    // Payment filter
+    if (fulfilledPaymentFilter !== "All") {
+      if ((o.payment || "").toLowerCase() !== fulfilledPaymentFilter.toLowerCase()) return false
+    }
+    // Delivery status filter
+    if (fulfilledDeliveryFilter !== "Any") {
+      const cs = (o.courier_status || o.fulfillment || "").toLowerCase()
+      if (fulfilledDeliveryFilter === "Not Available") {
+        const isPending = cs.includes("pending") || cs.includes("booked")
+        if (isPending) return false
+      } else if (fulfilledDeliveryFilter === "Pickup Request Not Sent") {
+        if (!(!cs || cs === "not_available" || cs === "unknown")) return false
+      }
+    }
+    // Date range filter
+    if (fulfilledDateFrom || fulfilledDateTo) {
+      const d = o.date_time || o.booking_date || ""
+      if (d) {
+        if (fulfilledDateFrom && d < fulfilledDateFrom) return false
+        if (fulfilledDateTo && d > fulfilledDateTo + "T23:59:59") return false
+      }
+    }
+    // Tags filter
+    if (tagsFilter.trim()) {
+      if (!(o.tags || "").toLowerCase().includes(tagsFilter.trim().toLowerCase())) return false
+    }
+    // City filter
+    if (cityFilter.trim()) {
+      if (!(o.location || "").toLowerCase().includes(cityFilter.trim().toLowerCase())) return false
+    }
+    // Inline column search
+    if (searchOrderNo && !(o.order_number || "").toLowerCase().includes(searchOrderNo.toLowerCase())) return false
+    if (searchCustomer && !(o.customer_name || "").toLowerCase().includes(searchCustomer.toLowerCase())) return false
+    if (searchCnNo && !(o.cn_number || "").toLowerCase().includes(searchCnNo.toLowerCase())) return false
+    if (searchPhone && !(o.phone || "").includes(searchPhone)) return false
     return true
   })
 
@@ -559,8 +737,17 @@ function LeopardsCourierFormContent() {
   const filteredLogs = logsList.filter((l) => {
     if (logTypeFilter !== "All" && !(l.log_type || "").toLowerCase().includes(logTypeFilter.toLowerCase())) return false
     if (logStatusFilter !== "All" && (l.status || "").toLowerCase() !== logStatusFilter.toLowerCase()) return false
+    if (logsDateFrom && l.date) {
+      const itemDate = l.date.split(" ")[0]
+      const normalizedItem = itemDate.replace(/\//g, "-")
+      if (normalizedItem < logsDateFrom) return false
+    }
+    if (logsDateTo && l.date) {
+      const itemDate = l.date.split(" ")[0]
+      const normalizedItem = itemDate.replace(/\//g, "-")
+      if (normalizedItem > logsDateTo) return false
+    }
     if (searchOrderNo && !(l.order_number || "").toLowerCase().includes(searchOrderNo.toLowerCase())) return false
-    if (!matchDateFilter(l.date)) return false
     return true
   })
 
@@ -580,25 +767,45 @@ function LeopardsCourierFormContent() {
     }
   }
 
+  // Export Logs as CSV
+  const handleExportLogsCSV = async () => {
+    toast.info("Exporting logs as CSV...")
+    try {
+      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/logs/export-csv")
+      if (!res.ok) throw new Error("Export failed")
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "leopard_logs_export.csv"
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success("Logs CSV exported successfully!")
+    } catch (err) {
+      toast.error("Failed to export logs CSV")
+    }
+  }
+
   if (!mounted) return null
 
   return (
     <main className="space-y-4 font-sans max-w-7xl mx-auto p-2 sm:p-4 bg-gray-50 min-h-screen text-xs">
-      {/* Top Banner (Matching Screenshot Layout) */}
-      <div className="bg-white px-4 py-3 rounded-xl border border-gray-200 shadow-2xs flex items-center justify-between">
+      {/* Top Banner */}
+      <div className="bg-white px-4 py-3 rounded-xl border border-gray-200 shadow-2xs flex items-center">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 bg-amber-400 rounded-md flex items-center justify-center font-bold text-black text-sm">
             {"🐆"}
           </div>
           <h1 className="text-base font-bold text-gray-900">Leopards Courier</h1>
         </div>
-        <button className="text-gray-400 hover:text-gray-700 text-lg cursor-pointer">{"•••"}</button>
       </div>
 
       {/* Main Sub-Navigation Bar & Content Container */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-4 space-y-4">
         {/* Navigation Tabs */}
-        <div className="flex items-center justify-between border-b border-gray-200 pb-2 font-semibold">
+        <div className="flex items-center border-b border-gray-200 pb-2 font-semibold">
           <div className="flex flex-wrap gap-4 text-xs">
             {["Orders", "Fulfilled", "Dispatched", "Generated Load Sheets", "Logs", "Settings"].map((tab) => (
               <button
@@ -614,7 +821,6 @@ function LeopardsCourierFormContent() {
               </button>
             ))}
           </div>
-          <span className="text-gray-500 font-normal text-xs cursor-pointer">Help ▾</span>
         </div>
 
         {/* TAB 1: ORDERS */}
@@ -651,8 +857,8 @@ function LeopardsCourierFormContent() {
                       >
                         <option value="Select Service Type">Select Service Type ▾</option>
                         <option value="Overnight">Overnight</option>
-                        <option value="Detained">Detained</option>
-                        <option value="Flyer">Flyer</option>
+                        <option value="Detain">Detain</option>
+                        <option value="Overland">Overland</option>
                       </select>
                     </div>
 
@@ -851,7 +1057,8 @@ function LeopardsCourierFormContent() {
                 >
                   <option value="All">All ▾</option>
                   <option value="fulfilled">Fulfilled</option>
-                  <option value="unfulfilled">Unfulfilled</option>
+                  <option value="partial">Partial</option>
+                  <option value="unfulfilled">Un-Fulfilled</option>
                 </select>
               </div>
 
@@ -863,49 +1070,41 @@ function LeopardsCourierFormContent() {
                   className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
                 >
                   <option value="All">All ▾</option>
-                  <option value="pending">Pending</option>
                   <option value="paid">Paid</option>
+                  <option value="unpaid">Un-Paid</option>
+                  <option value="partial">Partial</option>
+                  <option value="pending">Pending</option>
+                  <option value="refunded">Refunded</option>
+                  <option value="voided">Voided</option>
                 </select>
               </div>
 
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-600 font-medium">Date Range:</span>
-                <select
-                  value={datePreset}
-                  onChange={(e) => setDatePreset(e.target.value)}
-                  className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
-                >
-                  <option value="All Time">All Time ▾</option>
-                  <option value="Today">Today</option>
-                  <option value="Last 7 Days">Last 7 Days</option>
-                  <option value="Last 30 Days">Last 30 Days</option>
-                  <option value="Last 90 Days">Last 90 Days</option>
-                  <option value="Custom">Custom Date / Search</option>
-                </select>
-                {datePreset === "Custom" && (
-                  <input
-                    type="text"
-                    placeholder="YYYY-MM-DD or MM/DD"
-                    value={dateRangeText}
-                    onChange={(e) => setDateRangeText(e.target.value)}
-                    className="bg-white border border-gray-300 rounded px-2 py-1 w-32 text-gray-700 focus:outline-none"
-                  />
-                )}
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="bg-white border border-gray-300 rounded px-2 py-1 font-medium text-gray-700 focus:outline-none"
+                />
+                <span className="text-gray-400">to</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="bg-white border border-gray-300 rounded px-2 py-1 font-medium text-gray-700 focus:outline-none"
+                />
               </div>
 
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-600 font-medium">Cities:</span>
-                <select
-                  value={selectedCity}
-                  onChange={(e) => setSelectedCity(e.target.value)}
-                  className="bg-white border border-gray-300 rounded px-2 py-1 text-gray-700 focus:outline-none"
-                >
-                  <option value="Select Cities">Select Cities ▾</option>
-                  <option value="Lahore">Lahore</option>
-                  <option value="Rawalpindi">Rawalpindi</option>
-                  <option value="Tarbela Ghazi">Tarbela Ghazi</option>
-                  <option value="Islamabad">Islamabad</option>
-                </select>
+                <input
+                  type="text"
+                  value={cityFilter}
+                  onChange={(e) => setCityFilter(e.target.value)}
+                  placeholder="Type city name..."
+                  className="bg-white border border-gray-300 rounded px-2 py-1 text-gray-700 focus:outline-none w-40"
+                />
               </div>
 
               <div className="flex items-center gap-2 ml-auto">
@@ -919,9 +1118,9 @@ function LeopardsCourierFormContent() {
                   onClick={() => {
                     setFulfillmentFilter("All")
                     setPaymentFilter("All")
-                    setDatePreset("All Time")
-                    setDateRangeText("")
-                    setSelectedCity("Select Cities")
+                    setDateFrom("")
+                    setDateTo("")
+                    setCityFilter("")
                     setTagsFilter("")
                     setSearchOrderNo("")
                     setSearchCustomer("")
@@ -956,8 +1155,8 @@ function LeopardsCourierFormContent() {
               >
                 <option value="Select Service Type">Select Service Type ▾</option>
                 <option value="Overnight">Overnight</option>
-                <option value="Detained">Detained</option>
-                <option value="Flyer">Flyer</option>
+                <option value="Detain">Detain</option>
+                <option value="Overland">Overland</option>
               </select>
 
               <select
@@ -973,8 +1172,24 @@ function LeopardsCourierFormContent() {
 
             {/* Action Buttons Row */}
             <div className="flex items-center gap-2 pt-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleImportCsvFile}
+                className="hidden"
+              />
               <button
-                onClick={fetchOrdersFromAPI}
+                onClick={handleImportCsvClick}
+                disabled={loading}
+                className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded shadow-xs inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Import CSV</span>
+              </button>
+
+              <button
+                onClick={() => { fetchOrdersFromAPI(); fetchLoadSheetsFromAPI(); fetchLogsFromAPI(); }}
                 disabled={loading}
                 className="px-3 py-1.5 bg-white hover:bg-gray-100 text-blue-600 font-bold border border-blue-400 rounded inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
@@ -991,13 +1206,13 @@ function LeopardsCourierFormContent() {
               </button>
 
               <span className="text-gray-500 text-xs ml-2 font-mono">
-                {filteredOrders.length} orders loaded from Leopards API
+                {filteredOrders.length} shipments loaded
               </span>
             </div>
 
             {/* Data Table */}
-            <div className="eligo-table-wrap border border-gray-200 rounded-lg shadow-2xs">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="eligo-table-wrap border border-gray-200 rounded-lg shadow-2xs overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse" style={{ minWidth: "1400px" }}>
                 <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
                   <tr>
                     <th className="p-2 border-r border-gray-200 text-center w-8">
@@ -1093,7 +1308,7 @@ function LeopardsCourierFormContent() {
                             type="text"
                             value={searchAmount}
                             onChange={(e) => setSearchAmount(e.target.value)}
-                            placeholder="Amoun "
+                            placeholder="Amount "
                             className="w-full bg-white border border-gray-300 rounded px-1.5 py-0.5 text-[11px] font-normal"
                           />
                           <MagnifyingGlass className="w-3 h-3 absolute right-1.5 text-gray-400" />
@@ -1101,7 +1316,7 @@ function LeopardsCourierFormContent() {
                       </div>
                     </th>
 
-                    <th className="p-2 text-center w-8"></th>
+                    <th className="p-2 text-center w-28">Download Invoice</th>
                   </tr>
                 </thead>
 
@@ -1145,38 +1360,14 @@ function LeopardsCourierFormContent() {
 
                       <td className="p-2 border-r border-gray-200 font-bold text-gray-900">{o.amount}</td>
 
-                      <td className="p-2 text-center relative">
+                      <td className="p-2 text-center">
                         <button
-                          onClick={() => setOpenActionMenuId(openActionMenuId === o.id ? null : o.id)}
-                          className="p-1 hover:bg-gray-200 rounded text-gray-600 cursor-pointer"
+                          onClick={() => handleDownloadCnPdf(o.cn_number)}
+                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded inline-flex items-center gap-1 transition-colors cursor-pointer"
                         >
-                          <DotsThreeVertical className="w-4 h-4" />
+                          <DownloadSimple className="w-3.5 h-3.5" />
+                          <span>Invoice</span>
                         </button>
-
-                        {openActionMenuId === o.id && (
-                          <div className="absolute right-2 top-8 z-30 w-44 bg-white rounded-lg shadow-xl border border-gray-200 py-1 text-left font-sans text-xs">
-                            <button
-                              onClick={() => {
-                                setSelectedSlip(o)
-                                setOpenActionMenuId(null)
-                              }}
-                              className="w-full px-3 py-1.5 text-left hover:bg-blue-50 text-gray-800 flex items-center gap-2"
-                            >
-                              <Printer className="w-3.5 h-3.5 text-blue-600" />
-                              <span>Print Airway Bill Label</span>
-                            </button>
-                            <a
-                              href={`https://www.leopardscourier.com/tracking?cn=${o.cn_number}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={() => setOpenActionMenuId(null)}
-                              className="w-full px-3 py-1.5 text-left hover:bg-blue-50 text-gray-800 flex items-center gap-2"
-                            >
-                              <Truck className="w-3.5 h-3.5 text-amber-600" />
-                              <span>Track on Leopards</span>
-                            </a>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   ))}
@@ -1212,50 +1403,318 @@ function LeopardsCourierFormContent() {
         {/* TAB 2: FULFILLED */}
         {activeTab === "Fulfilled" && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between bg-gray-50 p-4 rounded-xl border border-gray-200">
-              <span className="font-bold text-gray-900 text-sm">
-                Fulfilled &amp; Dispatched Parcels ({orders.length})
-              </span>
-              <span className="text-gray-500 font-mono text-[11px]">Leopards API Real-Time Sync</span>
+            {/* Filter Bar Row */}
+            <div className="flex flex-wrap items-center gap-4 bg-gray-50/50 p-3 rounded-lg border border-gray-100 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-600 font-medium">Payment Status:</span>
+                <select
+                  value={fulfilledPaymentFilter}
+                  onChange={(e) => setFulfilledPaymentFilter(e.target.value)}
+                  className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
+                >
+                  <option value="All">All ▾</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Unpaid">Unpaid</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-600 font-medium">Delivery Status:</span>
+                <select
+                  value={fulfilledDeliveryFilter}
+                  onChange={(e) => setFulfilledDeliveryFilter(e.target.value)}
+                  className="bg-white border border-gray-300 rounded px-3 py-1 text-gray-800 focus:outline-none"
+                >
+                  <option value="Any">Any ▾</option>
+                  <option value="Not Available">Not Available</option>
+                  <option value="Pickup Request Not Sent">Pickup Request Not Sent</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-600 font-medium">Date Range:</span>
+                <input
+                  type="date"
+                  value={fulfilledDateFrom}
+                  onChange={(e) => setFulfilledDateFrom(e.target.value)}
+                  className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
+                />
+                <span className="text-gray-400">to</span>
+                <input
+                  type="date"
+                  value={fulfilledDateTo}
+                  onChange={(e) => setFulfilledDateTo(e.target.value)}
+                  className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-600 font-medium">Tags:</span>
+                <input
+                  type="text"
+                  value={tagsFilter}
+                  onChange={(e) => setTagsFilter(e.target.value)}
+                  placeholder="Filter tags..."
+                  className="bg-white border border-gray-300 rounded px-2 py-1 text-gray-700 focus:outline-none w-28"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-600 font-medium">Cities:</span>
+                <input
+                  type="text"
+                  value={cityFilter}
+                  onChange={(e) => setCityFilter(e.target.value)}
+                  placeholder="Filter city..."
+                  className="bg-white border border-gray-300 rounded px-2 py-1 text-gray-700 focus:outline-none w-28"
+                />
+              </div>
+
+              <button
+                onClick={() => toast.info("Filter applied")}
+                className="px-4 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow-xs cursor-pointer ml-auto"
+              >
+                Filter
+              </button>
+
+              <button
+                onClick={() => {
+                  setFulfilledPaymentFilter("All")
+                  setFulfilledDeliveryFilter("Any")
+                  setFulfilledDateFrom("")
+                  setFulfilledDateTo("")
+                  setTagsFilter("")
+                  setCityFilter("")
+                }}
+                className="px-4 py-1 bg-white hover:bg-gray-100 text-gray-800 font-bold border border-indigo-300 rounded cursor-pointer"
+              >
+                Clear
+              </button>
             </div>
 
-            <div className="eligo-table-wrap border border-gray-200 rounded-xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-gray-100 text-gray-600 uppercase font-bold border-b border-gray-200">
+            {/* Action Buttons Row */}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => { fetchOrdersFromAPI(); fetchLoadSheetsFromAPI(); fetchLogsFromAPI(); }}
+                disabled={loading}
+                className="px-3 py-1.5 bg-white hover:bg-gray-100 text-blue-600 font-bold border border-blue-400 rounded inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <ArrowClockwise className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                <span>{loading ? "Refreshing..." : "Refresh"}</span>
+              </button>
+
+              <div className="relative">
+                <button
+                  onClick={() => setActionDropdownOpen(!actionDropdownOpen)}
+                  className="px-2 py-1.5 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded inline-flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <DotsThreeVertical className="w-4 h-4" />
+                </button>
+                {actionDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setActionDropdownOpen(false)} />
+                    <div className="absolute left-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-52 text-xs font-bold text-gray-800">
+                      <button
+                        onClick={() => { toast.info("Generate Load Sheets clicked"); setActionDropdownOpen(false); }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 inline-flex items-center gap-2 cursor-pointer"
+                      >
+                        <FileText className="w-4 h-4 text-gray-500" />
+                        Generate Load Sheets
+                      </button>
+                      <button
+                        onClick={() => { toast.info("Bulk Download Invoice clicked"); setActionDropdownOpen(false); }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 inline-flex items-center gap-2 cursor-pointer"
+                      >
+                        <DownloadSimple className="w-4 h-4 text-gray-500" />
+                        Bulk Download Invoice
+                      </button>
+                      <button
+                        onClick={() => { toast.info("Bulk Cancel clicked"); setActionDropdownOpen(false); }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 text-red-600 inline-flex items-center gap-2 cursor-pointer"
+                      >
+                        <Trash className="w-4 h-4" />
+                        Bulk Cancel
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={handleSyncAll}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded shadow-xs inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowClockwise className="w-3.5 h-3.5" />
+                <span>Sync Status</span>
+              </button>
+
+              <span className="text-gray-500 text-xs ml-2 font-mono">
+                {filteredFulfilled.length} fulfilled orders
+              </span>
+            </div>
+
+            {/* Fulfilled Table */}
+            <div className="eligo-table-wrap border border-gray-200 rounded-lg shadow-2xs overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse" style={{ minWidth: "1400px" }}>
+                <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-3">Order #</th>
-                    <th className="px-4 py-3">Customer &amp; Phone</th>
-                    <th className="px-4 py-3">Location</th>
-                    <th className="px-4 py-3">C.N #</th>
-                    <th className="px-4 py-3">Amount</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                    <th className="p-2 border-r border-gray-200 text-center w-8">
+                      <input
+                        type="checkbox"
+                        checked={selectedOrderIds.length > 0 && selectedOrderIds.length === filteredFulfilled.length}
+                        onChange={toggleSelectAll}
+                        className="rounded text-blue-600 cursor-pointer"
+                      />
+                    </th>
+
+                    <th className="p-2 border-r border-gray-200 text-center w-12">Sr#</th>
+
+                    <th className="p-2 border-r border-gray-200">
+                      <div className="space-y-1">
+                        <div>Order#</div>
+                        <div className="relative flex items-center">
+                          <input
+                            type="text"
+                            value={searchOrderNo}
+                            onChange={(e) => setSearchOrderNo(e.target.value)}
+                            placeholder="Order# "
+                            className="w-full bg-white border border-gray-300 rounded px-1.5 py-0.5 text-[11px] font-normal"
+                          />
+                          <MagnifyingGlass className="w-3 h-3 absolute right-1.5 text-gray-400" />
+                        </div>
+                      </div>
+                    </th>
+
+                    <th className="p-2 border-r border-gray-200">
+                      <div className="space-y-1">
+                        <div>Customer</div>
+                        <div className="relative flex items-center">
+                          <input
+                            type="text"
+                            value={searchCustomer}
+                            onChange={(e) => setSearchCustomer(e.target.value)}
+                            placeholder="Customer "
+                            className="w-full bg-white border border-gray-300 rounded px-1.5 py-0.5 text-[11px] font-normal"
+                          />
+                          <MagnifyingGlass className="w-3 h-3 absolute right-1.5 text-gray-400" />
+                        </div>
+                      </div>
+                    </th>
+
+                    <th className="p-2 border-r border-gray-200">
+                      <div className="space-y-1">
+                        <div>Phone No.</div>
+                        <div className="relative flex items-center">
+                          <input
+                            type="text"
+                            value={searchPhone}
+                            onChange={(e) => setSearchPhone(e.target.value)}
+                            placeholder="Phone "
+                            className="w-full bg-white border border-gray-300 rounded px-1.5 py-0.5 text-[11px] font-normal"
+                          />
+                          <MagnifyingGlass className="w-3 h-3 absolute right-1.5 text-gray-400" />
+                        </div>
+                      </div>
+                    </th>
+
+                    <th className="p-2 border-r border-gray-200">
+                      <div className="space-y-1">
+                        <div>CN No.</div>
+                        <div className="relative flex items-center">
+                          <input
+                            type="text"
+                            value={searchCnNo}
+                            onChange={(e) => setSearchCnNo(e.target.value)}
+                            placeholder="CN No. "
+                            className="w-full bg-white border border-gray-300 rounded px-1.5 py-0.5 text-[11px] font-normal"
+                          />
+                          <MagnifyingGlass className="w-3 h-3 absolute right-1.5 text-gray-400" />
+                        </div>
+                      </div>
+                    </th>
+
+                    <th className="p-2 border-r border-gray-200 font-bold">Location</th>
+
+                    <th className="p-2 border-r border-gray-200 font-bold min-w-[200px]">Address</th>
+
+                    <th className="p-2 border-r border-gray-200 font-bold">Payment</th>
+
+                    <th className="p-2 border-r border-gray-200 font-bold">Courier Status</th>
+
+                    <th className="p-2 border-r border-gray-200 font-bold">Tags</th>
+
+                    <th className="p-2 border-r border-gray-200 font-bold">Total</th>
+
+                    <th className="p-2 border-r border-gray-200 font-bold">COD</th>
+
+                    <th className="p-2 border-r border-gray-200 font-bold">Date &amp; Time</th>
+
+                    <th className="p-2 text-center w-28">Download Invoice</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
-                  {orders.map((o) => (
-                    <tr key={o.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-bold text-amber-800">{o.order_number}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-bold text-gray-900">{o.customer_name}</div>
-                        <div className="text-[11px] text-gray-500 font-mono">{o.phone}</div>
+
+                <tbody className="divide-y divide-gray-200 bg-white font-normal text-gray-900">
+                  {filteredFulfilled.map((o, idx) => (
+                    <tr key={o.id} className="hover:bg-blue-50/40 transition-colors">
+                      <td className="p-2 border-r border-gray-200 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedOrderIds.includes(o.id)}
+                          onChange={() => toggleSelectOrder(o.id)}
+                          className="rounded text-blue-600 cursor-pointer"
+                        />
                       </td>
-                      <td className="px-4 py-3 font-semibold text-gray-800">{o.location}</td>
-                      <td className="px-4 py-3 font-mono font-bold text-indigo-900">{o.cn_number}</td>
-                      <td className="px-4 py-3 font-bold text-emerald-800">Rs {o.amount}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full border border-emerald-200 inline-flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          <span>Fulfilled</span>
+
+                      <td className="p-2 border-r border-gray-200 text-center font-medium text-gray-600">
+                        {o.sr || idx + 1}
+                      </td>
+
+                      <td className="p-2 border-r border-gray-200 font-bold text-gray-900">{o.order_number}</td>
+
+                      <td className="p-2 border-r border-gray-200 font-medium text-gray-800">{o.customer_name}</td>
+
+                      <td className="p-2 border-r border-gray-200 font-mono text-gray-800">{o.phone}</td>
+
+                      <td className="p-2 border-r border-gray-200 font-mono font-bold text-indigo-950">
+                        {o.cn_number}
+                      </td>
+
+                      <td className="p-2 border-r border-gray-200 font-medium text-gray-800">{o.location}</td>
+
+                      <td className="p-2 border-r border-gray-200 text-gray-700 text-[11px] leading-tight max-w-[220px]">
+                        {o.address}
+                      </td>
+
+                      <td className="p-2 border-r border-gray-200 text-gray-800 capitalize">{o.payment}</td>
+
+                      <td className="p-2 border-r border-gray-200">
+                        <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full border inline-flex items-center gap-1 ${
+                          (o.courier_status || "").toLowerCase().includes("pending")
+                            ? "bg-amber-100 text-amber-800 border-amber-200"
+                            : (o.courier_status || "").toLowerCase().includes("not available")
+                              ? "bg-gray-100 text-gray-600 border-gray-200"
+                              : "bg-emerald-100 text-emerald-800 border-emerald-200"
+                        }`}>
+                          <Clock className="w-3 h-3" />
+                          <span>{o.courier_status || "Not Available"}</span>
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
+
+                      <td className="p-2 border-r border-gray-200 text-gray-700">{o.tags}</td>
+
+                      <td className="p-2 border-r border-gray-200 font-bold text-gray-900">{o.total || o.amount}</td>
+
+                      <td className="p-2 border-r border-gray-200 font-bold text-emerald-800">{o.cod}</td>
+
+                      <td className="p-2 border-r border-gray-200 font-mono text-gray-700">{o.date_time}</td>
+
+                      <td className="p-2 text-center">
                         <button
-                          onClick={() => setSelectedSlip(o)}
-                          className="px-3 py-1.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          onClick={() => handleDownloadCnPdf(o.cn_number)}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1 transition-colors cursor-pointer"
                         >
-                          <Printer className="w-3.5 h-3.5" />
-                          <span>Print Airway Bill</span>
+                          <DownloadSimple className="w-3.5 h-3.5" />
+                          <span>Download Invoice</span>
                         </button>
                       </td>
                     </tr>
@@ -1266,61 +1725,52 @@ function LeopardsCourierFormContent() {
           </div>
         )}
 
-        {/* TAB 3: DISPATCHED (EXACT MATCHING USER SCREENSHOT 1) */}
+        {/* TAB 3: DISPATCHED */}
         {activeTab === "Dispatched" && (
           <div className="space-y-4 animate-in fade-in duration-150">
             {/* Filter Bar */}
-            <div className="flex flex-wrap items-center gap-4 bg-gray-50/50 p-3 rounded-lg border border-gray-100 text-xs">
+            <div className="flex flex-wrap items-center gap-3 bg-gray-50/50 p-3 rounded-lg border border-gray-100 text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-600 font-medium">Payment Status:</span>
                 <select
-                  value={paymentFilter}
-                  onChange={(e) => setPaymentFilter(e.target.value)}
+                  value={dispatchedPaymentFilter}
+                  onChange={(e) => setDispatchedPaymentFilter(e.target.value)}
                   className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
                 >
                   <option value="All">All ▾</option>
-                  <option value="pending">Pending</option>
-                  <option value="paid">Paid</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Unpaid">Unpaid</option>
                 </select>
               </div>
 
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-600 font-medium">Delivery Status:</span>
                 <select
-                  value={deliveryStatusFilter}
-                  onChange={(e) => setDeliveryStatusFilter(e.target.value)}
+                  value={dispatchedDeliveryFilter}
+                  onChange={(e) => setDispatchedDeliveryFilter(e.target.value)}
                   className="bg-white border border-gray-300 rounded px-3 py-1 text-gray-800 focus:outline-none"
                 >
                   <option value="Any">Any ▾</option>
-                  <option value="pending">Pending</option>
-                  <option value="in_transit">In Transit</option>
-                  <option value="delivered">Delivered</option>
+                  <option value="Not Available">Not Available</option>
+                  <option value="Pickup Request Not Sent">Pickup Request Not Sent</option>
                 </select>
               </div>
 
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-600 font-medium">Date Range:</span>
-                <select
-                  value={datePreset}
-                  onChange={(e) => setDatePreset(e.target.value)}
+                <input
+                  type="date"
+                  value={dispatchedDateFrom}
+                  onChange={(e) => setDispatchedDateFrom(e.target.value)}
                   className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
-                >
-                  <option value="All Time">All Time ▾</option>
-                  <option value="Today">Today</option>
-                  <option value="Last 7 Days">Last 7 Days</option>
-                  <option value="Last 30 Days">Last 30 Days</option>
-                  <option value="Last 90 Days">Last 90 Days</option>
-                  <option value="Custom">Custom Date / Search</option>
-                </select>
-                {datePreset === "Custom" && (
-                  <input
-                    type="text"
-                    placeholder="YYYY-MM-DD or MM/DD"
-                    value={dateRangeText}
-                    onChange={(e) => setDateRangeText(e.target.value)}
-                    className="bg-white border border-gray-300 rounded px-2 py-1 w-32 text-gray-700 focus:outline-none"
-                  />
-                )}
+                />
+                <span className="text-gray-400">to</span>
+                <input
+                  type="date"
+                  value={dispatchedDateTo}
+                  onChange={(e) => setDispatchedDateTo(e.target.value)}
+                  className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
+                />
               </div>
 
               <button
@@ -1340,9 +1790,9 @@ function LeopardsCourierFormContent() {
               </button>
             </div>
 
-            {/* Dispatched Table (Exact Pixel Match of User Screenshot 1) */}
-            <div className="eligo-table-wrap border border-gray-200 rounded-lg shadow-2xs">
-              <table className="w-full text-left text-xs border-collapse">
+            {/* Dispatched Table */}
+            <div className="eligo-table-wrap border border-gray-200 rounded-lg shadow-2xs overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse" style={{ minWidth: "1400px" }}>
                 <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
                   <tr>
                     <th className="p-2 border-r border-gray-200 text-center w-8">
@@ -1455,17 +1905,19 @@ function LeopardsCourierFormContent() {
                 </span>
                 <div className="flex items-center gap-1.5 text-xs">
                   <span className="text-gray-600 font-medium">Date Range:</span>
-                  <select
-                    value={datePreset}
-                    onChange={(e) => setDatePreset(e.target.value)}
-                    className="bg-white border border-gray-300 rounded px-2 py-0.5 font-bold text-gray-800 focus:outline-none"
-                  >
-                    <option value="All Time">All Time ▾</option>
-                    <option value="Today">Today</option>
-                    <option value="Last 7 Days">Last 7 Days</option>
-                    <option value="Last 30 Days">Last 30 Days</option>
-                    <option value="Last 90 Days">Last 90 Days</option>
-                  </select>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="bg-white border border-gray-300 rounded px-2 py-0.5 font-medium text-gray-700 focus:outline-none"
+                  />
+                  <span className="text-gray-400">to</span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="bg-white border border-gray-300 rounded px-2 py-0.5 font-medium text-gray-700 focus:outline-none"
+                  />
                 </div>
               </div>
 
@@ -1579,7 +2031,7 @@ function LeopardsCourierFormContent() {
           </div>
         )}
 
-        {/* TAB 5: LOGS (EXACT MATCHING USER SCREENSHOT 3) */}
+        {/* TAB 5: LOGS */}
         {activeTab === "Logs" && (
           <div className="space-y-4 animate-in fade-in duration-150">
             {/* Filter Bar */}
@@ -1592,7 +2044,9 @@ function LeopardsCourierFormContent() {
                   className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
                 >
                   <option value="All">All ▾</option>
-                  <option value="CN Generated Manual">CN Generated Manual</option>
+                  <option value="CN Generated">CN Generated</option>
+                  <option value="CN Cancelled">CN Cancelled</option>
+                  <option value="Configuration Updated">Configuration Updated</option>
                 </select>
               </div>
 
@@ -1605,33 +2059,26 @@ function LeopardsCourierFormContent() {
                 >
                   <option value="All">All ▾</option>
                   <option value="Success">Success</option>
-                  <option value="Error">Error</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Fail">Fail</option>
                 </select>
               </div>
 
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-600 font-medium">Date Range:</span>
-                <select
-                  value={datePreset}
-                  onChange={(e) => setDatePreset(e.target.value)}
+                <input
+                  type="date"
+                  value={logsDateFrom}
+                  onChange={(e) => setLogsDateFrom(e.target.value)}
                   className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
-                >
-                  <option value="All Time">All Time ▾</option>
-                  <option value="Today">Today</option>
-                  <option value="Last 7 Days">Last 7 Days</option>
-                  <option value="Last 30 Days">Last 30 Days</option>
-                  <option value="Last 90 Days">Last 90 Days</option>
-                  <option value="Custom">Custom Date / Search</option>
-                </select>
-                {datePreset === "Custom" && (
-                  <input
-                    type="text"
-                    placeholder="YYYY-MM-DD or MM/DD"
-                    value={dateRangeText}
-                    onChange={(e) => setDateRangeText(e.target.value)}
-                    className="bg-white border border-gray-300 rounded px-2 py-1 w-32 text-gray-700 focus:outline-none"
-                  />
-                )}
+                />
+                <span className="text-gray-400">to</span>
+                <input
+                  type="date"
+                  value={logsDateTo}
+                  onChange={(e) => setLogsDateTo(e.target.value)}
+                  className="bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-800 focus:outline-none"
+                />
               </div>
 
               <button
@@ -1652,7 +2099,7 @@ function LeopardsCourierFormContent() {
                 </button>
 
                 <button
-                  onClick={() => toast.info("Exported logs CSV")}
+                  onClick={handleExportLogsCSV}
                   className="px-3 py-1 bg-white hover:bg-gray-100 text-gray-800 font-bold border border-gray-300 rounded cursor-pointer"
                 >
                   Export
@@ -1660,7 +2107,7 @@ function LeopardsCourierFormContent() {
               </div>
             </div>
 
-            {/* Logs Table (Exact Pixel Match of Screenshot 3) */}
+            {/* Logs Table */}
             <div className="eligo-table-wrap border border-gray-200 rounded-lg shadow-2xs">
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
@@ -1725,16 +2172,6 @@ function LeopardsCourierFormContent() {
         {/* TAB 6: SETTINGS (EXACT MATCHING USER SCREENSHOTS 4 & 5 WITH AUTO-SAVE & PLAIN TEXT SHIPPER CITY) */}
         {activeTab === "Settings" && (
           <div className="space-y-6 text-xs animate-in fade-in duration-150">
-            {/* Auto Save Status Banner */}
-            <div className="flex items-center justify-between bg-emerald-50 px-4 py-2.5 rounded-lg border border-emerald-200 text-emerald-950 font-medium">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle className="w-4 h-4 text-emerald-600" />
-                <span>All settings changes are automatically stored and synced with the database</span>
-              </span>
-              <span className="text-[11px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200 font-mono">
-                Auto-saved to DB ✓
-              </span>
-            </div>
 
             {/* Section 1: Default Shipper Information */}
             <div className="space-y-3">
@@ -2050,7 +2487,8 @@ function LeopardsCourierFormContent() {
                 <label className="block font-semibold text-gray-700 mb-1">Custom Notes</label>
                 <textarea
                   rows={2}
-                  placeholder="Enter custom notes"
+                  placeholder={settingsData.courier_settings.add_custom_notes ? "Enter custom notes" : "Enable 'Add Custom Notes to AWB' to enter notes"}
+                  disabled={!settingsData.courier_settings.add_custom_notes}
                   value={settingsData.courier_settings.custom_notes}
                   onChange={(e) =>
                     updateSettings({
@@ -2058,247 +2496,18 @@ function LeopardsCourierFormContent() {
                       courier_settings: { ...settingsData.courier_settings, custom_notes: e.target.value },
                     })
                   }
-                  className="w-full p-3 bg-white border border-gray-300 rounded text-gray-900 focus:outline-none"
+                  className={`w-full p-3 border border-gray-300 rounded text-gray-900 focus:outline-none ${
+                    settingsData.courier_settings.add_custom_notes
+                      ? "bg-white"
+                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  }`}
                 ></textarea>
               </div>
             </div>
           </div>
         )}
       </div>
-
-      {/* Printable Official Leopards Airway Bill Invoice Modal */}
-      {selectedSlip && (
-        <OfficialLeopardsAirwayBill data={selectedSlip} onClose={() => setSelectedSlip(null)} />
-      )}
-
-      {/* Booking Result Official Airway Bill Invoice Slip Modal */}
-      {bookingResultModal && (
-        <OfficialLeopardsAirwayBill data={bookingResultModal.booking_details || bookingResultModal} onClose={() => setBookingResultModal(null)} />
-      )}
     </main>
-  )
-}
-
-function OfficialLeopardsAirwayBill({ data, onClose }: { data: any; onClose: () => void }) {
-  const details = data?.booking_details || data || {}
-  const cn = details.cn_number || details.track_number || "ID7536607778"
-  const orderId = details.order_id || details.order_number || "#1331"
-  const consigneeName = details.consignee_name || details.customer_name || "DANYAL SAJID"
-  const consigneePhone = details.consignee_phone || details.phone || "03115133191"
-  const destination = (details.destination_city || details.location || "HARIPUR").replace(/\(PK\)/gi, "").trim().toUpperCase()
-  const consigneeAddress = details.consignee_address || details.address || "tarbela ghazi hamlet sobra sectortarbela ghazi 22860"
-  const codAmount = details.cod_amount || details.amount || "2,699.00"
-  const bookingDate = details.booking_date || details.dispatched_date || "2026-07-07"
-  const printDate = new Date().toISOString().split("T")[0]
-  const specialInst = details.special_instructions || "GEM - Reversible Premium Leather Belt - Black and Dark Brown / 46(B007) Qty=1"
-  const weight = details.weight ? (String(details.weight).includes("(g)") ? details.weight : `${details.weight} (g)`) : "170.00 (g)"
-  const pieces = details.pieces ? (String(details.pieces).includes("PCS") ? details.pieces : `${details.pieces} PCS (1/1)`) : "1 PCS (1/1)"
-
-  const handlePrint = () => {
-    window.print()
-  }
-
-  const handleDownloadRealPdf = () => {
-    window.open(`http://localhost:8000/api/v1/orders/leopard/cn/${cn}/download-pdf`, "_blank")
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-gray-300 overflow-hidden flex flex-col max-h-[96vh]">
-        {/* Control Header Bar */}
-        <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-900 text-white text-xs font-sans print:hidden">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-amber-400">{"🐆 Official Leopards Courier Airway Bill Invoice"}</span>
-            <span className="text-gray-400">| CN #{cn}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDownloadRealPdf}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
-              title="Download real PDF directly from Leopards Courier API"
-            >
-              <DownloadSimple className="w-4 h-4" />
-              <span>Download Leopards API PDF</span>
-            </button>
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-black font-bold rounded-lg text-xs shadow-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Print Label</span>
-            </button>
-            <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-white cursor-pointer">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* PRINTABLE CANVAS MATCHING EXACT UPLOADED LEOPARDS AIRWAY BILL */}
-        <div className="p-4 sm:p-6 bg-gray-100 overflow-y-auto print:p-0 print:bg-white flex justify-center">
-          <div className="bg-white border-2 border-black p-4 w-full max-w-[720px] text-black font-sans text-[11px] leading-tight space-y-2.5 shadow-lg print:shadow-none print:max-w-none print:w-full print:border-2 print:border-black">
-            
-            {/* Top Barcode Header Row */}
-            <div className="border-b-2 border-black pb-2 flex items-start justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-amber-400 border border-black rounded flex items-center justify-center font-black text-black text-sm">
-                  {"🐆"}
-                </div>
-                <div>
-                  <h1 className="text-xl font-black italic tracking-tighter text-black uppercase leading-none">
-                    Leopards
-                  </h1>
-                  <span className="text-[9px] font-bold text-gray-700 tracking-widest block">There for You</span>
-                </div>
-              </div>
-
-              <div className="text-center font-sans">
-                <h2 className="text-2xl font-black tracking-wider text-black uppercase leading-none">OVERNIGHT</h2>
-                <span className="text-xs font-bold text-black uppercase tracking-widest block mt-0.5">COD PARCEL</span>
-              </div>
-
-              {/* Barcode Graphic */}
-              <div className="text-right flex flex-col items-end">
-                <div className="font-mono text-xs font-black tracking-widest border-b border-black pb-0.5 px-2">
-                  {`||| | |||| | ||||| ||| ||| ${cn} |||`}
-                </div>
-                <span className="font-mono font-bold text-[10px] text-black tracking-widest mt-0.5">{`I D ${String(cn).replace(/^ID/i, "").split("").join(" ")}`}</span>
-              </div>
-            </div>
-
-            {/* Main Information 2-Column Grid */}
-            <div className="grid grid-cols-12 border-2 border-black divide-x-2 divide-black">
-              {/* Left Column: Consignee & COD */}
-              <div className="col-span-7 p-2.5 space-y-2">
-                <div className="flex items-center justify-between border-b border-black pb-1.5">
-                  <span className="font-black text-xs uppercase text-black">COD AMOUNT</span>
-                  <span className="font-mono font-black text-base text-black bg-gray-100 px-2 py-0.5 rounded border border-black">
-                    PKR {codAmount}
-                  </span>
-                </div>
-
-                <div className="space-y-1 text-xs">
-                  <div className="flex gap-2">
-                    <span className="font-bold w-20">Consignee:</span>
-                    <span className="font-bold uppercase text-black">{consigneeName}</span>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <span className="font-bold w-20">Contact:</span>
-                    <span className="font-mono font-bold">{consigneePhone}</span>
-                  </div>
-
-                  <div className="flex gap-2 items-center">
-                    <span className="font-bold w-20">Destination:</span>
-                    <span className="font-black text-sm uppercase text-black">{destination}</span>
-                  </div>
-
-                  <div className="flex gap-2 text-[10px] text-gray-700">
-                    <span className="font-bold w-20">Hub:</span>
-                    <span className="w-16">---</span>
-                    <span className="font-bold w-12">Area:</span>
-                    <span>---</span>
-                  </div>
-                </div>
-
-                <div className="space-y-0.5 border-t border-black pt-1.5">
-                  <span className="font-bold block text-[10px]">Address:</span>
-                  <div className="font-semibold text-[11px] leading-snug">{consigneeAddress}</div>
-                </div>
-
-                <div className="border-t border-gray-300 pt-1 space-y-0.5 text-[10px]">
-                  <span className="font-bold block">Business Address:</span>
-                  <span className="text-gray-800">OFFICE#407, 4TH FLOOR, GULBERG EMPIRE, EXECUTIVE BLOCK, GULBERG GREENS, ISB</span>
-                </div>
-              </div>
-
-              {/* Right Column: Tracking Metadata & QR */}
-              <div className="col-span-5 p-2.5 space-y-2 bg-gray-50/50">
-                <div className="flex items-center justify-between gap-1 border-b border-black pb-1">
-                  <div className="border border-black p-1 bg-white text-center text-[9px] font-bold">
-                    <span>Scan To Pay</span>
-                    <div className="w-10 h-10 border border-dashed border-gray-400 mt-0.5 mx-auto flex items-center justify-center font-mono text-[8px] bg-gray-50">
-                      [QR]
-                    </div>
-                  </div>
-
-                  <div className="border border-black p-1 bg-white text-center text-[9px] font-bold">
-                    <span>Tracking QR</span>
-                    <div className="w-10 h-10 border border-dashed border-gray-400 mt-0.5 mx-auto flex items-center justify-center font-mono text-[8px] bg-gray-50">
-                      [QR]
-                    </div>
-                  </div>
-                </div>
-
-                {/* Key-Value details */}
-                <div className="space-y-1 text-[10px] font-sans">
-                  <div className="flex justify-between border-b border-gray-200 pb-0.5">
-                    <span className="font-bold">Tracking No:</span>
-                    <span className="font-mono font-black text-black">{cn}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-gray-200 pb-0.5">
-                    <span className="font-bold">Order ID:</span>
-                    <span className="font-mono font-bold text-black">{orderId}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-gray-200 pb-0.5">
-                    <span className="font-bold">Booking Date:</span>
-                    <span className="font-mono">{bookingDate}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-gray-200 pb-0.5">
-                    <span className="font-bold">Print Date:</span>
-                    <span className="font-mono">{printDate}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-gray-200 pb-0.5">
-                    <span className="font-bold">Origin City:</span>
-                    <span className="font-bold">ISLAMABAD</span>
-                  </div>
-                  <div className="flex justify-between border-b border-gray-200 pb-0.5">
-                    <span className="font-bold">Pieces:</span>
-                    <span className="font-mono font-bold">{pieces}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-gray-200 pb-0.5">
-                    <span className="font-bold">Weight:</span>
-                    <span className="font-mono font-bold">{weight}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-bold">User:</span>
-                    <span className="font-mono">245122</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom Shipper Details Rows */}
-            <div className="border-2 border-black divide-y divide-black font-sans text-[10px]">
-              <div className="p-1.5 flex justify-between bg-white">
-                <div><span className="font-bold">Shipper AC / Name:</span> <span className="font-bold">102620 / ELIGO LEATHER</span></div>
-                <div><span className="font-bold">Shipper Contact:</span> <span className="font-mono font-bold">03345399470</span></div>
-              </div>
-
-              <div className="p-1.5 bg-white">
-                <span className="font-bold">Shipper Address:</span> <span>OFFICE # 407, 4TH FLOOR, GULBERG EMPIRE, CIVIC CENTER, EXECUTIVE BLOCK, GULBERG GREENS, ISLAMABAD</span>
-              </div>
-
-              <div className="p-1.5 bg-white">
-                <span className="font-bold">Return Address:</span> <span>Office # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad</span>
-              </div>
-
-              <div className="p-1.5 bg-gray-50">
-                <span className="font-bold">Special Instruction:</span> <span className="font-mono font-medium">{specialInst}</span>
-              </div>
-            </div>
-
-            {/* Footer Row */}
-            <div className="flex items-center justify-between text-[9px] font-bold text-gray-800 pt-1 border-t border-black">
-              <span>www.leopardscourier.com</span>
-              <span>WhatsApp: 0345 536 7273</span>
-              <span>UAN: 111 300 786</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   )
 }
 

@@ -245,6 +245,7 @@ async def get_collection(db: AsyncSession, col_id: int) -> Collection | None:
 async def list_collections(
     db: AsyncSession,
     search: str | None = None,
+    collection_type: str | None = None,
     skip: int = 0,
     limit: int = 50,
 ) -> list[Collection]:
@@ -256,6 +257,8 @@ async def list_collections(
                 Collection.url_handle.ilike(f"%{search}%"),
             ),
         )
+    if collection_type:
+        query = query.where(Collection.collection_type == collection_type)
     query = query.order_by(Collection.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())

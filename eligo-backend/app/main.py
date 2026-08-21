@@ -17,11 +17,6 @@ from app.modules.catalog.router import (
 )
 from app.modules.companies.router import router as companies_router
 from app.modules.segments.router import router as segments_router
-from app.modules.growth.router import (
-    growth_router,
-    attribution_router,
-    campaign_router,
-)
 from app.modules.discounts.router import router as discounts_router, public_discounts_router
 from app.modules.content.router import (
     content_router,
@@ -34,22 +29,25 @@ from app.modules.content.router import (
     blog_comments_router,
     pages_router,
 )
-from app.modules.markets.router import (
-    markets_overview_router,
-    market_router,
-    market_catalog_router,
-    rollout_router,
-)
-from app.modules.analytics.router import (
-    analytics_router,
-    reports_router,
-    explorations_router,
-    live_view_router,
-)
 from app.modules.settings.router import router as settings_router
+from app.modules.settings.checkout.router import public_checkout_router
+from app.modules.settings.shipping_and_delivery.router import public_shipping_router
 from app.modules.store.router import router as store_router
+from app.db.session import AsyncSessionLocal
+from app.modules.settings.notifications.service import seed_defaults
+from app.modules.settings.checkout.service import seed_default_config
+from app.modules.settings.shipping_and_delivery.service import seed_defaults as seed_shipping_defaults
 
 app = FastAPI(title="Eligo Backend")
+
+
+@app.on_event("startup")
+async def _seed_defaults():
+    async with AsyncSessionLocal() as db:
+        await seed_defaults(db)
+        await seed_default_config(db)
+        await seed_shipping_defaults(db)
+    print("[startup] Defaults seeded (notifications, checkout, shipping)")
 
 # High Performance Timing & HTTP Cache-Control Middleware (< 0.6s TTFB guarantee)
 @app.middleware("http")
@@ -95,9 +93,6 @@ app.include_router(transfer_router, prefix="/api/v1")
 app.include_router(gift_card_router, prefix="/api/v1")
 app.include_router(companies_router, prefix="/api/v1")
 app.include_router(segments_router, prefix="/api/v1")
-app.include_router(growth_router, prefix="/api/v1")
-app.include_router(attribution_router, prefix="/api/v1")
-app.include_router(campaign_router, prefix="/api/v1")
 app.include_router(discounts_router, prefix="/api/v1")
 app.include_router(public_discounts_router, prefix="/api/v1")
 app.include_router(content_router, prefix="/api/v1")
@@ -109,15 +104,9 @@ app.include_router(url_redirects_router, prefix="/api/v1")
 app.include_router(blog_posts_router, prefix="/api/v1")
 app.include_router(blog_comments_router, prefix="/api/v1")
 app.include_router(pages_router, prefix="/api/v1")
-app.include_router(markets_overview_router, prefix="/api/v1")
-app.include_router(market_router, prefix="/api/v1")
-app.include_router(market_catalog_router, prefix="/api/v1")
-app.include_router(rollout_router, prefix="/api/v1")
-app.include_router(analytics_router, prefix="/api/v1")
-app.include_router(reports_router, prefix="/api/v1")
-app.include_router(explorations_router, prefix="/api/v1")
-app.include_router(live_view_router, prefix="/api/v1")
 app.include_router(settings_router, prefix="/api/v1")
+app.include_router(public_checkout_router, prefix="/api/v1")
+app.include_router(public_shipping_router, prefix="/api/v1")
 app.include_router(store_router, prefix="/api/v1")
 
 @app.get("/")

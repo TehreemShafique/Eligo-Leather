@@ -146,6 +146,14 @@ class Order(Base):
     audit_logs = relationship("OrderAuditLog", back_populates="order", cascade="all, delete-orphan")
     notes = relationship("OrderNote", back_populates="order", cascade="all, delete-orphan")
 
+    @property
+    def customer_name(self) -> str | None:
+        if self.customer is None:
+            return None
+        parts = [self.customer.first_name or "", self.customer.last_name or ""]
+        name = " ".join(p for p in parts if p).strip()
+        return name or self.customer.email
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"

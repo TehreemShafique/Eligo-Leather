@@ -42,7 +42,6 @@ export default function AdminSettingsCustomDataPage() {
     { type: "locations", name: "Locations", defCount: 1, desc: "Warehouse dispatch desk contact, pickup cutoff hours." },
     { type: "pages", name: "Pages", defCount: 2, desc: "Page subtitle, SEO canonical override, author signature." },
     { type: "blog_posts", name: "Blog posts", defCount: 1, desc: "Featured product links, reading time estimates." },
-    { type: "markets", name: "Markets", defCount: 0, desc: "Regional duty tariffs, local currency formatting rules." },
     { type: "shop", name: "Shop", defCount: 2, desc: "Global brand assets, footer copyright disclaimers." },
   ]
 

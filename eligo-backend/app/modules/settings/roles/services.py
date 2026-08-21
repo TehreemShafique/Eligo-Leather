@@ -33,18 +33,19 @@ async def seed_system_roles(db:AsyncSession) -> None:
 
 async def list_roles(db: AsyncSession) -> list[dict]:
     result = await db.execute(select(Roles))
-    role = list(result.scalars().all())
+    roles = list(result.scalars().all())
 
     output = []
 
-    for role in role:
-        count_result = await db.execute(select(func.count(User.id).where(User.role_id == role.id)))
+    for role in roles:
+        count_result = await db.execute(select(func.count()).select_from(User).where(User.role_id == role.id))
         count = count_result.scalar_one()
         output.append(
             {"id": role.id, "name": role.name, "domain": role.domain, "description": role.description,
             "is_system": role.is_system, "user_count": count,}
         )
-        return output
+
+    return output
 async def get_role(db: AsyncSession, role_id: int) -> Roles | None:
     return await db.get(Roles, role_id)
 

@@ -14,6 +14,8 @@ from app.modules.settings.checkout.schema import (
 
 router = APIRouter(prefix="/checkout", tags=["Settings - Checkout"], dependencies=[Depends(require_admin)])
 
+public_checkout_router = APIRouter(prefix="/checkout", tags=["Settings - Checkout - Public"])
+
 
 @router.post("/seed", status_code=status.HTTP_204_NO_CONTENT)
 async def seed_default_checkout_config(db: AsyncSession = Depends(get_db)):
@@ -80,3 +82,12 @@ async def delete_checkout_config(config_id: int, db: AsyncSession = Depends(get_
     deleted = await service.delete_config(config_id, db)
     if not deleted:
         raise HTTPException(status_code=404, detail="Checkout configuration not found")
+
+
+# ============================== Public (Storefront) ==============================
+
+
+@public_checkout_router.get("/config", response_model=CheckoutConfigOut)
+async def get_public_checkout_config(db: AsyncSession = Depends(get_db)):
+    """Return the active checkout config for the storefront (no auth required)."""
+    return await service.get_active_config(db)

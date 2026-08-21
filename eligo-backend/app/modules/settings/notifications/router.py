@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.core.dependencies import require_admin
 
 from app.modules.settings.notifications import service
 from app.modules.settings.notifications.model import (
@@ -32,7 +31,6 @@ from app.modules.settings.notifications.schema import (
 router = APIRouter(
     prefix="/notifications",
     tags=["Settings - Notifications"],
-    dependencies=[Depends(require_admin)],
 )
 
 

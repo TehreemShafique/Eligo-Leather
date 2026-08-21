@@ -180,7 +180,6 @@ function NewMetafieldFormContent() {
     locations: "location",
     pages: "page",
     blog_posts: "blog post",
-    markets: "market",
     shop: "shop",
   }
 

@@ -152,6 +152,7 @@ class OrderListOut(BaseModel):
     id: int
     order_number: str
     customer_id: int | None
+    customer_name: str | None = None
     fulfill_by: datetime | None
     channel: str
     total_price: Decimal

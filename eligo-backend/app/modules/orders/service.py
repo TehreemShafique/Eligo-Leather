@@ -97,13 +97,6 @@ async def create_order(db: AsyncSession, data: OrderCreate) -> Order:
     await db.commit()
     await db.refresh(order, attribute_names=["items", "audit_logs"])
 
-    try:
-        import asyncio
-        from app.modules.settings.notifications.service import background_dispatch_order_confirmation
-        asyncio.create_task(background_dispatch_order_confirmation(order.id))
-    except Exception:
-        pass
-
     return order
 
 
@@ -132,7 +125,7 @@ async def list_orders(
     skip: int = 0,
     limit: int = 50,
 ) -> list[Order]:
-    query = select(Order).options(selectinload(Order.items))
+    query = select(Order).options(selectinload(Order.items), selectinload(Order.customer))
 
     if is_archived is not None:
         query = query.where(Order.is_archived == is_archived)
@@ -690,7 +683,7 @@ async def update_abandoned_checkout(
 async def send_recovery_email(
     db: AsyncSession, checkout_id: int, recovery_url: str | None = None
 ) -> AbandonedCheckout | None:
-    """Simulate sending a recovery email. In production, integrate with email service."""
+    """Send a recovery email via the notification dispatch engine."""
     checkout = await get_abandoned_checkout(db, checkout_id)
     if not checkout:
         return None
@@ -698,6 +691,22 @@ async def send_recovery_email(
     checkout.recovery_status = "email_sent"
     checkout.recovery_email_sent_at = datetime.now(timezone.utc)
     checkout.recovery_attempts += 1
+
+    from app.modules.settings.notifications.service import background_dispatch_event
+    try:
+        import asyncio
+        asyncio.create_task(background_dispatch_event("abandoned_checkout", {
+            "email": checkout.customer_email,
+            "customer_email": checkout.customer_email,
+            "customer_name": checkout.customer_name or "Valued Customer",
+            "order_number": checkout.checkout_reference,
+            "total_price": str(checkout.total_price),
+            "currency": checkout.currency or "PKR",
+            "recovery_url": recovery_url or "http://localhost:3000/cart",
+            "store_name": "Eligo Leather",
+        }))
+    except Exception:
+        pass
 
     await db.commit()
     await db.refresh(checkout, attribute_names=["items"])
@@ -763,6 +772,10 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
             cn_str = str(cn_number).strip()
             cn_clean = cn_str.replace("ID", "").strip()
 
+            # Upsert to leopard_shipments so it shows in the Order tab
+            from app.modules.orders.leopard_service import upsert_shipment_from_webhook
+            await upsert_shipment_from_webhook(db, cn_str, status_str, entry)
+
             result = await db.execute(
                 select(Order).where(
                     or_(
@@ -791,6 +804,41 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
                     metadata_json=json.dumps(entry),
                 )
                 updated_orders.append({"order_id": order.id, "cn_number": cn_number, "status": status_str})
+
+                from app.modules.settings.notifications.service import background_dispatch_event
+                status_lower = status_str.lower()
+                if "delivered" in status_lower:
+                    _notif_payload = {
+                        "email": getattr(order, "customer_email", None) or entry.get("email"),
+                        "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
+                        "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                        "order_number": order.order_number,
+                        "tracking_number": str(cn_number),
+                        "tracking_company": "Leopards Courier",
+                        "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+                        "total_price": str(order.total_price),
+                    }
+                    try:
+                        import asyncio
+                        asyncio.create_task(background_dispatch_event("order_delivered", _notif_payload))
+                    except Exception:
+                        pass
+                elif "dispatch" in status_lower or "transit" in status_lower:
+                    _notif_payload = {
+                        "email": getattr(order, "customer_email", None) or entry.get("email"),
+                        "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
+                        "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                        "order_number": order.order_number,
+                        "tracking_number": str(cn_number),
+                        "tracking_company": "Leopards Courier",
+                        "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+                        "total_price": str(order.total_price),
+                    }
+                    try:
+                        import asyncio
+                        asyncio.create_task(background_dispatch_event("order_shipped", _notif_payload))
+                    except Exception:
+                        pass
 
     await db.commit()
     return {"matched_updated": len(updated_orders), "updated": updated_orders}

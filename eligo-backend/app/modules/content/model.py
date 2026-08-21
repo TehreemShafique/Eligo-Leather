@@ -249,6 +249,7 @@ class BlogPost(Base):
     handle: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    faqs: Mapped[str | None] = mapped_column(Text, nullable=True)
     author: Mapped[str] = mapped_column(String, default="Eligo Leather")
     blog: Mapped[str] = mapped_column(String, default="News")
     tags: Mapped[str | None] = mapped_column(String, nullable=True)

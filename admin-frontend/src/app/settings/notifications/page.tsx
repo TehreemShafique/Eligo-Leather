@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   Bell,
   Envelope,
@@ -20,138 +20,155 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
+const API = "http://localhost:8000/api/v1/settings/notifications"
+
 interface NotificationTemplate {
-  id: string
+  id: number
   code: string
   title: string
   desc: string
   type: string
   subject: string
   htmlBody: string
+  is_active: boolean
+  is_built_in: boolean
+}
+
+function mapBackendTemplate(t: any): NotificationTemplate {
+  return {
+    id: t.id,
+    code: t.code,
+    title: t.name,
+    desc: "",
+    type: "Email (Resend + Jinja2)",
+    subject: t.subject,
+    htmlBody: t.html_body,
+    is_active: t.is_active,
+    is_built_in: t.is_built_in,
+  }
 }
 
 export default function AdminSettingsNotificationsPage() {
   const [mailProvider, setMailProvider] = useState<"resend" | "smtp">("resend")
-  const [resendApiKey, setResendApiKey] = useState("re_live_94827103984719283")
-  const [fromEmail, setFromEmail] = useState("orders@eligoleather.com")
-  const [fromName, setFromName] = useState("Eligo Leather")
-  const [adminEmail, setAdminEmail] = useState("admin@eligoleather.com")
+  const [resendApiKey, setResendApiKey] = useState("")
+  const [fromEmail, setFromEmail] = useState("")
+  const [fromName, setFromName] = useState("")
+  const [adminEmail, setAdminEmail] = useState("")
   const [savingConfig, setSavingConfig] = useState(false)
+  const [senderEnabled, setSenderEnabled] = useState(true)
 
   const [editingTemplate, setEditingTemplate] = useState<NotificationTemplate | null>(null)
   const [activeTab, setActiveTab] = useState<"edit" | "preview">("edit")
   const [testingSmtp, setTestingSmtp] = useState(false)
+  const [loadingTemplates, setLoadingTemplates] = useState(true)
 
-  const [templates, setTemplates] = useState<NotificationTemplate[]>([
-    {
-      id: "tmpl_01",
-      code: "order_confirmation",
-      title: "Order Confirmation Email",
-      desc: "Sent automatically via Resend API to the customer after they place their order.",
-      type: "Email (Resend + Jinja2)",
-      subject: "Order {{ order_number }} confirmed - {{ store_name }}",
-      htmlBody: `<div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-  <h2 style="color: #854d0e;">Thank you for your order!</h2>
-  <p>Hi {{ customer_name | default('Valued Customer') }},</p>
-  <p>We've received your order <strong>#{{ order_number | default('EL-9482') }}</strong> and are currently processing it.</p>
-  <div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin: 16px 0;">
-    <p style="margin: 0; font-weight: bold; font-size: 14px;">Order Summary</p>
-    <p style="margin: 4px 0; color: #4b5563;">Items Total: {{ total_price | default('Rs. 4,598') }}</p>
-    <p style="margin: 4px 0; color: #4b5563;">Payment: Cash on Delivery / Card</p>
-  </div>
-  <p>If you have any questions, reply directly to this email or contact support at {{ support_email | default('support@eligoleather.com') }}.</p>
-  <p style="margin-top: 24px; color: #6b7280; font-size: 12px;">{{ store_name }} &bull; Premium Handcrafted Leather</p>
-</div>`,
-    },
-    {
-      id: "tmpl_02",
-      code: "order_shipped",
-      title: "Shipping & Tracking Email",
-      desc: "Sent when an order is fulfilled and courier tracking number is generated.",
-      type: "Email & SMS (Resend + Jinja2)",
-      subject: "Your order {{ order_number }} is on the way!",
-      htmlBody: `<div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-  <h2 style="color: #047857;">Great news! Your parcel is shipped</h2>
-  <p>Hi {{ customer_name | default('Valued Customer') }},</p>
-  <p>Order <strong>#{{ order_number | default('EL-9482') }}</strong> has been dispatched via {{ tracking_company | default('TCS Courier') }}.</p>
-  <div style="background: #ecfdf5; padding: 16px; border-radius: 8px; margin: 16px 0; border: 1px solid #a7f3d0;">
-    <p style="margin: 0; font-weight: bold; color: #065f46;">Tracking Number:</p>
-    <p style="margin: 4px 0; font-family: monospace; font-size: 16px; font-weight: bold; color: #047857;">{{ tracking_number | default('TCS-847291039') }}</p>
-  </div>
-  <p style="margin-top: 24px; color: #6b7280; font-size: 12px;">Thank you for choosing {{ store_name }}.</p>
-</div>`,
-    },
-    {
-      id: "tmpl_03",
-      code: "discount_offer",
-      title: "Active Discount & Promotional Offer Email",
-      desc: "Sent when a promotional discount code is active or assigned to a customer.",
-      type: "Email (Resend + Jinja2)",
-      subject: "Exclusive {{ discount_code }} offer on {{ store_name }}",
-      htmlBody: `<div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-  <h2 style="color: #854d0e;">Special Offer Just For You!</h2>
-  <p>Hi {{ customer_name | default('Valued Customer') }},</p>
-  <p>Use code <strong>{{ discount_code | default('ELIGO15') }}</strong> to get {{ discount_value | default('15% OFF') }} your next order of handcrafted leather goods.</p>
-  <div style="margin: 20px 0;">
-    <a href="{{ store_url | default('http://localhost:3000') }}" style="background: #854d0e; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">Claim Discount &rarr;</a>
-  </div>
-  <p style="color: #6b7280; font-size: 12px;">Valid on all genuine leather wallets, belts, and accessories.</p>
-</div>`,
-    },
-    {
-      id: "tmpl_04",
-      code: "abandoned_checkout",
-      title: "Abandoned Checkout Recovery Email",
-      desc: "Sent automatically to customers who left items in their cart without completing checkout.",
-      type: "Email (Resend + Jinja2)",
-      subject: "You left something special behind - {{ store_name }}",
-      htmlBody: `<div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-  <h2 style="color: #854d0e;">Complete your order now</h2>
-  <p>Hi {{ customer_name | default('Valued Customer') }},</p>
-  <p>You left your handcrafted leather items worth <strong>{{ total_price | default('Rs. 2,899') }}</strong> in your shopping cart.</p>
-  <div style="margin: 20px 0;">
-    <a href="{{ recovery_url | default('http://localhost:3000/cart') }}" style="background: #854d0e; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">Return to Cart &rarr;</a>
-  </div>
-  <p style="color: #6b7280; font-size: 12px;">Limited stock available!</p>
-</div>`,
-    },
-    {
-      id: "tmpl_05",
-      code: "admin_notification",
-      title: "Staff Order & System Alert",
-      desc: "Sent to admin team when a new high-value order is received or low inventory alert triggers.",
-      type: "Email (Resend + Jinja2)",
-      subject: "[Staff Alert] New Order {{ order_number }} Received",
-      htmlBody: `<div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-  <h3 style="color: #111827;">New Order Notification</h3>
-  <p>A new order <strong>#{{ order_number | default('EL-9482') }}</strong> was placed on {{ store_name }}.</p>
-  <p>Customer: {{ customer_name | default('Muhammad Ali') }} ({{ customer_email | default('ali.m@example.com') }})</p>
-  <p>Order Total: <strong>{{ total_price | default('Rs. 4,598') }}</strong></p>
-</div>`,
-    },
-  ])
+  const [templates, setTemplates] = useState<NotificationTemplate[]>([])
 
-  const handleSaveMailConfig = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchSenderConfig()
+    fetchTemplates()
+  }, [])
+
+  const fetchSenderConfig = async () => {
+    try {
+      const res = await fetch(`${API}/sender`)
+      if (!res.ok) return
+      const data = await res.json()
+      setFromEmail(data.from_email || "")
+      setFromName(data.from_name || "")
+      setAdminEmail(data.admin_email || "")
+      setSenderEnabled(data.is_enabled)
+      setResendApiKey(data.smtp_username || "")
+    } catch {}
+  }
+
+  const fetchTemplates = async () => {
+    setLoadingTemplates(true)
+    try {
+      const res = await fetch(`${API}/templates`)
+      if (!res.ok) return
+      const data = await res.json()
+      setTemplates(data.map(mapBackendTemplate))
+    } catch {
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  const handleSaveMailConfig = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingConfig(true)
-    setTimeout(() => {
+    try {
+      const res = await fetch(`${API}/sender`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_email: fromEmail,
+          from_name: fromName,
+          admin_email: adminEmail,
+          smtp_username: resendApiKey,
+        }),
+      })
+      if (res.ok) {
+        toast.success("Sender configuration updated successfully!")
+        fetchSenderConfig()
+      } else {
+        const err = await res.json()
+        toast.error(err.detail || "Failed to save config")
+      }
+    } catch {
+      toast.error("Network error saving config")
+    } finally {
       setSavingConfig(false)
-      toast.success("Resend API & Email Provider settings updated successfully!")
-    }, 600)
+    }
   }
 
-  const handleSaveTemplate = (updated: NotificationTemplate) => {
-    setTemplates(prev => prev.map(t => (t.id === updated.id ? updated : t)))
-    setEditingTemplate(updated)
-    toast.success(`Jinja2 template '${updated.title}' updated! Live output preview refreshed.`)
+  const handleSaveTemplate = async (updated: NotificationTemplate) => {
+    try {
+      const res = await fetch(`${API}/templates/${updated.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: updated.title,
+          subject: updated.subject,
+          html_body: updated.htmlBody,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const mapped = mapBackendTemplate(data)
+        setTemplates(prev => prev.map(t => (t.id === updated.id ? { ...mapped, title: mapped.title || updated.title } : t)))
+        setEditingTemplate({ ...mapped, title: mapped.title || updated.title })
+        toast.success(`Template '${updated.title}' saved to database!`)
+      } else {
+        const err = await res.json()
+        toast.error(err.detail || "Failed to save template")
+      }
+    } catch {
+      toast.error("Network error saving template")
+    }
   }
 
-  const handleSendTestEmail = (template: NotificationTemplate) => {
+  const handleSendTestEmail = async (template: NotificationTemplate) => {
     setTestingSmtp(true)
-    setTimeout(() => {
+    try {
+      const res = await fetch(`${API}/sender/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: adminEmail }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        toast.success(data.message || `Test email sent to ${adminEmail}!`)
+      } else {
+        const err = await res.json()
+        toast.error(err.detail || "Failed to send test email")
+      }
+    } catch {
+      toast.error("Network error sending test email")
+    } finally {
       setTestingSmtp(false)
-      toast.success(`Test email for '${template.title}' dispatched via Resend API to ${adminEmail}!`)
-    }, 900)
+    }
   }
 
   const renderPreview = (text: string) => {
@@ -192,9 +209,9 @@ export default function AdminSettingsNotificationsPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1.5">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Resend API Active</span>
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold border inline-flex items-center gap-1.5 ${senderEnabled ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}>
+              <CheckCircle className={`w-3.5 h-3.5 ${senderEnabled ? "text-emerald-700" : "text-gray-400"}`} />
+              <span>{senderEnabled ? "Email Engine Active" : "Email Engine Disabled"}</span>
             </span>
           </div>
         </div>
@@ -223,7 +240,7 @@ export default function AdminSettingsNotificationsPage() {
             </div>
 
             <div>
-              <label className="block font-semibold text-gray-700 mb-1">Resend API Key (`RESEND_API_KEY`)</label>
+              <label className="block font-semibold text-gray-700 mb-1">Resend API Key (RESEND_API_KEY)</label>
               <input
                 type="password"
                 value={resendApiKey}
@@ -278,9 +295,26 @@ export default function AdminSettingsNotificationsPage() {
 
         {/* Jinja Email Template List */}
         <div className="space-y-3 pt-2">
-          <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wide">
-            Automated Jinja Email Templates per Purpose
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wide">
+              Automated Jinja Email Templates per Purpose
+            </h2>
+            <button
+              onClick={fetchTemplates}
+              className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <ArrowsClockwise className="w-3.5 h-3.5" />
+              Refresh
+            </button>
+          </div>
+
+          {loadingTemplates && (
+            <div className="text-xs text-gray-400 py-8 text-center">Loading templates from database...</div>
+          )}
+
+          {!loadingTemplates && templates.length === 0 && (
+            <div className="text-xs text-gray-400 py-8 text-center">No templates found. Click refresh or restart the backend to seed defaults.</div>
+          )}
 
           {templates.map(item => (
             <div
@@ -293,8 +327,12 @@ export default function AdminSettingsNotificationsPage() {
                   <span className="text-[10px] font-mono font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded border border-amber-200">
                     {item.code}
                   </span>
+                  {item.is_built_in && (
+                    <span className="text-[10px] font-mono font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
+                      built-in
+                    </span>
+                  )}
                 </div>
-                <span className="text-gray-500 block text-xs">{item.desc}</span>
                 <span className="text-[11px] text-gray-400 font-mono mt-1 block">Subject: {item.subject}</span>
               </div>
 

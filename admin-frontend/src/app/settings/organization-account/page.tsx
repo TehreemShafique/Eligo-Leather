@@ -1,68 +1,104 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Users, Plus, DownloadSimple, UploadSimple, ShieldCheck, X, Check, Lock, UserCheck } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/layout/page-header"
 
+const API = "http://localhost:8000/api/v1/settings"
+
+interface UserRecord {
+  id: number
+  email: string
+  full_name: string | null
+  user_type: string
+  role_id: number | null
+  is_admin: boolean
+  is_active: boolean
+  created_at: string
+}
+
+interface RoleRecord {
+  id: number
+  name: string
+  domain: string
+  description: string | null
+  is_system: boolean
+  user_count: number
+}
+
 export default function AdminSettingsUsersPage() {
   const [addUserModalOpen, setAddUserModalOpen] = useState(false)
   const [userType, setUserType] = useState<"admin" | "pos">("admin")
   const [emailInput, setEmailInput] = useState("")
   const [fullNameInput, setFullNameInput] = useState("")
-  const [selectedRole, setSelectedRole] = useState("Administrator")
+  const [selectedRoleId, setSelectedRoleId] = useState<number | "">("")
+  const [passwordInput, setPasswordInput] = useState("")
   const [requireSecureAuth, setRequireSecureAuth] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
-  const usersList = [
-    {
-      id: 1,
-      name: "Bilal Hussain Abbasi",
-      email: "eligoleather9@gmail.com",
-      status: "Active",
-      role: "Store owner",
-      userType: "Admin user",
-    },
-    {
-      id: 2,
-      name: "Muhammad Usama Shakeel",
-      email: "usama.shakeel@example.com",
-      status: "Active",
-      role: "Administrator",
-      userType: "Admin user",
-    },
-    {
-      id: 3,
-      name: "POS Retail Cashier",
-      email: "pos.terminal01@eligoleather.com",
-      status: "Active",
-      role: "Cashier",
-      userType: "Point of Sale user",
-    },
-  ]
+  const [usersList, setUsersList] = useState<UserRecord[]>([])
+  const [rolesList, setRolesList] = useState<RoleRecord[]>([])
 
-  const availableRoles = [
-    "Administrator",
-    "Store manager",
-    "Marketer",
-    "Merchandiser",
-    "Online store editor",
-    "Customer support",
-    "POS administrator",
-    "Cashier",
-  ]
+  const roleMap = Object.fromEntries(rolesList.map((r) => [r.id, r.name]))
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [usersRes, rolesRes] = await Promise.all([
+        fetch(`${API}/users/`),
+        fetch(`${API}/roles/list-roles`),
+      ])
+      if (usersRes.ok) setUsersList(await usersRes.json())
+      if (rolesRes.ok) setRolesList(await rolesRes.json())
+    } catch {
+      toast.error("Failed to load users or roles from backend.")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!emailInput) {
-      toast.error("Please enter a valid user email address.")
+    if (!emailInput || !passwordInput) {
+      toast.error("Email and password are required.")
       return
     }
-    toast.success(`User "${fullNameInput || emailInput}" added to database successfully!`)
-    setAddUserModalOpen(false)
-    setEmailInput("")
-    setFullNameInput("")
+    try {
+      setSubmitting(true)
+      const res = await fetch(`${API}/users/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: emailInput,
+          password: passwordInput,
+          full_name: fullNameInput || null,
+          user_type: userType,
+          role_id: selectedRoleId || null,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Failed to create user." }))
+        toast.error(err.detail || "Failed to create user.")
+        return
+      }
+      toast.success(`User "${fullNameInput || emailInput}" created successfully!`)
+      setAddUserModalOpen(false)
+      setEmailInput("")
+      setFullNameInput("")
+      setPasswordInput("")
+      setSelectedRoleId("")
+      fetchData()
+    } catch {
+      toast.error("Network error while creating user.")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -110,33 +146,45 @@ export default function AdminSettingsUsersPage() {
       {/* Main Users Table */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
         <div className="eligo-table-wrap">
-          <table className="eligo-table">
-            <thead>
-              <tr>
-                <th className="eligo-th">User</th>
-                <th className="eligo-th">User Type</th>
-                <th className="eligo-th">Status</th>
-                <th className="eligo-th text-right">Role</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {usersList.map((u) => (
-                <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="font-bold text-amber-800 text-xs">{u.name}</div>
-                    <span className="text-[11px] text-gray-500">{u.email}</span>
-                  </td>
-                  <td className="px-6 py-4 font-semibold text-gray-800">{u.userType}</td>
-                  <td className="px-6 py-4">
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      {u.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right font-bold text-gray-900">{u.role}</td>
+          {loading ? (
+            <div className="p-12 text-center text-xs text-gray-500">Loading users…</div>
+          ) : usersList.length === 0 ? (
+            <div className="p-12 text-center text-xs text-gray-500">No users found. Add a user to get started.</div>
+          ) : (
+            <table className="eligo-table">
+              <thead>
+                <tr>
+                  <th className="eligo-th">User</th>
+                  <th className="eligo-th">User Type</th>
+                  <th className="eligo-th">Status</th>
+                  <th className="eligo-th text-right">Role</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {usersList.map((u) => (
+                  <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="font-bold text-amber-800 text-xs">{u.full_name || "—"}</div>
+                      <span className="text-[11px] text-gray-500">{u.email}</span>
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-gray-800 capitalize">{u.user_type === "pos" ? "Point of Sale user" : "Admin user"}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                        u.is_active
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                          : "bg-red-100 text-red-800 border-red-200"
+                      }`}>
+                        {u.is_active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-bold text-gray-900">
+                      {roleMap[u.role_id ?? 0] ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -185,7 +233,6 @@ export default function AdminSettingsUsersPage() {
                 <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">Full Name</label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. Adnan Khan"
                   value={fullNameInput}
                   onChange={(e) => setFullNameInput(e.target.value)}
@@ -201,6 +248,19 @@ export default function AdminSettingsUsersPage() {
                   placeholder="staff@eligoleather.com"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">Password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="Minimum 6 characters"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
                   className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
                 />
               </div>
@@ -225,12 +285,13 @@ export default function AdminSettingsUsersPage() {
               <div>
                 <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">Assign Role</label>
                 <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
+                  value={selectedRoleId}
+                  onChange={(e) => setSelectedRoleId(e.target.value ? Number(e.target.value) : "")}
                   className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-bold text-amber-800"
                 >
-                  {availableRoles.map((role) => (
-                    <option key={role} value={role}>{role}</option>
+                  <option value="">— No role —</option>
+                  {rolesList.map((role) => (
+                    <option key={role.id} value={role.id}>{role.name}</option>
                   ))}
                 </select>
               </div>
@@ -245,9 +306,10 @@ export default function AdminSettingsUsersPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900 cursor-pointer"
+                  disabled={submitting}
+                  className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900 cursor-pointer disabled:opacity-50"
                 >
-                  Assign User
+                  {submitting ? "Creating…" : "Assign User"}
                 </button>
               </div>
             </form>

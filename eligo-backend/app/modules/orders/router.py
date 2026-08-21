@@ -93,12 +93,75 @@ async def get_leopard_orders_api(db: AsyncSession = Depends(get_db)):
         return {"status": "error", "message": str(exc), "orders": [], "source": "leopards_api"}
 
 
+@public_webhook_router.get("/leopard/all-orders")
+async def get_leopard_all_orders_api(db: AsyncSession = Depends(get_db)):
+    """Fetch leopard shipments from local DB for the Orders tab.
+
+    Only returns actual Leopards shipments (from CSV import, webhooks,
+    manual booking, CN generation). No local-only orders are mixed in.
+    """
+    try:
+        leopard_orders = await leopard_service.fetch_shipments_from_db(db)
+        dispatched = await leopard_service.fetch_shipments_from_db_dispatched(db)
+
+        return {
+            "status": "success",
+            "orders": leopard_orders,
+            "dispatched": dispatched,
+            "source": "database",
+        }
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Leopard /leopard/all-orders failed: %s", exc)
+        return {"status": "error", "message": str(exc), "orders": [], "dispatched": [], "source": "error"}
+
+
+@public_webhook_router.post("/leopard/import-csv")
+async def import_leopard_csv_api(request: Request, db: AsyncSession = Depends(get_db)):
+    """Import historical shipment data from a CSV file.
+
+    Expects JSON body: {"csv_content": "..."} where csv_content is the raw
+    CSV text. Parses headers flexibly and upserts into leopard_shipments.
+    """
+    try:
+        data = await request.json()
+        csv_content = data.get("csv_content", "")
+        if not csv_content:
+            raise HTTPException(status_code=400, detail="No CSV content provided")
+
+        result = await leopard_service.import_shipments_from_csv(db, csv_content)
+
+        await leopard_service.record_log(
+            db,
+            order_number=None,
+            log_type="Historical CSV Import",
+            status="Success" if result["imported"] > 0 else "Warning",
+            detail=result["message"],
+        )
+
+        # Include debug info so frontend can show CSV headers if no CNs matched
+        return {
+            "status": "success",
+            **result,
+            "debug_headers": result.get("headers_found", []),
+            "debug_sample_row": result.get("sample_row", {}),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Leopard CSV import failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @public_webhook_router.post("/leopard/generate-cn")
 async def generate_leopard_cn_api(request: Request, db: AsyncSession = Depends(get_db)):
-    """Generate Leopards Consignment Number (CN) for selected orders.
+    """Generate Leopards Consignment Number (CN) and automatically book the shipment.
 
-    CN numbers are taken from the real Leopards CN pool (`cnList`) and the
-    assignment is recorded in the shipment registry + Logs tab.
+    Flow:
+    1. Fetch CN pool from Leopards API
+    2. For each order_id, look up order details from local DB
+    3. Assign an available CN and call bookPacket API to register with Leopards
+    4. Save booking to leopard_shipments table + cross-link Order.tracking_number
+    5. Return results with CN numbers and booking status
     """
     data = await request.json()
     order_ids = data.get("order_ids", [])
@@ -125,44 +188,183 @@ async def generate_leopard_cn_api(request: Request, db: AsyncSession = Depends(g
         new_cn = available_cns[idx] if idx < len(available_cns) else None
         if not new_cn:
             await leopard_service.record_log(
-                db, order_number, "CN Generated Manual", "Error",
+                db, order_number, "CN Generated + Booked", "Error",
                 "No available CN left in the Leopards CN pool",
             )
             generated_cns.append({"order_id": oid, "cn_number": None, "status": "NO_CN_AVAILABLE"})
             continue
 
+        # Look up the order from local DB to get booking details
+        clean_id = str(oid).replace("#", "").strip()
+        order_row = None
+        if clean_id.isdigit():
+            order_result = await db.execute(select(Order).where(Order.id == int(clean_id)))
+            order_row = order_result.scalar_one_or_none()
+        if not order_row:
+            order_result = await db.execute(select(Order).where(Order.order_number == order_number))
+            order_row = order_result.scalar_one_or_none()
+
+        # Also check existing shipment to avoid double-booking
         existing = await db.execute(
             select(LeopardShipment).where(LeopardShipment.cn_number == new_cn)
         )
-        if existing.scalar_one_or_none() is None:
-            db.add(LeopardShipment(cn_number=new_cn, order_number=order_number, current_status="pending"))
-            await db.commit()
+        if existing.scalar_one_or_none() is not None:
+            generated_cns.append({"order_id": oid, "cn_number": new_cn, "status": "ALREADY_EXISTS"})
+            continue
 
-        await leopard_service.record_log(
-            db, order_number, "CN Generated Manual", "Success", new_cn
-        )
-        generated_cns.append({"order_id": oid, "cn_number": new_cn, "status": "CN_GENERATED_SUCCESSFULLY"})
+        if order_row:
+            # Extract consignee details from the local order
+            customer_name = ""
+            customer_phone = ""
+            if order_row.customer:
+                customer_name = f"{order_row.customer.first_name or ''} {order_row.customer.last_name or ''}".strip()
+                customer_phone = order_row.customer.phone or ""
+
+            consignee_name = customer_name or "Customer"
+            consignee_phone = customer_phone or "0000000000"
+            consignee_address = order_row.shipping_address or ""
+            destination_city = order_row.destination or "Islamabad"
+            cod_amount = str(order_row.total_price or 0)
+            weight = "500"
+            pieces = "1"
+
+            # Call the real Leopards bookPacket API
+            book_payload = {
+                "order_id": order_number,
+                "cod_amount": cod_amount,
+                "consignee_name": consignee_name,
+                "consignee_phone": consignee_phone,
+                "consignee_email": "",
+                "consignee_address": consignee_address,
+                "destination_city": destination_city,
+                "special_instructions": "N/A",
+                "weight": weight,
+                "weight_grams": 500,
+                "pieces": 1,
+            }
+
+            try:
+                book_res = await leopard_client.book_packet_api(book_payload)
+                api_status = book_res.get("status")
+                live_cn = (
+                    book_res.get("track_number")
+                    or book_res.get("cn_number")
+                    or book_res.get("track_no")
+                )
+
+                api_error = book_res.get("error")
+                if api_status == 0 or (api_error and api_error != "0"):
+                    # API error — still save CN locally as pending
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    db.add(LeopardShipment(
+                        cn_number=new_cn,
+                        order_number=order_number,
+                        current_status="pending",
+                        booking_date=now_str,
+                        destination_city=destination_city,
+                        consignee_name=consignee_name,
+                        consignee_phone=consignee_phone,
+                        consignee_address=consignee_address,
+                        collect_amount=cod_amount,
+                        weight=weight,
+                        pieces=1,
+                        raw_json=json.dumps(book_res, default=str),
+                    ))
+                    await db.commit()
+                    await leopard_service.record_log(
+                        db, order_number, "CN Generated + Booked", "Partial",
+                        f"CN {new_cn} assigned but Leopards booking failed: {api_error}",
+                    )
+                    generated_cns.append({"order_id": oid, "cn_number": new_cn, "status": "CN_GENERATED_BOOK_FAILED"})
+                elif live_cn:
+                    # Success — use the CN returned by Leopards (may differ from pool CN)
+                    cn_number = str(live_cn).strip()
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    booking_date_str = datetime.now().strftime("%Y-%m-%d")
+
+                    # Save/updated shipment with full booking data
+                    db.add(LeopardShipment(
+                        cn_number=cn_number,
+                        order_number=order_number,
+                        booking_date=now_str,
+                        destination_city=destination_city,
+                        consignee_name=consignee_name,
+                        consignee_phone=consignee_phone,
+                        consignee_address=consignee_address,
+                        collect_amount=cod_amount,
+                        weight=weight,
+                        pieces=1,
+                        current_status="Booked",
+                        raw_json=json.dumps(book_res, default=str),
+                    ))
+                    # Cross-link Order.tracking_number
+                    order_row.tracking_number = cn_number
+                    await db.commit()
+
+                    await leopard_service.record_log(
+                        db, order_number, "CN Generated + Booked", "Success",
+                        f"CN #{cn_number} booked for {consignee_name} to {destination_city}. COD: Rs {cod_amount}",
+                    )
+                    generated_cns.append({"order_id": oid, "cn_number": cn_number, "status": "CN_GENERATED_SUCCESSFULLY"})
+                else:
+                    # No CN returned from API
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    db.add(LeopardShipment(
+                        cn_number=new_cn,
+                        order_number=order_number,
+                        current_status="pending",
+                        booking_date=now_str,
+                        raw_json=json.dumps(book_res, default=str),
+                    ))
+                    await db.commit()
+                    await leopard_service.record_log(
+                        db, order_number, "CN Generated + Booked", "Partial",
+                        f"CN {new_cn} assigned but Leopards did not return a booking CN",
+                    )
+                    generated_cns.append({"order_id": oid, "cn_number": new_cn, "status": "CN_GENERATED_BOOK_FAILED"})
+            except Exception as book_exc:
+                # Network error — save CN locally as pending
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                db.add(LeopardShipment(
+                    cn_number=new_cn,
+                    order_number=order_number,
+                    current_status="pending",
+                    booking_date=now_str,
+                    raw_json=json.dumps({"error": str(book_exc)}, default=str),
+                ))
+                await db.commit()
+                await leopard_service.record_log(
+                    db, order_number, "CN Generated + Booked", "Error",
+                    f"CN {new_cn} assigned but booking API call failed: {book_exc}",
+                )
+                generated_cns.append({"order_id": oid, "cn_number": new_cn, "status": "CN_GENERATED_BOOK_FAILED"})
+        else:
+            # Order not found in local DB — just assign CN without booking
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            db.add(LeopardShipment(cn_number=new_cn, order_number=order_number, current_status="pending", booking_date=now_str))
+            await db.commit()
+            await leopard_service.record_log(
+                db, order_number, "CN Generated + Booked", "Warning",
+                f"CN {new_cn} assigned but order not found in local DB — manual booking required",
+            )
+            generated_cns.append({"order_id": oid, "cn_number": new_cn, "status": "CN_GENERATED_NO_ORDER_DATA"})
 
     return {
         "status": "success",
-        "message": f"Leopards CN generated successfully for {len(generated_cns)} orders",
+        "message": f"Leopards CN generated for {len(generated_cns)} order(s)",
         "results": generated_cns,
     }
 
 
 @public_webhook_router.get("/leopard/dispatched")
 async def get_leopard_dispatched_api(db: AsyncSession = Depends(get_db)):
-    """Fetch dispatched parcels list live from the Leopards Merchant API."""
+    """Fetch dispatched parcels list from local DB (historical imports + webhooks + bookings)."""
     try:
-        packets = await leopard_service.fetch_shipments(db)
-        dispatched = [
-            leopard_service.shipment_to_dispatched(packet, idx)
-            for idx, packet in enumerate(packets)
-        ]
-        return {"status": "success", "dispatched": dispatched, "source": "leopards_api"}
+        dispatched = await leopard_service.fetch_shipments_from_db_dispatched(db)
+        return {"status": "success", "dispatched": dispatched, "source": "database"}
     except Exception as exc:
         logging.getLogger(__name__).warning("Leopards API /leopard/dispatched failed: %s", exc)
-        return {"status": "error", "message": str(exc), "dispatched": [], "source": "leopards_api"}
+        return {"status": "error", "message": str(exc), "dispatched": [], "source": "database"}
 
 
 @public_webhook_router.get("/leopard/load-sheets")
@@ -259,6 +461,34 @@ async def book_leopard_packet_api(request: Request, db: AsyncSession = Depends(g
     except Exception as exc:
         logging.getLogger(__name__).error("Leopards API /leopard/book-packet failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@public_webhook_router.get("/leopard/sync-all")
+async def sync_all_leopard_api(db: AsyncSession = Depends(get_db)):
+    """Full sync: discover all CNs, track them via Leopards API, upsert locally."""
+    try:
+        result = await leopard_service.sync_all_from_leopards(db)
+        # Build orders + dispatched from tracked packets for the frontend
+        packets = result.get("packets", [])
+        orders = [
+            leopard_service.shipment_to_order(packet, idx)
+            for idx, packet in enumerate(packets)
+        ]
+        dispatched = [
+            leopard_service.shipment_to_dispatched(packet, idx)
+            for idx, packet in enumerate(packets)
+        ]
+        return {
+            "status": "success",
+            "summary": result.get("summary", {}),
+            "orders": orders,
+            "dispatched": dispatched,
+            "new_cns_discovered": result.get("new_cns_discovered", []),
+            "not_found_cns": result.get("not_found_cns", []),
+        }
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Leopard /leopard/sync-all failed: %s", exc)
+        return {"status": "error", "message": str(exc)}
 
 
 _LEOPARD_APP_CODE = "leopards_courier"
@@ -537,7 +767,11 @@ async def get_public_order_detail_api(order_id: str, db: AsyncSession = Depends(
 
 
 @public_webhook_router.post("/mark-paid/{order_id}")
-async def mark_order_paid_public_api(order_id: str, db: AsyncSession = Depends(get_db)):
+async def mark_order_paid_public_api(
+    order_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     """Mark an order as Paid in PostgreSQL DB."""
     clean_id = order_id.replace("#", "").strip()
     search_num = f"#{clean_id}"
@@ -555,6 +789,21 @@ async def mark_order_paid_public_api(order_id: str, db: AsyncSession = Depends(g
         await db.commit()
         await db.refresh(order)
 
+        from app.modules.settings.notifications.service import background_dispatch_event
+        background_tasks.add_task(
+            background_dispatch_event,
+            "order_paid",
+            {
+                "email": getattr(order, "customer_email", None),
+                "customer_email": getattr(order, "customer_email", None),
+                "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                "order_number": order.order_number,
+                "total_price": str(order.total_price),
+                "paid_amount": str(order.paid_amount),
+                "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+            },
+        )
+
     return {
         "status": "success",
         "message": f"Order #{clean_id} marked as Paid in Database",
@@ -563,7 +812,11 @@ async def mark_order_paid_public_api(order_id: str, db: AsyncSession = Depends(g
 
 
 @public_webhook_router.post("/mark-delivered/{order_id}")
-async def mark_order_delivered_public_api(order_id: str, db: AsyncSession = Depends(get_db)):
+async def mark_order_delivered_public_api(
+    order_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     """Mark an order as Delivered in PostgreSQL DB."""
     clean_id = order_id.replace("#", "").strip()
     search_num = f"#{clean_id}"
@@ -580,6 +833,22 @@ async def mark_order_delivered_public_api(order_id: str, db: AsyncSession = Depe
         order.fulfillment_status = FulfillmentStatus.fulfilled
         await db.commit()
         await db.refresh(order)
+
+        from app.modules.settings.notifications.service import background_dispatch_event
+        background_tasks.add_task(
+            background_dispatch_event,
+            "order_delivered",
+            {
+                "email": getattr(order, "customer_email", None),
+                "customer_email": getattr(order, "customer_email", None),
+                "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                "order_number": order.order_number,
+                "tracking_number": order.tracking_number,
+                "tracking_company": order.tracking_company or "Leopards Courier",
+                "total_price": str(order.total_price),
+                "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+            },
+        )
 
     return {
         "status": "success",

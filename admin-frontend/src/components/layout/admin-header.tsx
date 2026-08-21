@@ -4,12 +4,18 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { MagnifyingGlass, Bell, Question, Command, CaretDown, SignOut } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { clearAuthToken, getStoredUser } from "@/lib/api"
 
 export function AdminHeader() {
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const [user, setUser] = useState<{ email: string; full_name: string | null } | null>(null)
+
+  useEffect(() => {
+    setUser(getStoredUser())
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -34,13 +40,18 @@ export function AdminHeader() {
 
   const handleLogout = () => {
     setProfileDropdownOpen(false)
+    clearAuthToken()
     toast.success("Logged out successfully!")
     router.push("/login")
   }
 
+  const displayName = user?.full_name || user?.email || "Admin"
+  const initials = user?.full_name
+    ? user.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : user?.email?.slice(0, 2).toUpperCase() || "AD"
+
   return (
     <header className="h-14 shrink-0 bg-[#ebebeb] border-b border-[#d2d2d2] px-5 flex items-center justify-between gap-4 z-40 select-none">
-      {/* Search Bar */}
       <div className="flex-1 max-w-xl min-w-0">
         <div className="relative flex items-center group">
           <MagnifyingGlass className="w-4 h-4 text-gray-500 absolute left-3 transition-colors group-focus-within:text-amber-800" />
@@ -57,7 +68,6 @@ export function AdminHeader() {
         </div>
       </div>
 
-      {/* Right Actions & Store Badge Dropdown */}
       <div className="flex items-center gap-1.5 shrink-0">
         <button
           type="button"
@@ -78,7 +88,6 @@ export function AdminHeader() {
 
         <div className="ml-2 h-7 w-px bg-gray-300" />
 
-        {/* Store Badge & Profile Dropdown Container */}
         <div className="relative" ref={dropdownRef}>
           <button
             type="button"
@@ -86,34 +95,30 @@ export function AdminHeader() {
             className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-white/80 transition-colors group cursor-pointer"
           >
             <div className="w-7 h-7 rounded-lg bg-amber-800 text-white font-bold text-[10px] flex items-center justify-center shadow-sm">
-              EL
+              {initials}
             </div>
-            <span className="hidden lg:inline text-xs font-bold text-gray-900">Eligo Leather</span>
+            <span className="hidden lg:inline text-xs font-bold text-gray-900">{displayName}</span>
             <CaretDown className={`w-3 h-3 text-gray-400 group-hover:text-gray-700 transition-transform ${profileDropdownOpen ? "rotate-180" : ""}`} />
           </button>
 
-          {/* Profile Popover Card Matching Picture 1 */}
           {profileDropdownOpen && (
             <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl border border-gray-200 shadow-2xl p-4 z-50 animate-scale-in font-sans">
-              {/* Super Admin Info */}
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-amber-800 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-sm">
-                  BH
+                  {initials}
                 </div>
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-bold text-gray-900 truncate leading-snug">
-                    Bilal Hussain Abbasi
+                    {displayName}
                   </span>
                   <span className="text-xs text-gray-500 truncate leading-snug">
-                    eligoleather9@gmail.com
+                    {user?.email || ""}
                   </span>
                 </div>
               </div>
 
-              {/* Divider */}
               <div className="h-px bg-gray-200/80 my-3" />
 
-              {/* Logout Button */}
               <button
                 type="button"
                 onClick={handleLogout}

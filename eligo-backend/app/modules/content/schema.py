@@ -245,6 +245,7 @@ class BlogPostCreate(BaseModel):
     handle: str
     body: str | None = None
     excerpt: str | None = None
+    faqs: str | None = None
     author: str = "Eligo Leather"
     blog: str = "News"
     tags: str | None = None
@@ -262,6 +263,7 @@ class BlogPostUpdate(BaseModel):
     handle: str | None = None
     body: str | None = None
     excerpt: str | None = None
+    faqs: str | None = None
     author: str | None = None
     blog: str | None = None
     tags: str | None = None
@@ -280,6 +282,7 @@ class BlogPostOut(BaseModel):
     handle: str
     body: str | None
     excerpt: str | None
+    faqs: str | None
     author: str
     blog: str
     tags: str | None

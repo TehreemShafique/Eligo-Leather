@@ -2,18 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import {
-  Truck,
-  EnvelopeSimple,
-  Star,
-  ChartBar,
-  Gear,
-  CheckCircle,
-  ArrowRight,
-  ShieldCheck,
-  Lightning,
-} from "@phosphor-icons/react"
-import { toast } from "sonner"
+import { Truck, Star, ArrowRight } from "@phosphor-icons/react"
 
 export default function AdminSettingsAppsPage() {
   const [appsList] = useState([
@@ -29,16 +18,6 @@ export default function AdminSettingsAppsPage() {
       portalUrl: "/settings/apps/leopards-courier",
     },
     {
-      code: "resend_email",
-      name: "Resend Email API",
-      category: "Transactional Emails",
-      status: "Active",
-      description: "Resend Email API adapter (_resend_send_email). Order confirmations, tracking updates, and receipt emails.",
-      icon: EnvelopeSimple,
-      color: "text-slate-900 bg-gray-100 border-gray-300",
-      actions: ["send_email"],
-    },
-    {
       code: "supabase_reviews",
       name: "Supabase Customer Reviews",
       category: "Reviews & Ratings",
@@ -48,16 +27,6 @@ export default function AdminSettingsAppsPage() {
       color: "text-emerald-800 bg-emerald-50 border-emerald-200",
       actions: ["fetch_reviews", "post_review", "update_review_status"],
       portalUrl: "/settings/apps/supabase",
-    },
-    {
-      code: "clarity_analytics",
-      name: "Microsoft Clarity Analytics",
-      category: "Behavior & Insights",
-      status: "Retained (Script Pending)",
-      description: "Microsoft Clarity session recordings and heatmap analytics integration.",
-      icon: ChartBar,
-      color: "text-blue-800 bg-blue-50 border-blue-200",
-      actions: ["fetch_insights"],
     },
   ])
 
@@ -97,13 +66,7 @@ export default function AdminSettingsAppsPage() {
                     </div>
                   </div>
 
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                      app.status === "Active"
-                        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                        : "bg-amber-100 text-amber-800 border border-amber-200"
-                    }`}
-                  >
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                     {app.status}
                   </span>
                 </div>
@@ -112,23 +75,13 @@ export default function AdminSettingsAppsPage() {
               </div>
 
               <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-                {app.portalUrl ? (
-                  <Link
-                    href={app.portalUrl}
-                    className="w-full py-2 bg-amber-800 hover:bg-amber-900 text-white rounded-xl font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-2"
-                  >
-                    <span>Open {app.name} Portal</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                ) : (
-                  <button
-                    onClick={() => toast.info(`Managing settings for ${app.name}`)}
-                    className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl font-bold text-xs transition-colors border border-gray-300 flex items-center justify-center gap-2"
-                  >
-                    <Gear className="w-4 h-4" />
-                    <span>View App Credentials</span>
-                  </button>
-                )}
+                <Link
+                  href={app.portalUrl}
+                  className="w-full py-2 bg-amber-800 hover:bg-amber-900 text-white rounded-xl font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>Open {app.name} Portal</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
               </div>
             </div>
           )

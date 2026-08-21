@@ -8,12 +8,15 @@ environment variables. Confirmed working live endpoints (2026-08):
 - POST /api/generateLoadSheet/format/json/  -> generate a load sheet for CNs
 - GET  /api/cnList/                         -> pool of allocated CN numbers
 - POST /api/getAllCities/format/json/       -> supported city list
+- POST /api/bookPacket/format/json/         -> book a new packet (returns CN)
+- GET  /api/booked_packet_slip_api/{CN}     -> real airway bill PDF
 """
 
 from __future__ import annotations
 
 import os
 import logging
+import json as json_mod
 
 import httpx
 
@@ -26,24 +29,10 @@ LEOPARDS_API_BASE_URL = os.getenv(
 LEOPARDS_API_KEY = os.getenv("LEOPARDS_API_KEY", "")
 LEOPARDS_API_PASSWORD = os.getenv("LEOPARDS_API_PASSWORD", "")
 
-_INITIAL_CN_NUMBERS = os.getenv(
-    "LEOPARDS_INITIAL_CN_NUMBERS", ""
-)
-_INITIAL_CHALLANS = os.getenv(
-    "LEOPARDS_INITIAL_CHALLANS", ""
-)
-
 _TIMEOUT = httpx.Timeout(90.0, connect=30.0)
 
-
-def initial_cn_numbers() -> list[str]:
-    """Comma-separated CNs configured via LEOPARDS_INITIAL_CN_NUMBERS."""
-    return [c.strip() for c in _INITIAL_CN_NUMBERS.split(",") if c.strip()]
-
-
-def initial_challans() -> list[str]:
-    """Comma-separated challan numbers configured via LEOPARDS_INITIAL_CHALLANS."""
-    return [c.strip() for c in _INITIAL_CHALLANS.split(",") if c.strip()]
+# Lazy-loaded city cache: name -> id
+_city_cache: dict[str, int] = {}
 
 
 async def _post(path: str, **fields) -> httpx.Response:
@@ -55,8 +44,8 @@ async def _post(path: str, **fields) -> httpx.Response:
         return resp
 
 
-async def track_booked_packets(cn_numbers: list[str]) -> list[dict]:
-    """Return the full booked-packet records for the given consignment numbers."""
+async def _track_batch(cn_numbers: list[str]) -> list[dict] | None:
+    """Track a batch of CNs. Returns packet_list or None if API returns no data."""
     if not cn_numbers:
         return []
     resp = await _post(
@@ -70,8 +59,39 @@ async def track_booked_packets(cn_numbers: list[str]) -> list[dict]:
         return []
     if isinstance(payload, dict) and isinstance(payload.get("packet_list"), list):
         return payload["packet_list"]
-    logger.warning("trackBookedPacket unexpected payload: %s", str(payload)[:200])
-    return []
+    return None
+
+
+async def track_booked_packets(cn_numbers: list[str]) -> list[dict]:
+    """Return the full booked-packet records for the given consignment numbers.
+
+    The Leopards API returns ``packet_list: None`` when *any* CN in the batch
+    is not found.  We first try the full batch, and if that returns None we
+    fall back to smaller sub-batches so that valid CNs are still returned.
+    """
+    if not cn_numbers:
+        return []
+
+    BATCH_SIZE = 10
+    all_packets: list[dict] = []
+
+    # Try the full batch first (fast path when all CNs are valid)
+    full_result = await _track_batch(cn_numbers)
+    if full_result is not None:
+        return full_result
+
+    # Full batch returned None – retry in smaller chunks
+    logger.info(
+        "trackBookedPacket full batch (%d CNs) returned None, retrying in batches of %d",
+        len(cn_numbers), BATCH_SIZE,
+    )
+    for i in range(0, len(cn_numbers), BATCH_SIZE):
+        chunk = cn_numbers[i : i + BATCH_SIZE]
+        result = await _track_batch(chunk)
+        if result:
+            all_packets.extend(result)
+
+    return all_packets
 
 
 async def download_load_sheet(challan_no: str) -> httpx.Response:
@@ -104,17 +124,22 @@ async def generate_load_sheet(
     """Generate a load sheet on Leopards for the given CNs.
 
     Returns the parsed JSON response (contains the new challan number).
+    The Leopards API requires comma-separated CN numbers.
     """
+    cn_csv = ",".join(cn_numbers)
     resp = await _post(
         "/api/generateLoadSheet/format/json/",
-        cn_number=",".join(cn_numbers),
-        courier_name=courier_name,
-        courier_code=courier_code,
+        cn_number=cn_csv,
+        courier_name=courier_name or "Leopards Courier Service",
+        courier_code=courier_code or "LCS",
     )
     try:
         return resp.json()
     except Exception:
-        return {"raw": resp.text[:1000]}
+        ct = resp.headers.get("content-type", "")
+        if resp.content and resp.content[:5] == b"%PDF-":
+            return {"status": 1, "message": "PDF generated", "pdf_bytes_len": len(resp.content)}
+        return {"raw": resp.text[:1000], "content_type": ct}
 
 
 async def cn_list() -> list[dict]:
@@ -136,29 +161,142 @@ async def get_all_cities() -> list[dict]:
     resp = await _post("/api/getAllCities/format/json/")
     payload = resp.json()
     if isinstance(payload, dict) and isinstance(payload.get("city_list"), list):
-        return payload["city_list"]
+        cities = payload["city_list"]
+        global _city_cache
+        _city_cache = {c["name"].lower(): c["id"] for c in cities if c.get("name") and c.get("id")}
+        return cities
     return []
 
 
+async def get_city_id(city_name: str) -> int | None:
+    """Resolve a city name to its Leopards city ID. Returns None if not found."""
+    global _city_cache
+    if not _city_cache:
+        await get_all_cities()
+    return _city_cache.get(city_name.lower().strip())
+
+
+async def booked_packet_slip_api(cn_number: str) -> httpx.Response | None:
+    """Download the real airway bill / booked packet slip PDF from Leopards.
+
+    This is the direct endpoint that returns a PDF for a given CN number.
+    Does NOT require generateLoadSheet first.
+
+    Tries multiple auth methods:
+    1. GET with base64-encoded credentials in query string
+    2. POST with api_key/api_password in form data
+    """
+    import base64
+    import urllib.parse
+
+    # Method 1: GET with base64 credentials (original Leopards docs format)
+    key_b64 = base64.b64encode(LEOPARDS_API_KEY.encode()).decode()
+    pw_b64 = base64.b64encode(LEOPARDS_API_PASSWORD.encode()).decode()
+    url = (
+        f"{LEOPARDS_API_BASE_URL}/api/booked_packet_slip_api/{cn_number}"
+        f"?api_key_secure={urllib.parse.quote(key_b64)}&api_key_password_secure={urllib.parse.quote(pw_b64)}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.get(url)
+            ct = resp.headers.get("content-type", "")
+            if resp.status_code == 200 and (
+                ct.startswith("application/pdf") or resp.content[:5] == b"%PDF-"
+            ):
+                return resp
+            logger.info(
+                "booked_packet_slip_api GET method returned %s (content-type: %s) for CN %s",
+                resp.status_code, ct, cn_number,
+            )
+    except Exception as exc:
+        logger.warning("booked_packet_slip_api GET failed for CN %s: %s", cn_number, exc)
+
+    # Method 2: POST with standard form auth (same as other Leopards endpoints)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.post(
+                f"{LEOPARDS_API_BASE_URL}/api/booked_packet_slip_api/{cn_number}",
+                data={"api_key": LEOPARDS_API_KEY, "api_password": LEOPARDS_API_PASSWORD},
+            )
+            ct = resp.headers.get("content-type", "")
+            if resp.status_code == 200 and (
+                ct.startswith("application/pdf") or resp.content[:5] == b"%PDF-"
+            ):
+                return resp
+            logger.info(
+                "booked_packet_slip_api POST method returned %s (content-type: %s) for CN %s",
+                resp.status_code, ct, cn_number,
+            )
+    except Exception as exc:
+        logger.warning("booked_packet_slip_api POST failed for CN %s: %s", cn_number, exc)
+
+    # Method 3: Try the format/json variant
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.post(
+                f"{LEOPARDS_API_BASE_URL}/api/booked_packet_slip_api/{cn_number}/format/json/",
+                data={"api_key": LEOPARDS_API_KEY, "api_password": LEOPARDS_API_PASSWORD},
+            )
+            ct = resp.headers.get("content-type", "")
+            if resp.status_code == 200 and (
+                ct.startswith("application/pdf") or resp.content[:5] == b"%PDF-"
+            ):
+                return resp
+            logger.info(
+                "booked_packet_slip_api format/json returned %s (content-type: %s) for CN %s",
+                resp.status_code, ct, cn_number,
+            )
+    except Exception as exc:
+        logger.warning("booked_packet_slip_api format/json failed for CN %s: %s", cn_number, exc)
+
+    return None
+
+
 async def book_packet_api(payload: dict) -> dict:
-    """Call Leopards Merchant API /api/bookPacket/format/json/ to book a packet."""
+    """Call Leopards Merchant API /api/bookPacket/format/json/ to book a packet.
+
+    The Leopards API requires:
+    - origin_city / destination_city as integer city IDs (or 'self' for origin)
+    - shipment fields can use 'self' to use merchant account defaults
+    """
+    destination_city = payload.get("destination_city", "")
+    destination_city_id = payload.get("destination_city_id")
+
+    if not destination_city_id and destination_city:
+        destination_city_id = await get_city_id(str(destination_city))
+
+    origin_val = payload.get("origin_city", "self")
+    if origin_val.lower() == "self" or not origin_val:
+        origin_val = "self"
+    else:
+        origin_id = await get_city_id(str(origin_val))
+        if origin_id:
+            origin_val = str(origin_id)
+
+    dest_val = str(destination_city_id) if destination_city_id else "self"
+
+    weight = str(payload.get("weight", payload.get("weight_grams", "500")))
+    pieces = str(payload.get("pieces", "1"))
+    cod_amount = str(payload.get("cod_amount", "0"))
+
     try:
         resp = await _post(
             "/api/bookPacket/format/json/",
-            booked_packet_weight=str(payload.get("weight", "500")),
-            booked_packet_no_piece=str(payload.get("pieces", "1")),
-            booked_packet_collect_amount=str(payload.get("cod_amount", "0")),
+            booked_packet_weight=weight,
+            booked_packet_no_piece=pieces,
+            booked_packet_collect_amount=cod_amount,
             booked_packet_order_id=str(payload.get("order_id", "")),
-            origin_city=str(payload.get("origin_city", "Islamabad")),
-            destination_city=str(payload.get("destination_city", "")),
-            shipment_name_eng=str(payload.get("shipper_name", "ELIGO LEATHER")),
-            shipment_email=str(payload.get("shipper_email", "info@eligoleather.com")),
-            shipment_phone=str(payload.get("shipper_phone", "03345399470")),
-            shipment_address=str(payload.get("shipper_address", "Office # 407, 4th floor, Gulberg Empire, Executive Block, Gulberg Greens, Islamabad")),
+            origin_city=origin_val,
+            destination_city=dest_val,
+            shipment_name_eng="self",
+            shipment_email="self",
+            shipment_phone="self",
+            shipment_address="self",
             consignment_name_eng=str(payload.get("consignee_name", "")),
+            consignment_email=str(payload.get("consignee_email", "")),
             consignment_phone=str(payload.get("consignee_phone", "")),
             consignment_address=str(payload.get("consignee_address", "")),
-            special_instructions=str(payload.get("special_instructions", "")),
+            special_instructions=str(payload.get("special_instructions", "N/A")),
         )
         return resp.json()
     except Exception as exc:

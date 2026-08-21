@@ -21,8 +21,9 @@ export default function CreateBlogPostPage() {
   // Form State
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
-  const [excerpt, setExcerpt] = useState("")
-  const [showExcerptField, setShowExcerptField] = useState(false)
+
+  // FAQs State — array of {question, answer}
+  const [faqs, setFaqs] = useState<{ question: string; answer: string }[]>([])
 
   // SEO Fields
   const [seoTitle, setSeoTitle] = useState("")
@@ -98,7 +99,8 @@ export default function CreateBlogPostPage() {
     const payload = {
       title: title.trim(),
       content: content.trim(),
-      excerpt: excerpt.trim() || title.trim(),
+      excerpt: "",
+      faqs: JSON.stringify(faqs),
       author: author.trim() || "Bilal Hussain Abbasi",
       blog_category: selectedBlogCategory,
       visibility: visibility,
@@ -202,30 +204,68 @@ export default function CreateBlogPostPage() {
             />
           </div>
 
-          {/* Card 3: Excerpt */}
+          {/* Card 3: FAQs */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <label className="font-bold text-gray-900 text-xs block">Excerpt</label>
+              <div>
+                <label className="font-bold text-gray-900 text-xs block">Frequently Asked Questions</label>
+                <span className="text-[10px] text-gray-500 font-medium">{faqs.length} FAQ{faqs.length !== 1 ? "s" : ""} added</span>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowExcerptField(!showExcerptField)}
-                className="p-1 text-gray-500 hover:text-black rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                title="Edit excerpt"
+                onClick={() => setFaqs([...faqs, { question: "", answer: "" }])}
+                className="px-3 py-1.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-[11px] rounded-xl transition-colors cursor-pointer flex items-center gap-1"
               >
-                <Pencil className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add FAQ</span>
               </button>
             </div>
 
-            {showExcerptField ? (
-              <textarea
-                value={excerpt}
-                onChange={(e) => setExcerpt(e.target.value)}
-                rows={3}
-                placeholder="Add a summary of the post to appear on your home page or blog."
-                className="w-full p-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden"
-              />
+            {faqs.length === 0 ? (
+              <p className="text-gray-400 font-medium text-[11px]">No FAQs added. Click "Add FAQ" to create one.</p>
             ) : (
-              <p className="text-gray-500 font-medium">Add a summary of the post to appear on your home page or blog.</p>
+              <div className="space-y-3">
+                {faqs.map((faq, idx) => (
+                  <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2 relative group">
+                    <button
+                      type="button"
+                      onClick={() => setFaqs(faqs.filter((_, i) => i !== idx))}
+                      className="absolute top-2 right-2 w-6 h-6 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 rounded-full text-xs font-bold flex items-center justify-center transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
+                      title="Remove FAQ"
+                    >
+                      ✕
+                    </button>
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-600 block mb-1">Question {idx + 1}</label>
+                      <input
+                        type="text"
+                        value={faq.question}
+                        onChange={(e) => {
+                          const next = [...faqs]
+                          next[idx] = { ...next[idx], question: e.target.value }
+                          setFaqs(next)
+                        }}
+                        placeholder="e.g., How do I care for my leather product?"
+                        className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-800/20 transition-all placeholder:text-gray-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-600 block mb-1">Answer</label>
+                      <textarea
+                        value={faq.answer}
+                        onChange={(e) => {
+                          const next = [...faqs]
+                          next[idx] = { ...next[idx], answer: e.target.value }
+                          setFaqs(next)
+                        }}
+                        rows={2}
+                        placeholder="Provide a detailed answer..."
+                        className="w-full p-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-800/20 transition-all placeholder:text-gray-400"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
@@ -286,7 +326,7 @@ export default function CreateBlogPostPage() {
                     "@type": "BlogPosting",
                     "@id": `https://eligoleather.com/blog/${slug}/#blogposting`,
                     "headline": title || "Blog Post Title",
-                    "description": seoDescription || excerpt || title || "Read our latest editorial guide from Eligo Leather.",
+                    "description": seoDescription || title || "Read our latest editorial guide from Eligo Leather.",
                     "image": imageUrls.length > 0 ? imageUrls : ["https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=800&q=80"],
                     "datePublished": new Date().toISOString(),
                     "dateModified": new Date().toISOString(),
@@ -329,24 +369,14 @@ export default function CreateBlogPostPage() {
                   },
                   {
                     "@type": "FAQPage",
-                    "mainEntity": [
-                      {
-                        "@type": "Question",
-                        "name": `What are the key insights in ${title || "this article"}?`,
-                        "acceptedAnswer": {
-                          "@type": "Answer",
-                          "text": "This editorial provides expert advice on leather craftsmanship, care techniques, and style guide tips."
-                        }
-                      },
-                      {
-                        "@type": "Question",
-                        "name": "Are Eligo Leather articles written by real artisans?",
-                        "acceptedAnswer": {
-                          "@type": "Answer",
-                          "text": "Yes! All guides are written and verified by experienced leather artisans and designers."
-                        }
+                    "mainEntity": faqs.filter(f => f.question.trim()).map(f => ({
+                      "@type": "Question",
+                      "name": f.question.trim(),
+                      "acceptedAnswer": {
+                        "@type": "Answer",
+                        "text": f.answer.trim() || "No answer provided."
                       }
-                    ]
+                    }))
                   }
                 ]
               }

@@ -8,15 +8,12 @@ import {
   ShoppingBagOpen,
   Tag,
   Users,
-  TrendUp,
   Percent,
   FileText,
   Globe,
-  ChartBar,
   InstagramLogo,
   Robot,
   Truck,
-  Package,
   Eye,
   Gear,
   CaretDown,
@@ -99,16 +96,12 @@ export function AdminSidebar() {
   const [productsOpen, setProductsOpen] = useState(false)
   const [customersOpen, setCustomersOpen] = useState(false)
   const [contentOpen, setContentOpen] = useState(false)
-  const [marketsOpen, setMarketsOpen] = useState(false)
-  const [analyticsOpen, setAnalyticsOpen] = useState(false)
   const [onlineStoreOpen, setOnlineStoreOpen] = useState(false)
 
   useEffect(() => {
     if (pathname.startsWith("/products")) setProductsOpen(true)
     if (pathname.startsWith("/customers")) setCustomersOpen(true)
     if (pathname.startsWith("/content")) setContentOpen(true)
-    if (pathname.startsWith("/markets")) setMarketsOpen(true)
-    if (pathname.startsWith("/analytics")) setAnalyticsOpen(true)
     if (pathname.startsWith("/online-store")) setOnlineStoreOpen(true)
   }, [pathname])
 
@@ -157,20 +150,6 @@ export function AdminSidebar() {
         { name: "Files", href: "/content/files" },
         { name: "Menus", href: "/content/menus" },
         { name: "Blog posts", href: "/content/blogs" },
-      ],
-    },
-    {
-      key: "markets",
-      open: marketsOpen,
-      toggle: () => setMarketsOpen(!marketsOpen),
-      icon: Globe,
-      label: "Markets",
-      baseHref: "/markets",
-      active: pathname.startsWith("/markets"),
-      items: [
-        { name: "Markets", href: "/markets" },
-        { name: "Catalogs", href: "/markets/catalogs" },
-        { name: "Rollouts", href: "/markets/rollouts" },
       ],
     },
   ]
@@ -280,56 +259,11 @@ export function AdminSidebar() {
           })}
 
           <NavItem
-            href="/growth"
-            icon={TrendUp}
-            label="Growth"
-            active={pathname.startsWith("/growth")}
-          />
-          <NavItem
             href="/discounts"
             icon={Percent}
             label="Discounts"
             active={pathname.startsWith("/discounts")}
           />
-
-          {/* Analytics Expandable */}
-          <div>
-            <button
-              type="button"
-              onClick={() => setAnalyticsOpen(!analyticsOpen)}
-              className={clsx(
-                "group w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all duration-200 cursor-pointer",
-                pathname.startsWith("/analytics")
-                  ? "bg-white text-gray-900 font-bold shadow-sm border border-gray-200/70"
-                  : "text-gray-700 font-semibold hover:bg-white/70 hover:translate-x-0.5 border border-transparent"
-              )}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <ChartBar className={clsx("w-4 h-4 shrink-0 transition-colors", pathname.startsWith("/analytics") ? "text-amber-800" : "text-gray-500 group-hover:text-amber-800")} />
-                <span className="truncate">Analytics</span>
-              </div>
-              <span className={clsx("transition-transform duration-200 shrink-0", analyticsOpen ? "rotate-180" : "")}>
-                {analyticsOpen ? (
-                  <CaretDown className="w-3.5 h-3.5 text-gray-500" />
-                ) : (
-                  <CaretRight className="w-3.5 h-3.5 text-gray-500" />
-                )}
-              </span>
-            </button>
-
-            <div
-              className={clsx(
-                "grid transition-all duration-200 ease-out overflow-hidden",
-                analyticsOpen ? "grid-rows-[1fr] opacity-100 mt-0.5" : "grid-rows-[0fr] opacity-0"
-              )}
-            >
-              <div className="min-h-0 pl-4 space-y-0.5">
-                <SubItem href="/analytics" label="Overview" active={pathname === "/analytics"} />
-                <SubItem href="/analytics/reports" label="Reports" active={pathname === "/analytics/reports"} />
-                <SubItem href="/analytics/live-view" label="Live View" active={pathname === "/analytics/live-view"} />
-              </div>
-            </div>
-          </div>
 
           {/* Online Store */}
           <div>
@@ -381,12 +315,6 @@ export function AdminSidebar() {
             label="Facebook & Instagram"
             active={pathname.includes("sales_channels")}
             badge="Pending"
-          />
-          <NavItem
-            href="/settings/apps"
-            icon={Package}
-            label="Apps"
-            active={pathname.startsWith("/settings/apps")}
           />
         </div>
       </div>

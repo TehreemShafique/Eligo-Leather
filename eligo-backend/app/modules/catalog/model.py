@@ -46,6 +46,13 @@ class WeightUnit(str, enum.Enum):
     oz = "oz"
 
 
+class CollectionType(str, enum.Enum):
+    wallets = "wallets"
+    belts = "belts"
+    cases = "cases"
+    keychains = "keychains"
+
+
 class CollectionRuleCondition(str, enum.Enum):
     tag = "tag"
     title = "title"
@@ -223,7 +230,10 @@ class Collection(Base):
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     conditions: Mapped[str | None] = mapped_column(Text, nullable=True)
     channels: Mapped[str | None] = mapped_column(Text, nullable=True)
-    theme_template: Mapped[str] = mapped_column(String, default="Default collection")
+    collection_type: Mapped[str] = mapped_column(
+        SAEnum(CollectionType, name="collection_type"),
+        default=CollectionType.wallets,
+    )
     seo_title: Mapped[str | None] = mapped_column(String(70), nullable=True)
     seo_description: Mapped[str | None] = mapped_column(String(160), nullable=True)
     meta_description: Mapped[str | None] = mapped_column(Text, nullable=True)

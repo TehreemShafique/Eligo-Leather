@@ -1,13 +1,11 @@
 "use client"
 
-import { useState, useEffect, use } from "react"
+import { useState, useEffect, use, useCallback } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import {
   ArrowLeft,
   CheckCircle,
   Clock,
-  Package,
   Truck,
   Printer,
   FileText,
@@ -18,350 +16,314 @@ import {
   CaretDown,
   X,
   PencilSimple,
-  Copy,
-  Archive,
-  ArrowRight,
-  Smiley,
-  At,
-  Hash,
-  Paperclip,
-  ShieldCheck,
   Tag,
-  ArrowsClockwise,
-  ArrowUpRight,
   WarningCircle,
-  SquaresFour,
-  Eye,
-  MagnifyingGlass,
-  Trash,
+  Plus,
+  Spinner,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api"
 
 type OrderDetailPageProps = {
   params: Promise<{ id: string }>
 }
 
+interface OrderItem {
+  id: number
+  product_name: string
+  variant_title: string | null
+  quantity: number
+  unit_price: number
+  total_price: number
+}
+
+interface AuditLog {
+  id: number
+  event_type: string
+  description: string
+  actor_name: string | null
+  created_at: string
+}
+
+interface OrderNote {
+  id: number
+  order_id: number
+  author_name: string
+  body: string
+  is_customer_visible: boolean
+  created_at: string
+  updated_at: string
+}
+
+interface OrderData {
+  id: number
+  order_number: string
+  customer_id: number | null
+  channel: string
+  currency: string
+  subtotal: number
+  shipping_cost: number
+  tax: number
+  total_price: number
+  paid_amount: number
+  payment_status: string
+  fulfillment_status: string
+  delivery_status: string
+  delivery_method: string
+  return_status: string
+  tracking_company: string | null
+  tracking_number: string | null
+  shipping_address: string | null
+  billing_address: string | null
+  customer_note: string | null
+  internal_note: string | null
+  tags: string | null
+  is_archived: boolean
+  created_at: string
+  updated_at: string
+  items: OrderItem[]
+  customer_name?: string | null
+  customer_phone?: string | null
+  customer_email?: string | null
+}
+
+const EVENT_ICONS: Record<string, string> = {
+  order_created: "\u{1F4E6}",
+  payment_updated: "\u{1F4B0}",
+  fulfillment_updated: "\u2705",
+  delivery_updated: "\u{1F69A}",
+  tracking_updated: "\u{1F4CD}",
+  email_sent: "\u2709\uFE0F",
+  note_added: "\u{1F4DD}",
+  tag_added: "\u{1F3F7}\uFE0F",
+  tag_removed: "\u{1F3F7}\uFE0F",
+  status_changed: "\u{1F504}",
+  courier_update: "\u{1F406}",
+  internal_comment: "\u{1F4AC}",
+  address_updated: "\u{1F4CD}",
+  order_archived: "\u{1F4C1}",
+  return_requested: "\u21A9\uFE0F",
+  return_approved: "\u2705",
+  return_received: "\u{1F4E6}",
+  restock_completed: "\u{1F3EA}",
+}
+
+function timeAgo(dateStr: string): string {
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diffSec = Math.floor((now - then) / 1000)
+  if (diffSec < 60) return "Just now"
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  const diffDay = Math.floor(diffHr / 24)
+  if (diffDay === 1) return "Yesterday"
+  if (diffDay < 7) return `${diffDay} days ago`
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+}
+
+function formatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+}
+
+function formatDateLong(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true,
+  })
+}
+
 export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const resolvedParams = use(params)
-  const id = resolvedParams?.id || "1339"
+  const id = resolvedParams?.id || ""
 
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const [loading, setLoading] = useState(true)
+  const [order, setOrder] = useState<OrderData | null>(null)
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
+  const [notes, setNotes] = useState<OrderNote[]>([])
 
-  // Interactive States
   const [moreActionsOpen, setMoreActionsOpen] = useState(false)
   const [packingSlipOpen, setPackingSlipOpen] = useState(false)
   const [editAddressOpen, setEditAddressOpen] = useState(false)
 
-  // Payment & Delivery Status States (Manual Toggle by Admin & Saved to DB)
-  const [paymentStatus, setPaymentStatus] = useState<"Payment pending" | "Paid">("Payment pending")
-  const [deliveryStatus, setDeliveryStatus] = useState<"Fulfilled" | "Delivered">("Fulfilled")
-
-  // Order Info State
-  const [orderNumber, setOrderNumber] = useState(`#${id}`)
-  const [orderDate, setOrderDate] = useState("7 August 2026 at 4:46 pm")
-  const [trackingId, setTrackingId] = useState("ID7540816875")
-  const [orderItems, setOrderItems] = useState<any[]>([
-    {
-      product_name: "GRACIOUS - Handmade Trifold Leather Wallet",
-      variant_title: "Black LW007",
-      quantity: 1,
-      unit_price: 2799.00,
-      total_price: 2799.00,
-    },
-  ])
-
-  // Customer & Shipping Address State
-  const [customerName, setCustomerName] = useState("Asjad Ali")
-  const [customerPhone, setCustomerPhone] = useState("+92 326 0890680")
-  const [customerEmail, setCustomerEmail] = useState("No email provided")
-  const [shippingAddress, setShippingAddress] = useState("House #302 street #14 gulbahar block bahria town Lahore")
-  const [city, setCity] = useState("Lahore")
-  const [country, setCountry] = useState("Pakistan")
-
-  // Timeline Comment State
+  const [editShippingAddress, setEditShippingAddress] = useState("")
   const [commentText, setCommentText] = useState("")
-  const [commentsList, setCommentsList] = useState<Array<{ id: number; author: string; text: string; date: string }>>([])
+  const [newTag, setNewTag] = useState("")
+  const [internalNote, setInternalNote] = useState("")
 
-  // Tags State
-  const [tags, setTags] = useState(["Dispatched", "leopards"])
-
-  // Fetch live order detail from backend API
-  useEffect(() => {
+  const fetchOrder = useCallback(async () => {
     if (!id) return
-    let isMounted = true
-
-    fetch(`http://localhost:8000/api/v1/orders/detail/${id}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (isMounted && data?.order) {
-          const o = data.order
-          setOrderNumber(o.order_number || `#${id}`)
-          setOrderDate(o.date || "7 August 2026 at 4:46 pm")
-          setPaymentStatus(o.payment_status === "paid" ? "Paid" : "Payment pending")
-          setDeliveryStatus(o.delivery_status === "delivered" ? "Delivered" : "Fulfilled")
-          setCustomerName(o.customer_name || "Asjad Ali")
-          setCustomerPhone(o.customer_phone || "+92 326 0890680")
-          setCustomerEmail(o.customer_email || "No email provided")
-          setShippingAddress(o.shipping_address || "House #302 street #14 gulbahar block bahria town Lahore")
-          setCity(o.city || "Lahore")
-          setTrackingId(o.tracking_number || "ID7540816875")
-          if (o.items && Array.isArray(o.items) && o.items.length > 0) {
-            setOrderItems(o.items)
-          }
-        }
-      })
-      .catch((err) => console.warn("Using order detail state:", err))
-
-    return () => {
-      isMounted = false
+    try {
+      const data = await apiFetch<OrderData>(`/api/v1/orders/${id}`)
+      setOrder(data)
+      setEditShippingAddress(data.shipping_address || "")
+      setInternalNote(data.internal_note || "")
+    } catch {
+      toast.error("Could not load order details")
+    } finally {
+      setLoading(false)
     }
   }, [id])
 
-  // Mark Paid Handler (Persists to PostgreSQL DB)
+  const fetchAuditLog = useCallback(async () => {
+    if (!id) return
+    try {
+      const data = await apiFetch<AuditLog[]>(`/api/v1/orders/${id}/audit-log`)
+      setAuditLogs(data)
+    } catch { /* silent */ }
+  }, [id])
+
+  const fetchNotes = useCallback(async () => {
+    if (!id) return
+    try {
+      const data = await apiFetch<OrderNote[]>(`/api/v1/orders/${id}/notes`)
+      setNotes(data)
+    } catch { /* silent */ }
+  }, [id])
+
+  useEffect(() => {
+    fetchOrder(); fetchAuditLog(); fetchNotes()
+  }, [fetchOrder, fetchAuditLog, fetchNotes])
+
+  useEffect(() => {
+    const interval = setInterval(() => { fetchOrder(); fetchAuditLog(); fetchNotes() }, 30000)
+    return () => clearInterval(interval)
+  }, [fetchOrder, fetchAuditLog, fetchNotes])
+
   const handleMarkPaid = async () => {
-    const nextStatus = paymentStatus === "Payment pending" ? "Paid" : "Payment pending"
-    setPaymentStatus(nextStatus)
+    if (!order) return
     try {
-      await fetch(`http://localhost:8000/api/v1/orders/mark-paid/${id}`, { method: "POST" })
-      toast.success(`Payment status marked as ${nextStatus} & updated in Database!`)
-    } catch (e) {
-      toast.success(`Payment status marked as ${nextStatus}!`)
-    }
+      await apiFetch(`/api/v1/orders/mark-paid/${id}`, { method: "POST" })
+      toast.success("Payment status marked as Paid!")
+      fetchOrder(); fetchAuditLog()
+    } catch { toast.error("Failed to update payment status") }
   }
 
-  // Mark Delivered Handler (Persists to PostgreSQL DB)
   const handleMarkDelivered = async () => {
-    const nextDeliv = deliveryStatus === "Fulfilled" ? "Delivered" : "Fulfilled"
-    setDeliveryStatus(nextDeliv)
+    if (!order) return
     try {
-      await fetch(`http://localhost:8000/api/v1/orders/mark-delivered/${id}`, { method: "POST" })
-      toast.success(`Fulfillment & delivery status updated to ${nextDeliv} in Database!`)
-    } catch (e) {
-      toast.success(`Fulfillment status updated to ${nextDeliv}!`)
-    }
+      await apiFetch(`/api/v1/orders/mark-delivered/${id}`, { method: "POST" })
+      toast.success("Order marked as delivered!")
+      fetchOrder(); fetchAuditLog()
+    } catch { toast.error("Failed to update delivery status") }
   }
 
-  const handlePostComment = (e: React.FormEvent) => {
+  const handleUpdateTags = async (newTags: string) => {
+    if (!order) return
+    try {
+      await apiFetch(`/api/v1/orders/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ tags: newTags }),
+      })
+      fetchOrder(); fetchAuditLog()
+    } catch { toast.error("Failed to update tags") }
+  }
+
+  const handleAddTag = () => {
+    if (!newTag.trim() || !order) return
+    const current = order.tags ? order.tags.split(",").map(t => t.trim()).filter(Boolean) : []
+    if (current.includes(newTag.trim())) { toast.info("Tag already exists"); setNewTag(""); return }
+    handleUpdateTags([...current, newTag.trim()].join(", "))
+    setNewTag("")
+  }
+
+  const handleRemoveTag = (tag: string) => {
+    if (!order) return
+    const current = order.tags ? order.tags.split(",").map(t => t.trim()).filter(Boolean) : []
+    handleUpdateTags(current.filter(t => t !== tag).join(", "))
+  }
+
+  const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!commentText.trim()) return
-
-    const newComment = {
-      id: Date.now(),
-      author: "Bilal Hussain Abbasi",
-      text: commentText,
-      date: "Just now",
-    }
-    setCommentsList([newComment, ...commentsList])
-    setCommentText("")
-    toast.success("Staff comment posted to timeline.")
+    try {
+      await apiFetch(`/api/v1/orders/${id}/notes`, {
+        method: "POST",
+        body: JSON.stringify({ body: commentText, is_customer_visible: false }),
+      })
+      setCommentText(""); fetchNotes(); fetchAuditLog()
+      toast.success("Comment added to timeline")
+    } catch { toast.error("Failed to post comment") }
   }
 
-  const handleSaveEditAddress = (e: React.FormEvent) => {
-    e.preventDefault()
-    setEditAddressOpen(false)
-    toast.success("Customer shipping address updated!")
+  const handleSaveNote = async () => {
+    if (!order) return
+    try {
+      await apiFetch(`/api/v1/orders/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ internal_note: internalNote }),
+      })
+      toast.success("Note saved!"); fetchOrder()
+    } catch { toast.error("Failed to save note") }
   }
 
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter((t) => t !== tagToRemove))
+  const handleSaveAddress = async () => {
+    if (!order) return
+    try {
+      await apiFetch(`/api/v1/orders/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ shipping_address: editShippingAddress }),
+      })
+      setEditAddressOpen(false); toast.success("Shipping address updated!"); fetchOrder(); fetchAuditLog()
+    } catch { toast.error("Failed to update address") }
   }
 
-  if (!mounted) return null
+  if (loading) return <div className="flex items-center justify-center py-32"><Spinner className="w-8 h-8 text-amber-800 animate-spin" /></div>
+
+  if (!order) return (
+    <div className="flex flex-col items-center justify-center py-32 gap-4">
+      <WarningCircle className="w-10 h-10 text-gray-400" />
+      <span className="text-sm font-semibold text-gray-500">Order not found</span>
+      <Link href="/orders" className="text-xs font-bold text-amber-800 hover:underline">Back to orders</Link>
+    </div>
+  )
+
+  const tags = order.tags ? order.tags.split(",").map(t => t.trim()).filter(Boolean) : []
+  const isPaid = order.payment_status === "paid"
+  const isFulfilled = order.fulfillment_status === "fulfilled"
 
   return (
     <div className="space-y-5 font-sans max-w-[1280px] mx-auto pb-10 animate-fade-in">
-      {/* Top Header Breadcrumbs & Action Buttons */}
+      {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Link
-            href="/orders"
-            className="p-2 bg-white rounded-xl border border-gray-200 text-gray-600 hover:text-black transition-colors"
-          >
+          <Link href="/orders" className="p-2 bg-white rounded-xl border border-gray-200 text-gray-600 hover:text-black transition-colors">
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <span>{orderNumber}</span>
-              </h1>
-
-              {/* Payment Status Pill */}
-              <span
-                className={`px-3 py-1 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer border transition-all duration-200 hover:shadow-md active:scale-95 ${
-                  paymentStatus === "Payment pending"
-                    ? "bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200"
-                    : "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
-                }`}
-                onClick={handleMarkPaid}
-                title="Click to manually toggle Payment status"
-              >
-                <Clock className="w-3.5 h-3.5" />
-                <span>{paymentStatus}</span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl font-bold text-gray-900">{order.order_number}</h1>
+              <span onClick={handleMarkPaid} className={`px-3 py-1 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer border transition-all duration-200 hover:shadow-md active:scale-95 ${isPaid ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200" : "bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200"}`} title="Click to toggle payment status">
+                {isPaid ? <CheckCircle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                <span>{isPaid ? "Paid" : "Payment pending"}</span>
               </span>
-
-              {/* Fulfillment Status Pill */}
-              <span className="px-3 py-1 bg-gray-200 text-gray-800 text-xs font-bold rounded-full flex items-center gap-1.5 border border-gray-300">
-                <CheckCircle className="w-3.5 h-3.5 text-gray-600" />
-                <span>{deliveryStatus}</span>
+              <span className={`px-3 py-1 text-xs font-bold rounded-full flex items-center gap-1.5 border ${isFulfilled ? "bg-blue-100 text-blue-800 border-blue-200" : "bg-gray-100 text-gray-700 border-gray-200"}`}>
+                {isFulfilled ? <Truck className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                <span>{isFulfilled ? "Fulfilled" : "Unfulfilled"}</span>
               </span>
             </div>
-
             <p className="text-xs text-gray-500 mt-1">
-              {orderDate} from <strong className="text-gray-800">Online Store</strong>
+              {formatDateLong(order.created_at)} from <strong className="text-gray-800">{order.channel}</strong>
             </p>
           </div>
         </div>
-
-        {/* Action Buttons Top Right */}
         <div className="flex items-center gap-2 relative">
-          <button
-            onClick={() => toast.info("Items restocked into warehouse inventory.")}
-            className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-800 text-xs font-bold rounded-xl transition-colors"
-          >
-            Restock
-          </button>
-
-          <button
-            onClick={() => toast.info("Return request initiated.")}
-            className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-800 text-xs font-bold rounded-xl transition-colors"
-          >
-            Return
-          </button>
-
-          {/* More Actions Dropdown */}
+          {!isPaid && <button onClick={handleMarkPaid} className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Paid</button>}
+          {!isFulfilled && <button onClick={handleMarkDelivered} className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Delivered</button>}
           <div className="relative">
-            <button
-              onClick={() => setMoreActionsOpen(!moreActionsOpen)}
-              className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-800 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5"
-            >
+            <button onClick={() => setMoreActionsOpen(!moreActionsOpen)} className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-800 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 cursor-pointer">
               <span>More actions</span>
               <CaretDown className={`w-3.5 h-3.5 transition-transform ${moreActionsOpen ? "rotate-180" : ""}`} />
             </button>
-
             {moreActionsOpen && (
               <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-2xl shadow-2xl py-2 z-40 text-xs font-medium space-y-1">
-                {/* Search Bar (Picture 2) */}
-                <div className="px-3 pb-2 border-b border-gray-100">
-                  <div className="relative">
-                    <MagnifyingGlass className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
-                    <input
-                      type="text"
-                      placeholder="Search actions"
-                      className="w-full h-8 pl-8 pr-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none text-gray-800"
-                    />
-                  </div>
-                </div>
-
-                {/* Primary Actions List */}
-                <button
-                  onClick={() => {
-                    setMoreActionsOpen(false)
-                    setEditAddressOpen(true)
-                  }}
-                  className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"
-                >
-                  <PencilSimple className="w-4 h-4 text-gray-600" />
-                  <span>Edit</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setMoreActionsOpen(false)
-                    toast.success("Order duplicated as draft #1340.")
-                  }}
-                  className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"
-                >
-                  <Copy className="w-4 h-4 text-gray-600" />
-                  <span>Duplicate</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setMoreActionsOpen(false)
-                    toast.info("Order unarchived.")
-                  }}
-                  className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"
-                >
-                  <Archive className="w-4 h-4 text-gray-600" />
-                  <span>Unarchive</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setMoreActionsOpen(false)
-                    toast.info("Opening order status page...")
-                  }}
-                  className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"
-                >
-                  <Eye className="w-4 h-4 text-gray-600" />
-                  <span>View order status page</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setMoreActionsOpen(false)
-                    toast.error("Order deleted.")
-                  }}
-                  className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-red-600 font-semibold"
-                >
-                  <Trash className="w-4 h-4 text-red-500" />
-                  <span>Delete order</span>
-                </button>
-
-                {/* Print Section (Picture 2) */}
+                <button onClick={() => { setMoreActionsOpen(false); setEditAddressOpen(true) }} className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"><PencilSimple className="w-4 h-4 text-gray-600" /><span>Edit shipping address</span></button>
+                <button onClick={() => { setMoreActionsOpen(false); window.print() }} className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"><Printer className="w-4 h-4 text-gray-600" /><span>Print order page</span></button>
+                <button onClick={() => { setMoreActionsOpen(false); setPackingSlipOpen(true) }} className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"><FileText className="w-4 h-4 text-gray-600" /><span>Print packing slip</span></button>
                 <div className="pt-1 border-t border-gray-100">
-                  <div className="px-4 py-1 text-[11px] font-bold text-gray-400">Print</div>
-
-                  <button
-                    onClick={() => {
-                      setMoreActionsOpen(false)
-                      window.print()
-                    }}
-                    className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"
-                  >
-                    <Printer className="w-4 h-4 text-gray-600" />
-                    <span>Print order page</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setMoreActionsOpen(false)
-                      setPackingSlipOpen(true)
-                    }}
-                    className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"
-                  >
-                    <FileText className="w-4 h-4 text-gray-600" />
-                    <span>Print packing slips</span>
-                  </button>
-                </div>
-
-                {/* Apps Section (Picture 3) */}
-                <div className="pt-1 border-t border-gray-100">
-                  <div className="px-4 py-1 text-[11px] font-bold text-gray-400">Apps</div>
-
-                  <Link
-                    href={`/settings/apps/leopards-courier?order_id=${encodeURIComponent(id)}`}
-                    onClick={() => setMoreActionsOpen(false)}
-                    className="w-full text-left px-4 py-2 hover:bg-amber-50 flex items-center gap-2.5 font-bold text-gray-900"
-                  >
-                    <div className="w-5 h-5 rounded-md bg-amber-400 flex items-center justify-center text-[10px] shrink-0 font-bold">
-                      🐆
-                    </div>
-                    <span>Manual Book From LCS</span>
-                  </Link>
-
-                  <Link
-                    href={`/settings/apps/leopards-courier?order_id=${encodeURIComponent(id)}&auto=true`}
-                    onClick={() => setMoreActionsOpen(false)}
-                    className="w-full text-left px-4 py-2 hover:bg-amber-50 flex items-center gap-2.5 font-bold text-gray-900"
-                  >
-                    <div className="w-5 h-5 rounded-md bg-amber-400 flex items-center justify-center text-[10px] shrink-0 font-bold">
-                      🐆
-                    </div>
-                    <span>Auto Book From LCS</span>
+                  <div className="px-4 py-1 text-[11px] font-bold text-gray-400">Book Shipment</div>
+                  <Link href={`/settings/apps/leopards-courier?order_id=${encodeURIComponent(id)}`} onClick={() => setMoreActionsOpen(false)} className="w-full text-left px-4 py-2 hover:bg-amber-50 flex items-center gap-2.5 font-bold text-gray-900">
+                    <span className="text-amber-600">{"\u{1F406}"}</span><span>Book via Leopard Courier</span>
                   </Link>
                 </div>
               </div>
@@ -370,535 +332,179 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
         </div>
       </div>
 
-      {/* Main Content Layout: Left Cards (8 cols), Right Sidebar (4 cols) */}
+      {/* Main Content Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left Main Column */}
         <div className="lg:col-span-8 space-y-6">
-          {/* Fulfillment Card (#1339-F1) */}
-          <div className="eligo-card p-6 space-y-4 hover:border-[#d4c9b4]">
+          {/* Fulfillment Card */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2 text-xs font-semibold text-gray-700">
-                <span className="px-2.5 py-0.5 bg-gray-100 text-gray-800 rounded-full font-bold flex items-center gap-1 border border-gray-200">
-                  <Package className="w-3.5 h-3.5 text-gray-600" />
-                  <span>Fulfilled</span>
-                </span>
-                <span className="text-gray-500 truncate max-w-xs">
-                  Off # 407, 4th floor, Gulberg Empire, Ex...
-                </span>
-              </div>
-              <span className="font-mono text-xs font-bold text-gray-400">#1339-F1</span>
+              <h3 className="text-sm font-bold text-gray-900">Fulfillment</h3>
+              {isFulfilled && <span className="eligo-badge bg-blue-100 text-blue-800 border-blue-200"><Truck className="w-3 h-3" />Fulfilled</span>}
             </div>
-
-            <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200 space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600 font-medium">8 August 2026</span>
-                <div className="flex items-center gap-2 text-amber-900 font-bold">
-                  <Truck className="w-4 h-4 text-amber-800" />
-                  <span>Leopards tracking: <span className="underline font-mono cursor-pointer">{trackingId}</span></span>
-                </div>
-              </div>
-            </div>
-
-            {/* Product Item Row */}
-            <div className="p-4 bg-white rounded-xl border border-gray-200 flex items-center justify-between gap-4 text-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-14 h-14 bg-gray-100 rounded-xl relative overflow-hidden shrink-0 border border-gray-200">
-                  <Image
-                    src="https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=200"
-                    alt="GRACIOUS - Handmade Trifold Leather Wallet"
-                    fill
-                    unoptimized
-                    className="object-cover"
-                  />
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-900">GRACIOUS - Handmade Trifold Leather Wallet</h3>
-                  <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
-                    <span className="px-1.5 py-0.5 bg-gray-100 rounded font-medium text-gray-700">Black</span>
-                    <span className="font-mono text-gray-400">LW007</span>
+            <div className="space-y-3">
+              {order.items.map((item) => (
+                <div key={item.id} className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500"><span className="text-sm">📦</span></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold text-gray-900 truncate">{item.product_name}</div>
+                    <div className="text-[11px] text-gray-500">{item.variant_title || "Default"} x {item.quantity}</div>
                   </div>
+                  <div className="text-xs font-bold text-gray-900">Rs. {Number(item.total_price).toLocaleString()}</div>
                 </div>
-              </div>
-
-              <div className="text-right">
-                <div className="font-semibold text-gray-500">Rs 2,799.00 &times; 1</div>
-                <div className="font-bold text-gray-900 text-sm">Rs 2,799.00</div>
-              </div>
+              ))}
             </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={handleMarkDelivered}
-                className="px-5 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-2xs"
-              >
-                {deliveryStatus === "Fulfilled" ? "Mark as delivered" : "Mark as fulfilled"}
-              </button>
-            </div>
+            {order.tracking_number && (
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+                <span className="text-[11px] text-gray-500 font-semibold">Tracking</span>
+                <span className="text-xs font-bold font-mono text-emerald-800">{order.tracking_number}</span>
+              </div>
+            )}
           </div>
 
-          {/* Payment Pending Card */}
-          <div className="eligo-card p-6 space-y-4 hover:border-[#d4c9b4]">
+          {/* Payment Card */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-3">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-amber-100 text-amber-900 text-xs font-bold rounded-full border border-amber-300 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>{paymentStatus}</span>
-                </span>
-              </div>
-              <button
-                onClick={handleMarkPaid}
-                className="text-xs font-bold text-amber-800 hover:underline"
-              >
-                {paymentStatus === "Payment pending" ? "Mark as paid" : "Mark as pending"}
-              </button>
+              <h3 className="text-sm font-bold text-gray-900">Payment</h3>
+              <span className={`eligo-badge ${isPaid ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-amber-100 text-amber-900 border-amber-300"}`}>
+                {isPaid ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                {isPaid ? "Paid" : "Pending"}
+              </span>
             </div>
-
-            <div className="space-y-2.5 text-xs text-gray-700">
-              <div className="flex justify-between py-1 border-b border-gray-100">
-                <span>Subtotal</span>
-                <span>1 item</span>
-                <span className="font-bold text-gray-900">Rs2,799.00</span>
-              </div>
-
-              <div className="flex justify-between py-1 border-b border-gray-100">
-                <span>Shipping</span>
-                <span className="text-gray-500 font-normal">free (0.0 kg: Items 0.0 kg, Package 0.0 kg)</span>
-                <span className="font-bold text-gray-900">Rs0.00</span>
-              </div>
-
-              <div className="flex justify-between py-1 font-bold text-gray-900 text-sm">
-                <span>Total</span>
-                <span>Rs2,799.00</span>
-              </div>
-
-              <div className="flex justify-between py-1 border-t border-gray-100 pt-2 text-xs">
-                <span>Paid</span>
-                <span className="font-semibold text-gray-600">{paymentStatus === "Paid" ? "Rs2,799.00" : "Rs0.00"}</span>
-              </div>
-
-              <div className="flex justify-between py-1 font-bold text-amber-900 text-xs">
-                <span>Balance</span>
-                <span>{paymentStatus === "Paid" ? "Rs0.00" : "Rs2,799.00"}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => toast.info("Invoice email sent to customer!")}
-                className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 font-bold rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
-              >
-                Send invoice
-              </button>
-
-              <button
-                type="button"
-                onClick={handleMarkPaid}
-                className="px-5 py-2 bg-gray-900 hover:bg-black text-white font-bold rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
-              >
-                {paymentStatus === "Paid" ? "Mark as pending" : "Mark as paid"}
-              </button>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="font-bold text-gray-900">Rs. {Number(order.subtotal).toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Shipping</span><span className="font-bold text-gray-900">Rs. {Number(order.shipping_cost).toLocaleString()}</span></div>
+              {Number(order.tax) > 0 && <div className="flex justify-between"><span className="text-gray-500">Tax</span><span className="font-bold text-gray-900">Rs. {Number(order.tax).toLocaleString()}</span></div>}
+              <div className="flex justify-between pt-2 border-t border-gray-100"><span className="font-bold text-gray-900">Total</span><span className="font-bold text-gray-900">Rs. {Number(order.total_price).toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Paid by customer</span><span className="font-bold text-emerald-800">Rs. {Number(order.paid_amount).toLocaleString()}</span></div>
+              {Number(order.total_price) - Number(order.paid_amount) > 0 && <div className="flex justify-between"><span className="text-gray-500">Balance due</span><span className="font-bold text-amber-800">Rs. {(Number(order.total_price) - Number(order.paid_amount)).toLocaleString()}</span></div>}
             </div>
           </div>
 
-          {/* Blocks Section (Image 2) */}
-          <div className="eligo-card p-5 space-y-3 hover:border-[#d4c9b4]">
-            <div className="flex items-center justify-between font-bold text-gray-900 text-xs">
-              <div className="flex items-center gap-2">
-                <span>Blocks</span>
-              </div>
-            </div>
-            <div className="p-3 bg-gray-50/50 rounded-xl border border-gray-200 text-center">
-              <button
-                type="button"
-                onClick={() => toast.info("Custom block added.")}
-                className="px-4 py-1.5 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 font-bold rounded-lg text-xs transition-colors cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-              >
-                <span className="font-bold text-xs">+ Block</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Timeline Section (Matching screenshot 2 image_9b9736.png) */}
-          <div className="eligo-card p-6 space-y-6 hover:border-[#d4c9b4]">
-            <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">
-              Timeline
-            </h2>
-
-            {/* Comment Form */}
-            <form onSubmit={handlePostComment} className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-sky-400 text-sky-950 font-bold text-xs flex items-center justify-center shrink-0">
-                  BH
-                </div>
-                <textarea
-                  rows={2}
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  placeholder="Leave a comment..."
-                  className="w-full p-2.5 rounded-xl bg-white border border-gray-300 text-xs text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-amber-800/40"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-gray-200 text-gray-400">
-                <div className="flex items-center gap-3">
-                  <Smiley className="w-4 h-4 hover:text-black cursor-pointer" />
-                  <At className="w-4 h-4 hover:text-black cursor-pointer" />
-                  <Hash className="w-4 h-4 hover:text-black cursor-pointer" />
-                  <Paperclip className="w-4 h-4 hover:text-black cursor-pointer" />
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-gray-500 font-medium">Only you and other staff can see comments</span>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-                  >
-                    Post
-                  </button>
-                </div>
-              </div>
+          {/* Timeline */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-4">
+            <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-3">Timeline</h3>
+            <form onSubmit={handlePostComment} className="flex items-start gap-2">
+              <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Add a comment to the timeline..." className="flex-1 h-9 px-3 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/20 focus:border-amber-800" />
+              <button type="submit" disabled={!commentText.trim()} className="px-3 h-9 bg-amber-800 hover:bg-amber-900 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shrink-0">Post</button>
             </form>
-
-            {/* Custom Comments List */}
-            {commentsList.map((c) => (
-              <div key={c.id} className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs space-y-1">
-                <div className="flex justify-between font-bold text-amber-900">
-                  <span>{c.author}</span>
-                  <span className="text-[10px] text-gray-400">{c.date}</span>
-                </div>
-                <p className="text-gray-800">{c.text}</p>
-              </div>
-            ))}
-
-            {/* Audit History Timeline */}
-            <div className="space-y-6 pt-2 font-sans text-xs">
-              <div>
-                <span className="font-bold text-gray-500 text-[11px] block mb-3">8 August</span>
-                <div className="space-y-4 pl-4 border-l-2 border-gray-200">
-                  <div className="relative flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-md bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center">
-                        17
-                      </div>
-                      <span className="font-semibold text-gray-800">17TRACK updated tracking info for 1 item.</span>
+            <div className="space-y-0">
+              {auditLogs.length === 0 ? <p className="text-xs text-gray-400 text-center py-4">No timeline events yet</p> : auditLogs.map((log, idx) => (
+                <div key={log.id} className="flex gap-3 relative">
+                  <div className="flex flex-col items-center">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 ${idx === 0 ? "bg-amber-100 ring-2 ring-amber-300" : "bg-gray-100"}`}>
+                      {idx === 0 ? <CheckCircle className="w-4 h-4 text-amber-800" /> : <span className="text-xs">{EVENT_ICONS[log.event_type] || "\u{1F4CC}"}</span>}
                     </div>
-                    <span className="text-gray-400 text-[11px]">1:17 pm</span>
+                    {idx < auditLogs.length - 1 && <div className="w-px flex-1 bg-gray-200 my-1" />}
                   </div>
-
-                  <div className="relative flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-md bg-amber-400 text-amber-950 font-bold text-[10px] flex items-center justify-center">
-                        🐆
-                      </div>
-                      <span className="font-semibold text-gray-800">
-                        Leopards Courier marked 1 item as fulfilled from Off # 407, 4th floor, Gulberg Empire, Executive Block, Gulberg Greens, Islamabad.
-                      </span>
+                  <div className="pb-4 flex-1 min-w-0">
+                    <p className="text-xs text-gray-800 leading-relaxed">{log.description}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] text-gray-400">{timeAgo(log.created_at)}</span>
+                      <span className="text-[10px] text-gray-300">{"\u00B7"}</span>
+                      <span className="text-[10px] text-gray-400">{formatTime(log.created_at)}</span>
+                      {log.actor_name && <><span className="text-[10px] text-gray-300">{"\u00B7"}</span><span className="text-[10px] text-gray-500 font-semibold">{log.actor_name}</span></>}
                     </div>
-                    <span className="text-gray-400 text-[11px]">1:17 pm</span>
                   </div>
                 </div>
-              </div>
-
-              <div>
-                <span className="font-bold text-gray-500 text-[11px] block mb-3">7 August</span>
-                <div className="space-y-4 pl-4 border-l-2 border-gray-200">
-                  <div className="relative flex justify-between items-start">
-                    <span className="font-semibold text-gray-800">
-                      A Rs2,799.00 PKR payment is pending on Cash on Delivery (COD).
-                    </span>
-                    <span className="text-gray-400 text-[11px]">4:46 pm</span>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Right Sidebar Column */}
-        <div className="lg:col-span-4 space-y-6 text-xs">
-          {/* Notes Card */}
-          <div className="eligo-card p-6 space-y-3 hover:border-[#d4c9b4]">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <h3 className="font-bold text-gray-900">Notes</h3>
-              <PencilSimple className="w-4 h-4 text-gray-400 cursor-pointer hover:text-black" />
-            </div>
-            <p className="text-gray-500 italic">No notes from customer</p>
-          </div>
-
+        {/* Right Sidebar */}
+        <div className="lg:col-span-4 space-y-5">
           {/* Customer Card */}
-          <div className="eligo-card p-6 space-y-4 hover:border-[#d4c9b4]">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <h3 className="font-bold text-gray-900 text-sm">Customer</h3>
-              <span className="text-gray-400 cursor-pointer">•••</span>
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-3">
+            <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2">Customer</h3>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2.5"><User className="w-4 h-4 text-gray-400" /><span className="text-xs font-bold text-gray-900">{order.customer_name || "Guest"}</span></div>
+              {order.customer_phone && <div className="flex items-center gap-2.5"><Phone className="w-4 h-4 text-gray-400" /><span className="text-xs text-gray-700">{order.customer_phone}</span></div>}
+              {order.customer_email && <div className="flex items-center gap-2.5"><EnvelopeSimple className="w-4 h-4 text-gray-400" /><span className="text-xs text-gray-700">{order.customer_email}</span></div>}
             </div>
-
-            <div className="space-y-3">
-              <div>
-                <span className="font-bold text-amber-800 hover:underline text-sm block cursor-pointer">{customerName}</span>
-                <span className="text-[11px] text-gray-500">1 order</span>
-              </div>
-
-              <div className="space-y-1 pt-2 border-t border-gray-100">
-                <span className="font-bold text-gray-900 block">Contact information</span>
-                <p className="text-gray-500">{customerEmail}</p>
-                <p className="font-bold text-gray-900">{customerPhone}</p>
-              </div>
-
-              <div className="space-y-1.5 pt-2 border-t border-gray-100">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-gray-900">Shipping address</span>
-                  <button onClick={() => setEditAddressOpen(true)} className="text-amber-800 font-bold hover:underline">Edit</button>
-                </div>
-
-                <div className="p-2.5 bg-amber-50/90 text-amber-900 rounded-xl border border-amber-200/80 font-bold text-[11px] flex items-center gap-2">
-                  <WarningCircle className="w-4 h-4 text-amber-800 shrink-0" />
-                  <span>Review address issues</span>
-                </div>
-
-                <p className="font-bold text-gray-900">{customerName}</p>
-                <p className="text-gray-700 leading-relaxed">{shippingAddress}</p>
-                <p className="text-gray-700">{city}</p>
-                <p className="text-gray-700">{country}</p>
-                <p className="font-bold text-gray-900">{customerPhone}</p>
-                <a href={`https://maps.google.com/?q=${encodeURIComponent(shippingAddress)}`} target="_blank" rel="noreferrer" className="text-blue-600 font-medium hover:underline block pt-1">
-                  View map
-                </a>
-              </div>
-
-              <div className="space-y-1 pt-2 border-t border-gray-100">
-                <span className="font-bold text-gray-900 block">Billing address</span>
-                <p className="text-gray-500">Same as shipping address</p>
-              </div>
-            </div>
+            {order.shipping_address && <div className="pt-2 border-t border-gray-100"><div className="flex items-start gap-2.5"><MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" /><span className="text-xs text-gray-700 leading-relaxed">{order.shipping_address}</span></div></div>}
           </div>
 
-          {/* Conversion Summary Card */}
-          <div className="eligo-card p-6 space-y-3 hover:border-[#d4c9b4]">
-            <h3 className="font-bold text-gray-900 border-b border-gray-100 pb-2">Conversion summary</h3>
-            <div className="space-y-2 text-gray-700">
-              <div className="flex items-center gap-2">
-                <span>🌱</span>
-                <span>This is their 1st order</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>👁️</span>
-                <span>1st session from Google</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>📊</span>
-                <span>1 session over 1 day</span>
-              </div>
-              <button onClick={() => toast.info("Direct Google search acquisition conversion.")} className="text-amber-800 font-semibold hover:underline pt-1 block">
-                View conversion details
-              </button>
-            </div>
-          </div>
-
-          {/* Order Risk Card */}
-          <div className="eligo-card p-6 space-y-2 hover:border-[#d4c9b4]">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <h3 className="font-bold text-gray-900">Order risk</h3>
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            </div>
-            <p className="text-gray-500 italic">Analysis not available</p>
+          {/* Note Card */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-3">
+            <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2">Note</h3>
+            <textarea rows={3} value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="Add a private note about this order..." className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/20 focus:border-amber-800 resize-none" />
+            <button onClick={handleSaveNote} className="px-3 py-1.5 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Save Note</button>
+            {notes.length > 0 && <div className="pt-2 border-t border-gray-100 space-y-2">
+              {notes.map(n => (
+                <div key={n.id} className={`p-2 rounded-lg border ${n.is_customer_visible ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200"}`}>
+                  <p className="text-xs text-gray-700">{n.body}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-gray-400">{timeAgo(n.created_at)}</span>
+                    {n.author_name && <span className="text-[10px] text-gray-500 font-semibold">{"\u00B7"} {n.author_name}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>}
           </div>
 
           {/* Tags Card */}
-          <div className="eligo-card p-6 space-y-3 hover:border-[#d4c9b4]">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <h3 className="font-bold text-gray-900">Tags</h3>
-              <PencilSimple className="w-4 h-4 text-gray-400 cursor-pointer" />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <span key={tag} className="px-2.5 py-1 bg-gray-100 text-gray-800 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-gray-200">
-                  <span>{tag}</span>
-                  <button onClick={() => handleRemoveTag(tag)} className="text-gray-400 hover:text-black font-bold">×</button>
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-3">
+            <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2">Tags</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map(tag => (
+                <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-200 rounded-lg text-[11px] font-bold">
+                  <Tag className="w-3 h-3" />{tag}
+                  <button onClick={() => handleRemoveTag(tag)} className="ml-0.5 text-amber-600 hover:text-red-600 cursor-pointer"><X className="w-3 h-3" /></button>
                 </span>
               ))}
+            </div>
+            <div className="flex gap-1.5">
+              <input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())} placeholder="Add tag..." className="flex-1 h-8 px-3 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/20 focus:border-amber-800" />
+              <button onClick={handleAddTag} disabled={!newTag.trim()} className="px-2 h-8 bg-amber-800 hover:bg-amber-900 disabled:opacity-50 text-white rounded-xl cursor-pointer"><Plus className="w-4 h-4" /></button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Official ELIGO LEATHER Packing Slip Modal */}
-      {packingSlipOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-200 p-8 space-y-6 text-xs font-sans max-h-[95vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-4">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Packing Slip Preview</span>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => window.print()}
-                  className="px-4 py-1.5 bg-amber-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Print</span>
-                </button>
-                <button onClick={() => setPackingSlipOpen(false)} className="p-1 text-gray-400 hover:text-black">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+      {/* Edit Address Modal */}
+      {editAddressOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 p-6 space-y-4 text-xs font-sans">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-base font-bold text-gray-900">Edit Shipping Address</h3>
+              <button onClick={() => setEditAddressOpen(false)} className="p-1 text-gray-400 hover:text-black cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
-
-            {/* Official Slip Content Container */}
-            <div className="p-8 bg-white border border-gray-300 rounded-xl space-y-8 text-black font-sans shadow-xs">
-              <div className="flex justify-between items-start border-b border-gray-900 pb-4">
-                <h1 className="text-3xl font-black tracking-wider text-black">ELIGOLEATHER</h1>
-                <div className="text-right text-xs font-medium text-gray-900 space-y-0.5">
-                  <div className="font-bold text-sm">Order #1339</div>
-                  <div>7 August 2026</div>
-                </div>
-              </div>
-
-              {/* Addresses Grid */}
-              <div className="grid grid-cols-2 gap-8 text-xs leading-relaxed">
-                <div>
-                  <h3 className="font-bold uppercase tracking-wider text-gray-900 mb-1 text-[11px]">SHIP TO</h3>
-                  <p className="font-bold">{customerName}</p>
-                  <p>{shippingAddress}</p>
-                  <p>{city}</p>
-                  <p>{city}</p>
-                  <p>{country}</p>
-                  <p className="font-bold mt-1">{customerPhone}</p>
-                </div>
-
-                <div>
-                  <h3 className="font-bold uppercase tracking-wider text-gray-900 mb-1 text-[11px]">BILL TO</h3>
-                  <p className="font-bold">{customerName}</p>
-                  <p>{shippingAddress}</p>
-                  <p>{city}</p>
-                  <p>{city}</p>
-                  <p>{country}</p>
-                </div>
-              </div>
-
-              {/* Items Table */}
-              <div className="border-t border-b border-gray-900 py-4 space-y-4">
-                <div className="flex justify-between font-bold uppercase text-[11px] text-gray-900">
-                  <span>ITEMS</span>
-                  <span>QUANTITY</span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs pt-2">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gray-100 rounded border border-gray-300 relative overflow-hidden shrink-0">
-                      <Image
-                        src="https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=200"
-                        alt="GRACIOUS - Handmade Trifold Leather Wallet"
-                        fill
-                        unoptimized
-                        className="object-cover"
-                      />
-                    </div>
-                    <div>
-                      <p className="font-bold text-gray-900">GRACIOUS - Handmade Trifold Leather Wallet</p>
-                      <p className="text-gray-600">Black</p>
-                      <p className="text-gray-500 font-mono text-[11px]">LW007</p>
-                    </div>
-                  </div>
-
-                  <span className="font-bold text-gray-900">1 of 1</span>
-                </div>
-              </div>
-
-              {/* Slip Footer */}
-              <div className="text-center text-xs space-y-2 pt-4 text-gray-800">
-                <p className="font-bold text-sm">Thank you for shopping with us!</p>
-                <div className="text-[11px] text-gray-600 space-y-0.5">
-                  <p className="font-bold text-gray-900">Eligo Leather</p>
-                  <p>Off # 407, 4th floor, Gulberg Empire, Executive Block, Gulberg Greens, Islamabad, Islamabad 04403,</p>
-                  <p>Pakistan</p>
-                  <p>eligoleather9@gmail.com</p>
-                  <p className="font-bold text-gray-900">eligoleather.com</p>
-                </div>
-              </div>
+            <textarea rows={4} value={editShippingAddress} onChange={(e) => setEditShippingAddress(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/20 focus:border-amber-800 resize-none" />
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              <button onClick={() => setEditAddressOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-pointer">Cancel</button>
+              <button onClick={handleSaveAddress} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900 cursor-pointer">Save</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Customer Address Modal */}
-      {editAddressOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 p-6 space-y-4 text-xs font-sans">
+      {/* Packing Slip Modal */}
+      {packingSlipOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-gray-200 p-6 space-y-4 text-xs font-sans">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="text-base font-bold text-gray-900">Edit Customer Shipping Address</h3>
-              <button onClick={() => setEditAddressOpen(false)} className="p-1 text-gray-400 hover:text-black">
-                <X className="w-4 h-4" />
-              </button>
+              <h3 className="text-base font-bold text-gray-900">Packing Slip - {order.order_number}</h3>
+              <button onClick={() => setPackingSlipOpen(false)} className="p-1 text-gray-400 hover:text-black cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
-
-            <form onSubmit={handleSaveEditAddress} className="space-y-3">
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Customer Full Name</label>
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-bold text-gray-900"
-                />
+            <div className="space-y-3">
+              <div><span className="font-bold text-gray-900">Ship to:</span> <span className="text-gray-700">{order.customer_name || "Guest"}</span></div>
+              <div><span className="font-bold text-gray-900">Address:</span> <span className="text-gray-700">{order.shipping_address || "No address"}</span></div>
+              <div className="border-t border-gray-100 pt-3 space-y-2">
+                {order.items.map(item => (
+                  <div key={item.id} className="flex justify-between">
+                    <span className="text-gray-700">{item.product_name} x {item.quantity}</span>
+                    <span className="font-bold text-gray-900">Rs. {Number(item.total_price).toLocaleString()}</span>
+                  </div>
+                ))}
               </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Phone Number</label>
-                <input
-                  type="text"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-bold text-gray-900"
-                />
+              <div className="border-t border-gray-100 pt-2 flex justify-between font-bold text-gray-900">
+                <span>Total</span><span>Rs. {Number(order.total_price).toLocaleString()}</span>
               </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Street Address</label>
-                <textarea
-                  rows={2}
-                  value={shippingAddress}
-                  onChange={(e) => setShippingAddress(e.target.value)}
-                  className="w-full p-3 rounded-xl bg-gray-50 border border-gray-300 font-medium text-gray-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">City</label>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-medium text-gray-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Country</label>
-                  <input
-                    type="text"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-medium text-gray-900"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setEditAddressOpen(false)}
-                  className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900 cursor-pointer"
-                >
-                  Save Address Changes
-                </button>
-              </div>
-            </form>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              <button onClick={() => window.print()} className="px-4 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900 cursor-pointer">Print</button>
+              <button onClick={() => setPackingSlipOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-pointer">Close</button>
+            </div>
           </div>
         </div>
       )}

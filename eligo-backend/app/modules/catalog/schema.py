@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.modules.catalog.model import (
     ProductStatus, ProductCategory, SalesChannel,
     WeightUnit, PurchaseOrderStatus, TransferStatus, GiftCardStatus,
+    CollectionType,
 )
 
 
@@ -219,7 +220,7 @@ class CollectionCreate(BaseModel):
     image_url: str | None = None
     conditions: str | None = None
     channels: str | None = None
-    theme_template: str = "Default collection"
+    collection_type: CollectionType = CollectionType.wallets
     seo_title: str | None = Field(None, max_length=70)
     seo_description: str | None = Field(None, max_length=160)
     meta_description: str | None = None
@@ -232,7 +233,7 @@ class CollectionUpdate(BaseModel):
     image_url: str | None = None
     conditions: str | None = None
     channels: str | None = None
-    theme_template: str | None = None
+    collection_type: CollectionType | None = None
     seo_title: str | None = Field(None, max_length=70)
     seo_description: str | None = Field(None, max_length=160)
     meta_description: str | None = None
@@ -246,7 +247,7 @@ class CollectionOut(BaseModel):
     image_url: str | None
     conditions: str | None
     channels: str | None
-    theme_template: str
+    collection_type: CollectionType
     seo_title: str | None
     seo_description: str | None
     meta_description: str | None = None
