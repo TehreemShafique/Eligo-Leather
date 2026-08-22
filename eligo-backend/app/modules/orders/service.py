@@ -107,6 +107,7 @@ async def get_order(db: AsyncSession, order_id: int) -> Order | None:
             selectinload(Order.items),
             selectinload(Order.audit_logs),
             selectinload(Order.notes),
+            selectinload(Order.customer),
         )
         .where(Order.id == order_id)
     )

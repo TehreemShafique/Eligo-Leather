@@ -111,6 +111,9 @@ export function ProductDetailView({ product, relatedProducts = [] }: ProductDeta
         <div className="w-full max-w-[1680px] flex justify-center">
           <ProductSpecGrid
             description={product.description || undefined}
+            material={product.material || undefined}
+            dimension={product.dimensions || undefined}
+            shippingPolicy={product.shipping_return_policy || undefined}
           />
         </div>
 
@@ -121,7 +124,7 @@ export function ProductDetailView({ product, relatedProducts = [] }: ProductDeta
 
         {/* Customer Reviews Section */}
         <div className="w-full max-w-[1680px]">
-          <TestimonialsSection />
+          <TestimonialsSection productId={product.id} />
         </div>
       </div>
     </div>

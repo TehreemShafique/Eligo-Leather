@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { CaretDown } from "@phosphor-icons/react"
 
 export interface CategoryProduct {
   id: string | number
-    slug?: string
-title: string
+  slug?: string
+  title: string
   originalPrice: number
   salePrice: number
   rating: number
@@ -19,94 +20,42 @@ title: string
   subcategoryId?: string
 }
 
+export interface CategorySidebarItem {
+  id: string | number
+  name: string
+  href: string
+  handle?: string
+}
+
 export interface CategoryContentProps {
   initialProducts?: CategoryProduct[]
   categoryTitle?: string
   currentSlug?: string
+  /** Admin-created categories (shared source with the header dropdown). */
+  sidebarCategories?: CategorySidebarItem[]
 }
 
-const UNSPLASH_IMAGES = [
-  "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=700",
-  "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=700",
-  "https://images.unsplash.com/photo-1591561954557-26941169b49e?auto=format&fit=crop&q=80&w=700",
-  "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&q=80&w=700",
+// Fixed vertical slots for the absolutely-positioned desktop sidebar links
+// (same rhythm as the original design, extended for larger category lists).
+const SIDEBAR_ITEM_POSITIONS = [
+  "lg:top-[7.8125cqw]",
+  "lg:top-[9.895833cqw]",
+  "lg:top-[11.979167cqw]",
+  "lg:top-[14.0625cqw]",
+  "lg:top-[16.145833cqw]",
+  "lg:top-[18.229167cqw]",
+  "lg:top-[20.3125cqw]",
+  "lg:top-[22.395833cqw]",
+  "lg:top-[24.479167cqw]",
+  "lg:top-[26.5625cqw]",
 ] as const
 
-const MOCK_TITLES = [
-  "ARDOR - Handmade Leather Card Holder Wallet",
-  "HERALD - Classic Leather Bifold Coin Pocket Wallet",
-  "VANGUARD - Full Grain Leather Money Clip Wallet",
-  "SOLO - Slim Handmade Minimalist Leather Wallet",
-  "TITAN - Handmade RFID Leather Trifold Wallet",
-  "LEGEND - Multi-Card Compartment Trifold Wallet",
-  "SOVEREIGN - Real Leather Long Checkbook Wallet",
-  "EMPEROR - Zipper Around Genuine Leather Long Wallet",
-  "CROWN - Crocodile Texture Genuine Leather Wallet",
-  "CLIPPER - Minimalist Leather Note Clip Wallet",
-  "HERITAGE - Vintage Crazy Horse Leather Wallet",
-  "CLASSIC - Retro Distressed Leather Coin Wallet",
-] as const
-
-const MOCK_SUBCATEGORIES = [
-  "bifold",
-  "bifold",
-  "trifold",
-  "trifold",
-  "long",
-  "long",
-  "crocodile",
-  "crocodile",
-  "note-clip",
-  "note-clip",
-  "vintage",
-  "vintage",
-] as const
-
-const MOCK_PRODUCTS: CategoryProduct[] = MOCK_TITLES.map((title, index) => ({
-  id: index + 1,
-  title,
-  originalPrice: index % 4 === 2 ? 5199 : 3999,
-  salePrice: 1699,
-  rating: 5,
-  reviewCount: 35,
-  image: UNSPLASH_IMAGES[index % UNSPLASH_IMAGES.length]!,
-  secondaryImage: UNSPLASH_IMAGES[(index + 1) % UNSPLASH_IMAGES.length]!,
-  isSale: index % 4 === 2,
-  subcategoryId: MOCK_SUBCATEGORIES[index]!,
-}))
-
-const SUBCATEGORIES = [
-  {
-    id: "bifold",
-    label: "Bifold Wallets",
-    position: "lg:top-[7.8125cqw]",
-  },
-  {
-    id: "trifold",
-    label: "Trifold Wallets",
-    position: "lg:top-[9.895833cqw]",
-  },
-  {
-    id: "long",
-    label: "Long Wallets",
-    position: "lg:top-[11.979167cqw]",
-  },
-  {
-    id: "crocodile",
-    label: "Crocodile Wallets",
-    position: "lg:top-[14.0625cqw]",
-  },
-  {
-    id: "note-clip",
-    label: "Note Clip Wallets",
-    position: "lg:top-[16.145833cqw]",
-  },
-  {
-    id: "vintage",
-    label: "Vintage Wallets",
-    position: "lg:top-[18.229167cqw]",
-  },
-] as const
+function sidebarPosition(index: number): string {
+  return (
+    SIDEBAR_ITEM_POSITIONS[index] ??
+    SIDEBAR_ITEM_POSITIONS[SIDEBAR_ITEM_POSITIONS.length - 1]
+  )
+}
 
 const SORT_LABELS = {
   default: "Default Sorting",
@@ -122,9 +71,7 @@ function ProductCard({
   item: CategoryProduct
   productIndex: number
 }) {
-  const secondaryImage =
-    item.secondaryImage ||
-    UNSPLASH_IMAGES[(productIndex + 1) % UNSPLASH_IMAGES.length]!
+  const secondaryImage = item.secondaryImage || item.image
   const showSaleDetails = productIndex % 4 === 2 && item.isSale !== false
 
   return (
@@ -199,34 +146,18 @@ export function CategoryContent({
   initialProducts = [],
   categoryTitle = "All Wallets Category",
   currentSlug,
+  sidebarCategories = [],
 }: CategoryContentProps) {
+  const router = useRouter()
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [sortBy, setSortBy] = useState<keyof typeof SORT_LABELS>("default")
-  const [activeSubcategory, setActiveSubcategory] = useState(
-    currentSlug || "all",
-  )
 
-  const baseProducts = initialProducts.length ? initialProducts : MOCK_PRODUCTS
+  // Products come straight from the database for the selected category —
+  // an empty catalog simply shows zero results until the admin adds items.
+  const baseProducts = initialProducts
 
   const processedProducts = useMemo(() => {
-    let result = [...baseProducts]
-
-    if (activeSubcategory !== "all" && activeSubcategory !== "wallets") {
-      const filterValue = activeSubcategory.toLowerCase()
-      const filteredProducts = result.filter((product) =>
-        `${product.subcategoryId || ""} ${product.title}`
-          .toLowerCase()
-          .includes(filterValue),
-      )
-
-      result = filteredProducts.length
-        ? filteredProducts
-        : MOCK_PRODUCTS.filter((product) =>
-            `${product.subcategoryId || ""} ${product.title}`
-              .toLowerCase()
-              .includes(filterValue),
-          )
-    }
+    const result = [...baseProducts]
 
     if (sortBy === "price-asc") {
       result.sort((a, b) => a.salePrice - b.salePrice)
@@ -237,7 +168,7 @@ export function CategoryContent({
     }
 
     return result
-  }, [activeSubcategory, baseProducts, sortBy])
+  }, [baseProducts, sortBy])
 
   const visibleProducts = processedProducts.slice(0, 12)
 
@@ -253,23 +184,24 @@ export function CategoryContent({
       <aside className="mb-8 lg:contents">
         <button
           type="button"
-          onClick={() => setActiveSubcategory("all")}
+          onClick={() => router.push("/products")}
           className="inline-flex h-10 w-full max-w-80 items-center justify-center rounded-[5px] bg-amber-800 px-7 text-sm font-semibold leading-5 text-white lg:absolute lg:left-[6.25cqw] lg:top-[4.166667cqw] lg:h-[2.083333cqw] lg:w-[16.666667cqw] lg:max-w-none lg:rounded-[0.260417cqw] lg:px-[1.458333cqw] lg:text-[0.729167cqw] lg:leading-[1.041667cqw]"
         >
           {categoryTitle}
         </button>
 
+        {/* Same admin-created categories as the header Our Product dropdown */}
         <div className="mt-5 flex flex-wrap gap-x-5 gap-y-3 lg:contents">
-          {SUBCATEGORIES.map((subcategory) => (
+          {sidebarCategories.map((subcategory, index) => (
             <button
               key={subcategory.id}
               type="button"
-              onClick={() => setActiveSubcategory(subcategory.id)}
-              className={`text-left text-base font-semibold leading-5 text-amber-800 transition-colors hover:text-amber-600 lg:absolute lg:left-[6.25cqw] lg:text-[0.9375cqw] lg:leading-[1.041667cqw] ${subcategory.position} ${
-                activeSubcategory === subcategory.id ? "underline" : ""
+              onClick={() => router.push(subcategory.href)}
+              className={`text-left text-base font-semibold leading-5 text-amber-800 transition-colors hover:text-amber-600 lg:absolute lg:left-[6.25cqw] lg:text-[0.9375cqw] lg:leading-[1.041667cqw] ${sidebarPosition(index)} ${
+                currentSlug === subcategory.handle ? "underline" : ""
               }`}
             >
-              <span aria-hidden="true">{"\u203A"}</span>{" "}{subcategory.label}
+              <span aria-hidden="true">{"\u203A"}</span>{" "}{subcategory.name}
             </button>
           ))}
         </div>

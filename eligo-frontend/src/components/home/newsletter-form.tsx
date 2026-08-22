@@ -3,17 +3,42 @@
 import { useState, type FormEvent } from "react"
 import Image from "next/image"
 import { toast } from "sonner"
+import { api, getApiErrorMessage } from "@/lib/api-client"
 
 export function NewsletterForm() {
   const [email, setEmail] = useState("")
+  const [subscribing, setSubscribing] = useState(false)
 
-  const handleSubscribe = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubscribe = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!email.trim()) return
+    if (!email.trim() || subscribing) return
 
-    toast.success("Thank you for subscribing to Eligo Leather updates!")
-    setEmail("")
+    setSubscribing(true)
+    try {
+      // Stored in the existing customers table so the subscriber shows up in
+      // the admin Customers list with the email subscription flag enabled.
+      await api.post(
+        "/customers",
+        {
+          email: email.trim(),
+          email_subscription: true,
+        },
+        { auth: false },
+      )
+      toast.success("Thank you for subscribing to Eligo Leather updates!")
+      setEmail("")
+    } catch (error) {
+      const message = getApiErrorMessage(error)
+      if (message.toLowerCase().includes("already exists")) {
+        toast.success("You are already subscribed to Eligo Leather updates!")
+        setEmail("")
+      } else {
+        toast.error(message)
+      }
+    } finally {
+      setSubscribing(false)
+    }
   }
 
   return (
@@ -47,9 +72,10 @@ export function NewsletterForm() {
 
       <button
         type="submit"
-        className="absolute right-1 top-1 inline-flex h-12 w-28 items-center justify-center rounded-[32px] bg-black text-sm font-semibold text-white transition-colors hover:bg-amber-800 sm:right-[5px] sm:top-[5px] sm:w-32 lg:right-auto lg:left-[27.760417cqw] lg:top-[0.260417cqw] lg:h-[2.5cqw] lg:w-[6.666667cqw] lg:rounded-[1.666667cqw] lg:text-[0.729167cqw] lg:leading-[1.041667cqw]"
+        disabled={subscribing}
+        className="absolute right-1 top-1 inline-flex h-12 w-28 items-center justify-center rounded-[32px] bg-black text-sm font-semibold text-white transition-colors hover:bg-amber-800 disabled:opacity-60 sm:right-[5px] sm:top-[5px] sm:w-32 lg:right-auto lg:left-[27.760417cqw] lg:top-[0.260417cqw] lg:h-[2.5cqw] lg:w-[6.666667cqw] lg:rounded-[1.666667cqw] lg:text-[0.729167cqw] lg:leading-[1.041667cqw]"
       >
-        Subscribe
+        {subscribing ? "..." : "Subscribe"}
       </button>
     </form>
   )

@@ -22,7 +22,10 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.orders import leopard_client
-from app.modules.orders.model import LeopardShipment, LeopardLoadSheet, LeopardLog, Order
+from app.modules.orders.model import (
+    LeopardShipment, LeopardLoadSheet, LeopardLog,
+    Order, OrderAuditLog, FulfillmentStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -911,13 +914,15 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
 
     Uses 'self' for shipper fields (merchant account defaults) and
     resolves destination city name to an integer city ID for the API.
+    On success the order is synced (tracking number, tracking company,
+    fulfillment status) and real timeline events are persisted.
     """
-    order_id = str(payload.get("order_id", "#1339")).strip()
-    cod_amount = str(payload.get("cod_amount", "2699.00"))
-    consignee_name = str(payload.get("consignee_name", "DANYAL SAJID"))
-    consignee_phone = str(payload.get("consignee_phone", "03115133191"))
-    consignee_address = str(payload.get("consignee_address", "tarbela ghazi hamlet sobra sector"))
-    destination_city = str(payload.get("destination_city", "HARIPUR"))
+    order_id = str(payload.get("order_id", "")).strip()
+    cod_amount = str(payload.get("cod_amount", "0"))
+    consignee_name = str(payload.get("consignee_name", "")).strip()
+    consignee_phone = str(payload.get("consignee_phone", "")).strip()
+    consignee_address = str(payload.get("consignee_address", "")).strip()
+    destination_city = str(payload.get("destination_city", "")).strip()
     special_instructions = str(payload.get("special_instructions", "N/A"))
     weight = str(payload.get("weight", payload.get("weight_grams", "500")))
     pieces = int(payload.get("pieces", 1))
@@ -1007,14 +1012,52 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
 
     # Cross-link: write CN back to Order.tracking_number so webhooks can match it
     clean_order_id = order_id.lstrip("#")
-    for fmt in (order_id, f"#{clean_order_id}", clean_order_id):
-        order_result = await db.execute(
-            select(Order).where(Order.order_number == fmt)
+    order_row = None
+    if clean_order_id.isdigit():
+        result = await db.execute(
+            select(Order)
+            .options(selectinload(Order.items))
+            .where(Order.id == int(clean_order_id))
         )
-        order_row = order_result.scalar_one_or_none()
-        if order_row:
-            order_row.tracking_number = cn_number
-            break
+        order_row = result.scalar_one_or_none()
+    if order_row is None:
+        for fmt in (order_id, f"#{clean_order_id}", clean_order_id):
+            order_result = await db.execute(
+                select(Order)
+                .options(selectinload(Order.items))
+                .where(Order.order_number == fmt)
+            )
+            order_row = order_result.scalar_one_or_none()
+            if order_row:
+                break
+
+    if order_row:
+        order_row.tracking_number = cn_number
+        order_row.tracking_company = "Leopards Courier"
+        was_unfulfilled = order_row.fulfillment_status != FulfillmentStatus.fulfilled
+        order_row.fulfillment_status = FulfillmentStatus.fulfilled
+
+        db.add(OrderAuditLog(
+            order_id=order_row.id,
+            event_type="courier_update",
+            description=(
+                f"Leopards Courier booked shipment CN #{cn_number} for "
+                f"{consignee_name or 'customer'} to {destination_city}. "
+                f"COD: Rs {cod_amount}"
+            ),
+            actor_name="Leopards Courier",
+        ))
+        if was_unfulfilled:
+            db.add(OrderAuditLog(
+                order_id=order_row.id,
+                event_type="fulfillment_updated",
+                description=(
+                    f"Leopards Courier marked {len(order_row.items) if order_row.items else 1} item(s) "
+                    f"as fulfilled from Office # 407, 4th floor, Gulberg Empire, "
+                    f"Executive Block, Gulberg Greens, Islamabad."
+                ),
+                actor_name="Leopards Courier",
+            ))
 
     await record_log(
         db,

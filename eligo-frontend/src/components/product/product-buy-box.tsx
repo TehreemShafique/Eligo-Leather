@@ -50,6 +50,14 @@ export function ProductBuyBox({
   const searchParams = useSearchParams()
   const addToCart = useCartStore((state) => state.addToCart)
 
+  // Description arrives sanitized from the server; derive a short
+  // plain-text teaser so the collapsed preview never leaks raw markup.
+  const plainDescription = description
+    ? description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+    : ""
+  const teaserLength = 180
+  const needsTruncation = plainDescription.length > teaserLength
+
   const initialVariantId = searchParams.get("variant")
   const initialColorObj = colors.length > 0
     ? (colors.find((c) => String(c.variantId) === initialVariantId) || colors[0])
@@ -144,22 +152,22 @@ export function ProductBuyBox({
       {description && (
         <div className="space-y-1 text-sm text-gray-800">
           <p className="leading-relaxed whitespace-pre-line">
-            {description}
+            {showFullDesc
+              ? plainDescription
+              : needsTruncation
+                ? `${plainDescription.slice(0, teaserLength)}...`
+                : plainDescription}
           </p>
 
-          {showFullDesc && (
-            <p className="leading-relaxed text-gray-700 pt-1 animate-in fade-in duration-200">
-              Crafted meticulously from 100% full-grain vintage leather, the {title} provides compact luxury. Its dual card slots keep your daily credit cards and ID secure without adding bulk to your pocket.
-            </p>
+          {needsTruncation && (
+            <button
+              type="button"
+              onClick={() => setShowFullDesc(!showFullDesc)}
+              className="text-xs font-semibold text-amber-800 hover:text-amber-900 underline underline-offset-2 cursor-pointer pt-1 block"
+            >
+              {showFullDesc ? "Show Less" : "Read More"}
+            </button>
           )}
-
-          <button
-            type="button"
-            onClick={() => setShowFullDesc(!showFullDesc)}
-            className="text-xs font-semibold text-amber-800 hover:text-amber-900 underline underline-offset-2 cursor-pointer pt-1 block"
-          >
-            {showFullDesc ? "Show Less" : "Read More"}
-          </button>
         </div>
       )}
 

@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.settings.apps import adapters
-from app.modules.settings.apps.crypto import decrypt_credentials, encrypt_credentials
+from app.modules.settings.apps.crypto import encrypt_credentials
 from app.modules.settings.apps.model import AppStatus, StoreIntegration
 from app.modules.settings.apps.schema import AppDefinition, AppInstall, AppUpdate
 
@@ -285,6 +285,5 @@ async def run_action(app_code: str, action: str, payload: dict, db: AsyncSession
     if action not in definition["actions"]:
         raise ValueError(f"App '{app_code}' does not support action '{action}'")
 
-    credentials = decrypt_credentials(row.api_credentials)
-    result = await adapters.run(app_code, action, credentials, row.settings or {}, payload)
+    result = await adapters.run(app_code, action, payload)
     return {"success": result.get("success", True), "action": action, "data": result}

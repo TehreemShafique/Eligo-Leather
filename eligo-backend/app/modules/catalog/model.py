@@ -239,12 +239,32 @@ class Collection(Base):
     meta_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     url_handle: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
 
+    # Optional parent collection powering the storefront category tree
+    # (top-level row = collection, child rows = its categories).
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("collections.id", ondelete="SET NULL"), nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
-        onupdate=func.now(),
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
+
+
+# ===========================================================================
+# Product <-> Collection link
+# ===========================================================================
+
+class ProductCollection(Base):
+    __tablename__ = "product_collections"
+
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), primary_key=True,
+    )
+    collection_id: Mapped[int] = mapped_column(
+        ForeignKey("collections.id", ondelete="CASCADE"), primary_key=True,
     )
 
 

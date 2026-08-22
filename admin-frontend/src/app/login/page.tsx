@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Lock, EnvelopeSimple, Eye, EyeSlash, ArrowRight, ShieldCheck } from "@phosphor-icons/react"
 import { toast } from "sonner"
@@ -12,6 +12,13 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [hasToken] = useState(() => !!getAuthToken())
+
+  useEffect(() => {
+    if (hasToken) {
+      router.push("/")
+    }
+  }, [hasToken, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,8 +43,7 @@ export default function AdminLoginPage() {
     }
   }
 
-  if (getAuthToken()) {
-    router.push("/")
+  if (hasToken) {
     return null
   }
 

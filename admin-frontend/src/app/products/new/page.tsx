@@ -199,6 +199,8 @@ interface VariantItem {
   imageUrl: string
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
 export default function AdminNewProductPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -207,15 +209,8 @@ export default function AdminNewProductPage() {
   const [viewMode, setViewMode] = useState<"edit" | "live_preview">("edit")
 
   // Multi-Category Selection State (Product can belong to 2 or more categories)
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(["Leather Clutch Wallets", "Mens Leather Goods"])
-  const [availableCategories, setAvailableCategories] = useState<string[]>([
-    "Leather Clutch Wallets",
-    "Mens Leather Goods",
-    "Women Leather Accessories",
-    "Crocodile Leather Special Edition",
-    "Bifold Wallets",
-    "Best Sellers",
-  ])
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+  const [availableCategories, setAvailableCategories] = useState<string[]>([])
 
   // Custom Editable JSON-LD Schema Code State
   const [customScriptOverride, setCustomScriptOverride] = useState<string>("")
@@ -225,7 +220,7 @@ export default function AdminNewProductPage() {
     setMounted(true)
     const fetchDBColls = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/catalog/collections/")
+        const res = await fetch(`${API_BASE}/api/v1/catalog/collections/`)
         if (res.ok) {
           const cols = await res.json()
           if (Array.isArray(cols) && cols.length > 0) {
@@ -240,10 +235,6 @@ export default function AdminNewProductPage() {
 
   const handleToggleCategory = (cat: string) => {
     if (selectedCategories.includes(cat)) {
-      if (selectedCategories.length === 1) {
-        toast.error("Product must belong to at least one category.")
-        return
-      }
       setSelectedCategories(prev => prev.filter(c => c !== cat))
     } else {
       setSelectedCategories(prev => [...prev, cat])
@@ -251,52 +242,37 @@ export default function AdminNewProductPage() {
   }
 
   // Form State: Product Details
-  const [title, setTitle] = useState("004 DYNAMO - Handmade Leather Wallet")
-  const [description, setDescription] = useState("<h2>Product Features</h2><ul><li>Handcrafted from 100% genuine full-grain cowhide leather.</li><li>Features 6 card slots, a slim central cash pocket, and hand-stitched wax thread.</li><li>Available in Orange (Main), Blue, and Green color variants.</li></ul>")
-  const [material, setMaterial] = useState("<h2>Material Specifications</h2><ul><li>100% Genuine Full Grain Cowhide Leather</li><li>Premium Waxed Nylon Stitching</li><li>Fabric-less natural raw leather interior</li></ul>")
-  const [dimensions, setDimensions] = useState("<h2>Product Dimensions</h2><ul><li>Length: 11.5 cm (4.5 inches)</li><li>Width: 9.2 cm (3.6 inches)</li><li>Thickness: 1.8 cm (0.7 inches)</li></ul>")
-  const [shippingReturnPolicy, setShippingReturnPolicy] = useState("<h2>Shipping & Return Policy</h2><ul><li>Free express delivery across Pakistan on orders over Rs. 2,000.</li><li>Delivered in 2-3 working days (Islamabad/Rawalpindi in 24 hours).</li><li>30-day easy return & exchange policy.</li></ul>")
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [material, setMaterial] = useState("")
+  const [dimensions, setDimensions] = useState("")
+  const [shippingReturnPolicy, setShippingReturnPolicy] = useState("")
 
   // Pricing & Inventory State
-  const [price, setPrice] = useState("2799")
-  const [compareAtPrice, setCompareAtPrice] = useState("4500")
-  const [sku, setSku] = useState("004-DYN-MAIN")
+  const [price, setPrice] = useState("")
+  const [compareAtPrice, setCompareAtPrice] = useState("")
+  const [sku, setSku] = useState("")
   const [status, setStatus] = useState("Active")
-  const [productType, setProductType] = useState("Leather Wallet")
-  const [vendor, setVendor] = useState("Eligo Artisans")
+  const [productType, setProductType] = useState("")
+  const [vendor, setVendor] = useState("Eligo Leather")
 
   // Color-Tagged Media Upload Gallery Items with Alt Text
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([
-    { id: 1, url: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&q=80&w=600", colorTag: "Orange", altText: "ARDOR Bifold Wallet in Orange Leather" },
-    { id: 2, url: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&q=80&w=600", colorTag: "Blue", altText: "ARDOR Bifold Wallet in Blue Leather" },
-    { id: 3, url: "https://images.unsplash.com/photo-1606503153255-59d8b8b82176?auto=format&fit=crop&q=80&w=600", colorTag: "Green", altText: "ARDOR Bifold Wallet in Green Leather" },
-  ])
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
 
   // Color Variants Matrix State (with independent stock quantity per color)
-  const [selectedPreviewColor, setSelectedPreviewColor] = useState("Orange")
-  const [colorVariants, setColorVariants] = useState<VariantItem[]>([
-    { id: "45929680404670", colorName: "Orange", hex: "#ea580c", sku: "004-DYN-ORG", price: "2799", stockQty: "70", isCanonical: true, handleSuffix: "", imageUrl: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=600" },
-    { id: "45929680404692", colorName: "Blue", hex: "#1e3a8a", sku: "004-DYN-BLU", price: "2799", stockQty: "50", isCanonical: false, handleSuffix: "?variant=45929680404692", imageUrl: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=600" },
-    { id: "45929680404693", colorName: "Green", hex: "#047857", sku: "004-DYN-GRN", price: "2799", stockQty: "90", isCanonical: false, handleSuffix: "?variant=45929680404693", imageUrl: "https://images.unsplash.com/photo-1606503153255-59d8b8b82176?w=600" },
-  ])
+  const [selectedPreviewColor, setSelectedPreviewColor] = useState("")
+  const [colorVariants, setColorVariants] = useState<VariantItem[]>([])
 
   const [newColorName, setNewColorName] = useState("")
   const [newColorHex, setNewColorHex] = useState("#000000")
 
   // Metafields & SEO States
-  const [pageTitle, setPageTitle] = useState("004 DYNAMO - Handmade Leather Wallet | Eligo Leather")
-  const [metaDescription, setMetaDescription] = useState("Buy 004 DYNAMO handmade genuine leather wallet online in Pakistan. Available in Orange, Blue, and Green.")
+  const [pageTitle, setPageTitle] = useState("")
+  const [metaDescription, setMetaDescription] = useState("")
   const [addDefModalOpen, setAddDefModalOpen] = useState(false)
   const [newDefLabel, setNewDefLabel] = useState("")
 
-  const [customMetafields, setCustomMetafields] = useState<CustomMetafieldDefinition[]>([
-    {
-      id: "def_01",
-      key: "care_instructions",
-      label: "Care & Maintenance",
-      value: "<p>Apply leather balm every 6 months. Keep away from prolonged water submersion.</p>",
-    },
-  ])
+  const [customMetafields, setCustomMetafields] = useState<CustomMetafieldDefinition[]>([])
 
   // Total calculated stock across all color variants
   const totalStockQuantity = colorVariants.reduce((sum, v) => sum + (parseInt(v.stockQty) || 0), 0)
@@ -501,7 +477,7 @@ export default function AdminNewProductPage() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/catalog/products/", {
+      const res = await fetch(`${API_BASE}/api/v1/catalog/products/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

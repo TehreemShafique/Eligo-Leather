@@ -50,16 +50,30 @@ function renderFormattedContent(text: string) {
 }
 
 export function ProductSpecGrid({
-  description = "No description available for this product.",
-  material = "➢ Thread: Nylon\n➢ Material: Waxy\n➢ Leather Type: Vintage Leather / Pullup Leather\n➢ Inner material: Fabric less",
-  dimension = "➢ Length: 3\"\n➢ Width: 4\"\n➢ Stitching: 3 mm",
-  shippingPolicy = "If there is any defect in the product, it can be exchanged within 7 days of purchase. Please note that the exchange will be processed, but refunds are not offered. Shipping typically takes 3-5 business days, while delivery to Islamabad or Rawalpindi will be completed within 1-2 business days.",
+  description,
+  material,
+  dimension,
+  shippingPolicy,
 }: SpecGridProps) {
   const columns = [
-    { title: "Product Description", content: description },
-    { title: "Product Material", content: material },
-    { title: "Product Dimension", content: dimension },
-    { title: "Shipping & Return Policy", content: shippingPolicy },
+    {
+      title: "Product Description",
+      content: description?.trim() || "No description available for this product.",
+    },
+    {
+      title: "Product Material",
+      content: material?.trim() || "Material details will be added soon.",
+    },
+    {
+      title: "Product Dimension",
+      content: dimension?.trim() || "Dimension details will be added soon.",
+    },
+    {
+      title: "Shipping & Return Policy",
+      content:
+        shippingPolicy?.trim() ||
+        "Shipping and return details will be added soon.",
+    },
   ]
 
   return (

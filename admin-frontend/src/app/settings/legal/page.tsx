@@ -76,8 +76,8 @@ export default function UnifiedPoliciesAndPrivacyPage() {
           if (isMounted && Array.isArray(data)) {
             const fetchedMap: Record<string, string> = {}
             data.forEach((p: any) => {
-              if (p.policy_type && p.body) {
-                fetchedMap[p.policy_type] = p.body
+              if (p.policy_type && p.content) {
+                fetchedMap[p.policy_type] = p.content
               }
             })
             setPolicyData((prev) => ({ ...prev, ...fetchedMap }))
@@ -133,7 +133,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
     const payload = {
       policy_type: activePolicyKey,
       title: policyOptionsList.find((p) => p.key === activePolicyKey)?.label || activePolicyKey,
-      body: currentText,
+      content: currentText,
     }
 
     try {

@@ -188,6 +188,23 @@ async def delete_metaobject_entry(db: AsyncSession, entry_id: int) -> bool:
 
 
 import io
+import re
+import uuid
+from pathlib import Path
+
+# Uploaded media lives next to the backend root and is served by the
+# StaticFiles mount at /static (see app.main).
+UPLOADS_DIR = Path(__file__).resolve().parents[3] / "static" / "uploads"
+
+
+def save_upload_to_disk(data: bytes, filename: str) -> str:
+    """Persists uploaded bytes under static/uploads and returns its public URL."""
+    suffix = Path(filename).suffix
+    safe_stem = re.sub(r"[^A-Za-z0-9_-]+", "_", Path(filename).stem)[:60] or "file"
+    unique_name = f"{uuid.uuid4().hex[:8]}_{safe_stem}{suffix}"
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    (UPLOADS_DIR / unique_name).write_bytes(data)
+    return f"/static/uploads/{unique_name}"
 
 
 def convert_image_to_webp(image_bytes: bytes, filename: str) -> tuple[bytes, str, str]:

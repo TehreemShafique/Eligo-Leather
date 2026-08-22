@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.core.dependencies import require_admin
 
-from app.modules.settings.apps import service
+from app.modules.settings.apps import service, adapters
 from app.modules.settings.apps.adapters import AdapterError
 from app.modules.settings.apps.model import AppStatus
 from app.modules.settings.apps.schema import (
@@ -126,3 +127,78 @@ async def run_app_action(
 #   async def track_shipment(app_code: str, tracking_number: str, db=Depends(get_db)):
 #       return await service.run_action(app_code, "track_shipment", {"tracking_number": tracking_number}, db)
 # =====================================================================
+
+
+# =====================================================================
+# PUBLIC STOREFRONT ROUTER (no auth) - Supabase product reviews
+# ---------------------------------------------------------------------
+# Customers can read APPROVED reviews and submit new (pending) ones.
+# Approval/moderation stays admin-only via the action endpoint above.
+# =====================================================================
+
+REVIEWS_APP_CODE = "supabase_reviews"
+
+
+class PublicReviewCreate(BaseModel):
+    external_id: str | None = Field(
+        default=None, description="Product id/handle the review belongs to"
+    )
+    reviewer_name: str = Field(min_length=1, max_length=120)
+    reviewer_email: str | None = Field(default=None, max_length=200)
+    rating: int = Field(ge=1, le=5)
+    title: str | None = Field(default=None, max_length=200)
+    body: str = Field(min_length=1, max_length=4000)
+
+
+public_router = APIRouter(prefix="/apps", tags=["Apps - Storefront"])
+
+
+def _ensure_reviews_app(app_code: str) -> None:
+    if app_code != REVIEWS_APP_CODE:
+        raise HTTPException(status_code=404, detail="App not found")
+
+
+@public_router.get("/{app_code}/public/reviews")
+async def public_list_reviews(
+    app_code: str,
+    product_id: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=12, ge=1, le=50),
+):
+    """Approved reviews only - pending/rejected rows never reach the storefront."""
+    _ensure_reviews_app(app_code)
+    try:
+        result = await adapters.run(
+            app_code,
+            "fetch_reviews",
+            {
+                "external_id": product_id,
+                "page": page,
+                "per_page": per_page,
+                "status": "approved",
+            },
+        )
+    except AdapterError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return [r for r in (result.get("reviews") or []) if r]
+
+
+@public_router.post("/{app_code}/public/reviews", status_code=status.HTTP_201_CREATED)
+async def public_create_review(app_code: str, data: PublicReviewCreate):
+    """Customer-submitted review; stored as pending for admin moderation."""
+    _ensure_reviews_app(app_code)
+    try:
+        return await adapters.run(
+            app_code,
+            "post_review",
+            {
+                "external_id": data.external_id,
+                "reviewer_name": data.reviewer_name,
+                "reviewer_email": data.reviewer_email or "",
+                "rating": data.rating,
+                "title": data.title or "",
+                "body": data.body,
+            },
+        )
+    except AdapterError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))

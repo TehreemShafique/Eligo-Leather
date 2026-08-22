@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { Calendar } from "@phosphor-icons/react"
 import { PageBreadcrumb } from "@/components/ui/page-breadcrumb"
-import { FaqSection } from "@/components/home/faq-section"
+import { FaqSection, type FAQItem } from "@/components/home/faq-section"
 import { BlogCommentForm } from "./blog-comment-form"
 import type { BlogPostOut } from "@/modules/content/schema"
 
@@ -15,11 +15,30 @@ function formatDate(dateStr: string): string {
   }).format(new Date(dateStr))
 }
 
-export function BlogDetailContent({ post }: { post: BlogPostOut }) {
+export interface BlogFaq {
+  question: string
+  answer: string
+}
+
+export function BlogDetailContent({
+  post,
+  faqs,
+}: {
+  post: BlogPostOut
+  faqs?: BlogFaq[]
+}) {
   const title = post.title
   const date = post.published_at ? formatDate(post.published_at) : formatDate(post.created_at)
   const image = post.featured_image_url || post.thumbnail_url || "https://images.unsplash.com/photo-1591561954557-26941169b49e?auto=format&fit=crop&q=80&w=1200"
   const body = post.body || ""
+
+  // Admin-authored FAQs for this post reuse the shared FAQ section design.
+  const faqItems: FAQItem[] | null = faqs && faqs.length > 0
+    ? faqs.map((faq) => ({
+        ...faq,
+        icon: "/images/homepage/17_rectangle_1699.webp",
+      }))
+    : null
 
   return (
     <article className="min-h-screen bg-slate-50 font-['Manrope']">
@@ -85,8 +104,8 @@ export function BlogDetailContent({ post }: { post: BlogPostOut }) {
         )}
       </div>
 
-      {/* FAQ Accordion Section */}
-      <FaqSection />
+      {/* FAQ Accordion Section — post FAQs when the admin added them */}
+      <FaqSection items={faqItems ?? undefined} />
 
       {/* Comment Form Section */}
       <BlogCommentForm />

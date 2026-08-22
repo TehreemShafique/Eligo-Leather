@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { listProducts, getProduct } from "@/modules/catalog/api"
+import { listProducts, getProduct, listCollections } from "@/modules/catalog/api"
 import { sanitizeCmsHtml } from "@/lib/sanitize-html"
 import { truncate } from "@/lib/utils"
 import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
@@ -35,14 +35,50 @@ async function resolveProduct(slug: string) {
 
 async function fetchRelatedProducts(currentProduct: ProductOut): Promise<ProductListOut[]> {
   try {
+    // Resolve which admin-created collection this product belongs to, using
+    // the same assignment data the admin form sends (comma-separated
+    // category titles stored on the product row).
+    const collections = await listCollections()
+    const ownCategories = (currentProduct.categories ?? "")
+      .split(",")
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean)
+    const ownerCollection =
+      ownCategories.length > 0
+        ? collections.find(
+            (c) =>
+              c.title?.trim() &&
+              ownCategories.includes(c.title.trim().toLowerCase()),
+          )
+        : undefined
+
+    // Same-collection-group scope when known (e.g. any category under the
+    // Wallets type); otherwise fall back to the product's top-level
+    // category.
     const products = await listProducts({
-      category: currentProduct.category,
       status: "Active",
-      limit: 6,
+      limit: 200,
+      ...(ownerCollection
+        ? { collection: ownerCollection.collection_type }
+        : { category: currentProduct.category }),
     })
-    return products
-      .filter((p) => p.id !== currentProduct.id)
-      .slice(0, 5)
+
+    const others = products.filter((p) => p.id !== currentProduct.id)
+    if (!ownerCollection) return others.slice(0, 5)
+
+    // Prefer products from a different category within the same collection,
+    // then fill with remaining ones from that collection.
+    const differentCategory = others.filter((p) => {
+      const titles = (p.categories ?? "")
+        .split(",")
+        .map((c) => c.trim().toLowerCase())
+        .filter(Boolean)
+      return !titles.some((t) => ownCategories.includes(t))
+    })
+    return [
+      ...differentCategory,
+      ...others.filter((p) => !differentCategory.includes(p)),
+    ].slice(0, 5)
   } catch {
     return []
   }

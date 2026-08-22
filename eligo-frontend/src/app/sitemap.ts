@@ -16,11 +16,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { path: "/privacy-policy", priority: 0.3, changeFrequency: "yearly" as const },
     { path: "/refund-policy", priority: 0.4, changeFrequency: "yearly" as const },
     { path: "/terms-of-service", priority: 0.3, changeFrequency: "yearly" as const },
+    { path: "/about", priority: 0.5, changeFrequency: "yearly" as const },
   ]
 
+  // Backend list endpoints cap `limit` at 200.
   const [products, posts] = await Promise.all([
-    listProducts({ status: "Active", limit: 500 }),
-    listBlogPosts({ visibility: "Visible", limit: 500 }),
+    listProducts({ status: "Active", limit: 200 }),
+    listBlogPosts({ visibility: "Visible", limit: 200 }),
   ])
 
   const staticEntries: MetadataRoute.Sitemap = staticRoutes.map((route) => ({

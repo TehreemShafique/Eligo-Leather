@@ -67,7 +67,7 @@ export default function EditPageDetailScreen() {
             const mapped = data.map((p: any) => ({
               key: p.policy_type,
               title: `${p.title || p.policy_type} (DB Policy)`,
-              body: p.body,
+              body: p.content,
             }))
             setDbPolicies(mapped)
           }

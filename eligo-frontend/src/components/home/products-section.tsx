@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { CaretDown, SquaresFour } from "@phosphor-icons/react"
 
 interface Product {
@@ -20,68 +21,17 @@ interface Product {
   strikeOriginalPrice?: boolean
 }
 
-const PRODUCTS_CATALOG: Product[] = [
-  {
-    id: 1,
-    title: "ARDOR - Handmade Leather Card Holder Wallet",
-    category: "Wallets",
-    originalPrice: 5199,
-    salePrice: 1699,
-    rating: 5,
-    reviewCount: 35,
-    image: "/images/homepage/26_rectangle_1682.webp",
-    secondaryImage: "/images/homepage/30_rectangle_1682.webp",
-    isSale: true,
-    strikeOriginalPrice: true,
-  },
-  {
-    id: 2,
-    title: "ARDOR - Handmade Leather Card Holder Wallet",
-    category: "Wallets",
-    originalPrice: 5199,
-    salePrice: 1699,
-    rating: 5,
-    reviewCount: 35,
-    image: "/images/homepage/25_rectangle_1682.webp",
-    secondaryImage: "/images/homepage/31_rectangle_1682.webp",
-  },
-  {
-    id: 3,
-    title: "ARDOR - Handmade Leather Card Holder Wallet",
-    category: "Cases",
-    originalPrice: 5199,
-    salePrice: 1699,
-    rating: 5,
-    reviewCount: 35,
-    image: "/images/homepage/27_rectangle_1682.webp",
-    secondaryImage: "/images/homepage/32_rectangle_1682.webp",
-  },
-  {
-    id: 4,
-    title: "ARDOR - Handmade Leather Card Holder Wallet",
-    category: "Belts",
-    originalPrice: 5199,
-    salePrice: 1699,
-    rating: 5,
-    reviewCount: 35,
-    image: "/images/homepage/28_rectangle_1682.webp",
-    secondaryImage: "/images/homepage/33_rectangle_1682.webp",
-    isSale: true,
-  },
-  {
-    id: 5,
-    title: "ARDOR - Handmade Leather Card Holder Wallet",
-    category: "Keychains",
-    originalPrice: 5199,
-    salePrice: 1699,
-    rating: 5,
-    reviewCount: 35,
-    image: "/images/homepage/29_rectangle_1682.webp",
-    secondaryImage: "/images/homepage/34_rectangle_1682.webp",
-  },
-]
-
 const CATEGORIES = ["All", "Wallets", "Keychains", "Cases", "Belts"]
+
+// Selecting a category opens the matching category page, which lists the
+// products belonging to that category straight from the backend database.
+const CATEGORY_ROUTES: Record<string, string> = {
+  All: "/products",
+  Wallets: "/categories/wallets",
+  Keychains: "/categories/keychains",
+  Cases: "/categories/cases",
+  Belts: "/categories/belts",
+}
 
 const PRODUCT_LEFT_POSITIONS = [
   "lg:left-[6.25cqw]",
@@ -95,10 +45,11 @@ const FALLBACK_SECONDARY_IMAGE =
   "/images/homepage/30_rectangle_1682.webp"
 
 export function ProductsSection({
-  initialProducts = PRODUCTS_CATALOG,
+  initialProducts = [],
 }: {
   initialProducts?: Product[]
 }) {
+  const router = useRouter()
   const [selectedCategory, setSelectedCategory] = useState("All")
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -123,13 +74,7 @@ export function ProductsSection({
     }
   }, [])
 
-  const filteredProducts =
-    selectedCategory === "All"
-      ? initialProducts
-      : initialProducts.filter(
-          (product) =>
-            product.category.toLowerCase() === selectedCategory.toLowerCase(),
-        )
+  const displayProducts = initialProducts.slice(0, 5)
 
   return (
     <section className="w-full font-['Manrope']">
@@ -185,6 +130,7 @@ export function ProductsSection({
                         onClick={() => {
                           setSelectedCategory(category)
                           setDropdownOpen(false)
+                          router.push(CATEGORY_ROUTES[category] ?? "/products")
                         }}
                         className={`w-full px-4 py-2.5 text-left text-xs font-semibold transition-all focus-visible:bg-amber-50 focus-visible:text-amber-800 focus-visible:outline-none lg:px-[0.833333cqw] lg:py-[0.416667cqw] lg:text-[0.625cqw] ${
                           selectedCategory === category
@@ -202,9 +148,8 @@ export function ProductsSection({
           </header>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:absolute lg:inset-0 lg:block">
-            {filteredProducts.slice(0, 5).map((item, index) => {
-              const secondaryImage =
-                item.secondaryImage || FALLBACK_SECONDARY_IMAGE
+            {displayProducts.map((item, index) => {
+              const secondaryImage = item.secondaryImage || item.image
 
               return (
                 <article

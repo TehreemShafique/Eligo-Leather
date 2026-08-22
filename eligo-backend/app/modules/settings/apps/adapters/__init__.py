@@ -196,6 +196,9 @@ async def _supabase_fetch_reviews(payload: dict) -> dict:
             "limit": str(per_page),
             "offset": str(offset),
         }
+        # Storefront reads only ever see approved reviews; admin fetches all.
+        if payload.get("status"):
+            params["status"] = f"eq.{payload['status']}"
         if payload.get("external_id"):
             params["product_id"] = f"eq.{payload['external_id']}"
 
@@ -215,16 +218,19 @@ async def _supabase_fetch_reviews(payload: dict) -> dict:
 
 async def _supabase_post_review(payload: dict) -> dict:
     """Supabase Reviews - action: post_review.
-    Payload: {external_id, reviewer_name, reviewer_email, rating, title, body}
+    Payload: {external_id?, reviewer_name, reviewer_email, rating, title, body}
+    Customer-submitted reviews always land as 'pending' until an admin
+    approves them via update_review_status.
     """
     try:
         body = {
-            "product_id": payload["external_id"],
+            "product_id": payload.get("external_id"),
             "reviewer_name": payload["reviewer_name"],
-            "reviewer_email": payload["reviewer_email"],
+            "reviewer_email": payload.get("reviewer_email", ""),
             "rating": payload["rating"],
             "title": payload.get("title", ""),
             "body": payload["body"],
+            "status": "pending",
         }
         headers = await _supabase_headers()
         headers["Prefer"] = "return=representation"  # ask PostgREST to return the created row

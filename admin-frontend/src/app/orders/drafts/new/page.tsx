@@ -20,11 +20,12 @@ import {
   CaretDown,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api"
 
 interface Variant {
   id: number
   title: string
-  available: number
+  available: number | null
   price: number
 }
 
@@ -85,38 +86,20 @@ export default function AdminCreateDraftOrderPage() {
   const [showDiscountModal, setShowDiscountModal] = useState(false)
   const [showShippingModal, setShowShippingModal] = useState(false)
 
-  // Product Selection Modal State (Picture 2)
-  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([
-    {
-      id: 1,
-      title: "APEX - Waxy Handmade Keychain",
-      image: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=200",
-      variants: [
-        { id: 101, title: "Tan", available: 12, price: 1199 },
-        { id: 102, title: "Dark Brown", available: 24, price: 1199 },
-        { id: 103, title: "Maroon", available: 12, price: 1199 },
-      ],
-    },
-    {
-      id: 2,
-      title: "ARDOR - Handmade Leather Card Holder Wallet",
-      image: "https://images.unsplash.com/photo-1606503153255-59d8b8b82176?auto=format&fit=crop&q=80&w=200",
-      variants: [
-        { id: 201, title: "Dark Grain", available: 7, price: 1699 },
-        { id: 202, title: "Maroon", available: 7, price: 1699 },
-        { id: 203, title: "Dark Brown", available: 20, price: 1699 },
-      ],
-    },
-    {
-      id: 3,
-      title: "GRACIOUS - Handmade Trifold Leather Wallet",
-      image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=200",
-      variants: [
-        { id: 301, title: "Black LW007", available: 15, price: 2799 },
-        { id: 302, title: "Tan LW008", available: 10, price: 2799 },
-      ],
-    },
-  ])
+  // Product Selection Modal State (Picture 2) — loaded live from the database
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([])
+
+  // Real customers fetched from the database
+  interface DbCustomer {
+    id: number
+    first_name: string | null
+    last_name: string | null
+    email: string | null
+    phone: string | null
+    location: string | null
+    postal_code: string | null
+  }
+  const [dbCustomers, setDbCustomers] = useState<DbCustomer[]>([])
 
   const [productSearch, setProductSearch] = useState("")
   const [selectedVariantIds, setSelectedVariantIds] = useState<number[]>([])
@@ -130,40 +113,16 @@ export default function AdminCreateDraftOrderPage() {
   const [customWeight, setCustomWeight] = useState("0")
   const [customWeightUnit, setCustomWeightUnit] = useState("kg")
 
-  // Sample Customers
-  const SAMPLE_CUSTOMERS = [
-    {
-      id: 101,
-      name: "Asjad Ali",
-      email: "asjad.ali@example.com",
-      phone: "+92 326 0890680",
-      address: "House #302 street #14 gulbahar block bahria town Lahore",
-    },
-    {
-      id: 102,
-      name: "danyal sajid",
-      email: "danyal@example.com",
-      phone: "03115133191",
-      address: "Tarbela Ghazi, Pakistan",
-    },
-    {
-      id: 103,
-      name: "Raja Khubaib",
-      email: "raja.k@example.com",
-      phone: "03338880607",
-      address: "Adiala Road, Rawalpindi, Pakistan",
-    },
-  ]
-
-  // Fetch product catalog from backend API if available
+  // Fetch real product catalog + customers from the backend database
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/orders/products-catalog")
-      .then((res) => (res.ok ? res.json() : null))
+    apiFetch<{ products: CatalogProduct[] }>("/api/v1/orders/products-catalog")
       .then((data) => {
-        if (data?.products && Array.isArray(data.products)) {
-          setCatalogProducts(data.products)
-        }
+        if (Array.isArray(data?.products)) setCatalogProducts(data.products)
       })
+      .catch(() => toast.error("Could not load product catalog from database"))
+
+    apiFetch<DbCustomer[]>("/api/v1/customers/?limit=100&skip=0")
+      .then((data) => { if (Array.isArray(data)) setDbCustomers(data) })
       .catch(() => {})
   }, [])
 
@@ -258,8 +217,13 @@ export default function AdminCreateDraftOrderPage() {
   }
 
   const handleSaveDraft = async () => {
+    if (items.length === 0) {
+      toast.error("Add at least one product to create an order.")
+      return
+    }
     setSaving(true)
 
+    const nameParts = (selectedCustomer?.name || "").trim().split(/\s+/)
     const payload = {
       channel: "Online Store",
       currency: currency,
@@ -270,11 +234,20 @@ export default function AdminCreateDraftOrderPage() {
       payment_status: "pending",
       fulfillment_status: "unfulfilled",
       delivery_status: "pending",
+      first_name: nameParts[0] || "",
+      last_name: nameParts.slice(1).join(" "),
+      email: selectedCustomer?.email && selectedCustomer.email.includes("@") ? selectedCustomer.email : "",
+      phone: selectedCustomer?.phone || "",
+      city: selectedCustomer?.address || "",
+      country: market,
+      customer_id: selectedCustomer?.id,
       shipping_address: selectedCustomer?.address || "",
       note: notes,
       tags: tags,
-      destination: selectedCustomer?.address?.includes("Lahore") ? "Lahore" : "Pakistan",
+      destination: selectedCustomer?.address || market,
       items: items.map((i) => ({
+        product_id: i.product_id ?? null,
+        variant_id: i.variant_id ?? null,
         product_name: i.product_name,
         variant_title: i.variant_title || "",
         quantity: i.quantity,
@@ -285,32 +258,27 @@ export default function AdminCreateDraftOrderPage() {
     }
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/create-order", {
+      const data = await apiFetch<{ order_number?: string }>("/api/v1/orders/create-order", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-
-      if (res.ok) {
-        const data = await res.json()
-        toast.success(`Order ${data.order_number || "#1340"} created and saved in PostgreSQL DB!`)
-      } else {
-        toast.success("Order created successfully in database!")
-      }
-    } catch (e) {
-      toast.success("Order created successfully!")
-    } finally {
-      setSaving(false)
+      toast.success(`Order ${data.order_number || ""} created in the database!`)
       router.push("/orders")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to create the order")
+      setSaving(false)
     }
   }
 
-  const filteredCustomers = SAMPLE_CUSTOMERS.filter(
-    (c) =>
-      c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      c.email.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      c.phone.includes(customerSearch)
-  )
+  const filteredCustomers = dbCustomers.filter((c) => {
+    const name = `${c.first_name || ""} ${c.last_name || ""}`.trim()
+    const q = customerSearch.toLowerCase()
+    return (
+      name.toLowerCase().includes(q) ||
+      (c.email || "").toLowerCase().includes(q) ||
+      (c.phone || "").includes(customerSearch)
+    )
+  })
 
   if (!mounted) return null
 
@@ -549,20 +517,32 @@ export default function AdminCreateDraftOrderPage() {
 
                 {customerSearch.trim() && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 divide-y divide-gray-100 max-h-40 overflow-y-auto text-xs">
-                    {filteredCustomers.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedCustomer(c)
-                          setCustomerSearch("")
-                        }}
-                        className="w-full p-2 text-left hover:bg-gray-50 block"
-                      >
-                        <span className="font-bold text-gray-900 block">{c.name}</span>
-                        <span className="text-[11px] text-gray-500">{c.phone}</span>
-                      </button>
-                    ))}
+                    {filteredCustomers.length === 0 && (
+                      <div className="p-2 text-gray-500">No customers found in database</div>
+                    )}
+                    {filteredCustomers.map((c) => {
+                      const name = `${c.first_name || ""} ${c.last_name || ""}`.trim() || c.email || "Unnamed"
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomer({
+                              id: c.id,
+                              name,
+                              email: c.email || "",
+                              phone: c.phone || "",
+                              address: c.location || "",
+                            })
+                            setCustomerSearch("")
+                          }}
+                          className="w-full p-2 text-left hover:bg-gray-50 block"
+                        >
+                          <span className="font-bold text-gray-900 block">{name}</span>
+                          <span className="text-[11px] text-gray-500">{c.phone || c.email}</span>
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -662,6 +642,13 @@ export default function AdminCreateDraftOrderPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
+                  {catalogProducts.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-6 px-3 text-center text-gray-500">
+                        No products found in database
+                      </td>
+                    </tr>
+                  )}
                   {catalogProducts.map((p) => {
                     const allVariantIds = p.variants.map((v) => v.id)
                     const isParentSelected = allVariantIds.every((id) => selectedVariantIds.includes(id))
@@ -680,7 +667,11 @@ export default function AdminCreateDraftOrderPage() {
                           </td>
                           <td className="py-2 px-3 flex items-center gap-2.5" colSpan={3}>
                             <div className="w-8 h-8 rounded bg-gray-200 overflow-hidden relative shrink-0">
-                              <Image src={p.image} alt={p.title} fill unoptimized className="object-cover" />
+                              {p.image ? (
+                                <Image src={p.image} alt={p.title} fill unoptimized className="object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-400"><ShoppingBag className="w-4 h-4" /></div>
+                              )}
                             </div>
                             <span className="text-gray-900 font-bold">{p.title}</span>
                           </td>
@@ -703,7 +694,7 @@ export default function AdminCreateDraftOrderPage() {
                                 {v.title}
                               </td>
                               <td className="py-2 px-3 text-right text-gray-600 font-mono">
-                                {v.available}
+                                {v.available ?? "—"}
                               </td>
                               <td className="py-2 px-3 text-right font-medium text-gray-900">
                                 Rs {v.price.toLocaleString()}.00 PKR

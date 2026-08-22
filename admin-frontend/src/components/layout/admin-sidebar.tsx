@@ -201,7 +201,6 @@ export function AdminSidebar() {
               icon={ShoppingBagOpen}
               label="Orders"
               active={pathname === "/orders"}
-              badge="22"
             />
             <div className="mt-0.5 pl-4 space-y-0.5">
               <SubItem href="/orders/drafts" label="Drafts" active={pathname === "/orders/drafts"} />

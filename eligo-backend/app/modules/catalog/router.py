@@ -61,13 +61,15 @@ async def list_products(
     category: str | None = Query(None),
     vendor: str | None = Query(None),
     search: str | None = Query(None),
+    collection: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
     return await service.list_products(
         db, status=status_filter, category=category,
-        vendor=vendor, search=search, skip=skip, limit=limit,
+        vendor=vendor, search=search, collection=collection,
+        skip=skip, limit=limit,
     )
 
 

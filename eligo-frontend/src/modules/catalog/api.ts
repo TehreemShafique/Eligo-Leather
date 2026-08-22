@@ -14,6 +14,8 @@ export type ListProductsParams = {
   status?: ProductStatus
   category?: ProductCategory
   search?: string
+  /** Collection id or url_handle (or a collection type like "wallets"). */
+  collection?: string
   skip?: number
   limit?: number
 }
@@ -38,11 +40,14 @@ export async function listProducts(params: ListProductsParams = {}): Promise<Pro
       status,
       category,
       search,
+      collection,
       skip = 0,
       limit = PAGINATION.defaultLimit,
     } = params
 
-    const query = buildQueryString({ status, category, search, skip, limit })
+    const query = buildQueryString({
+      status, category, search, collection, skip, limit,
+    })
     const data = await api.get(`/catalog/products${query}`, { auth: false, ...CATALOG_CACHE })
     if (!data || !Array.isArray(data)) return []
     return ProductListOutSchema.array().parse(data)

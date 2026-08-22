@@ -10,6 +10,7 @@ from app.modules.settings.customer_accounts.router import router as customer_acc
 from app.modules.settings.shipping_and_delivery.router import router as shipping_router
 from app.modules.settings.locations.router import router as locations_router
 from app.modules.settings.apps.router import router as apps_router
+from app.modules.settings.apps.router import public_router as apps_public_router
 from app.modules.settings.sales_channels.router import router as sales_channels_router
 from app.modules.settings.sales_channels.router import webhook_router as sales_channels_webhook_router
 from app.modules.settings.customer_events.router import router as customer_events_router
@@ -31,6 +32,7 @@ router.include_router(customer_accounts_router)
 router.include_router(shipping_router)
 router.include_router(locations_router)
 router.include_router(apps_router)
+router.include_router(apps_public_router)
 router.include_router(sales_channels_router)
 router.include_router(sales_channels_webhook_router)
 router.include_router(customer_events_router)

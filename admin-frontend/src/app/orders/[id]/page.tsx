@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, use, useCallback } from "react"
+import { useState, useEffect, use, useCallback, useRef } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -20,6 +20,13 @@ import {
   WarningCircle,
   Plus,
   Spinner,
+  Trash,
+  TextB,
+  TextItalic,
+  TextStrikethrough,
+  Quotes,
+  LinkSimple,
+  Smiley,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
@@ -87,40 +94,33 @@ interface OrderData {
   customer_email?: string | null
 }
 
-const EVENT_ICONS: Record<string, string> = {
-  order_created: "\u{1F4E6}",
-  payment_updated: "\u{1F4B0}",
-  fulfillment_updated: "\u2705",
-  delivery_updated: "\u{1F69A}",
-  tracking_updated: "\u{1F4CD}",
-  email_sent: "\u2709\uFE0F",
-  note_added: "\u{1F4DD}",
-  tag_added: "\u{1F3F7}\uFE0F",
-  tag_removed: "\u{1F3F7}\uFE0F",
-  status_changed: "\u{1F504}",
-  courier_update: "\u{1F406}",
-  internal_comment: "\u{1F4AC}",
-  address_updated: "\u{1F4CD}",
-  order_archived: "\u{1F4C1}",
-  return_requested: "\u21A9\uFE0F",
-  return_approved: "\u2705",
-  return_received: "\u{1F4E6}",
-  restock_completed: "\u{1F3EA}",
-}
+type FeedItem =
+  | {
+      kind: "event"
+      id: number
+      description: string
+      event_type: string
+      actor_name: string | null
+      created_at: string
+    }
+  | {
+      kind: "comment"
+      id: number
+      body: string
+      author_name: string | null
+      is_customer_visible: boolean
+      created_at: string
+    }
 
-function timeAgo(dateStr: string): string {
-  const now = Date.now()
-  const then = new Date(dateStr).getTime()
-  const diffSec = Math.floor((now - then) / 1000)
-  if (diffSec < 60) return "Just now"
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDay = Math.floor(diffHr / 24)
-  if (diffDay === 1) return "Yesterday"
-  if (diffDay < 7) return `${diffDay} days ago`
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+function dayLabel(dateStr: string): string {
+  const d = new Date(dateStr)
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diffDays = Math.round((startOfToday.getTime() - startOfDay.getTime()) / 86400000)
+  if (diffDays <= 0) return "Today"
+  if (diffDays === 1) return "Yesterday"
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long" })
 }
 
 function formatTime(dateStr: string): string {
@@ -150,6 +150,9 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const [commentText, setCommentText] = useState("")
   const [newTag, setNewTag] = useState("")
   const [internalNote, setInternalNote] = useState("")
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
+  const [editNoteText, setEditNoteText] = useState("")
+  const composerRef = useRef<HTMLTextAreaElement | null>(null)
 
   const fetchOrder = useCallback(async () => {
     if (!id) return
@@ -246,6 +249,47 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
     } catch { toast.error("Failed to post comment") }
   }
 
+  const handleSaveEditedNote = async (noteId: number) => {
+    if (!editNoteText.trim()) return
+    try {
+      await apiFetch(`/api/v1/orders/notes/${noteId}?body=${encodeURIComponent(editNoteText)}`, {
+        method: "PATCH",
+      })
+      setEditingNoteId(null); setEditNoteText("")
+      fetchNotes(); fetchAuditLog()
+      toast.success("Comment updated")
+    } catch { toast.error("Failed to update comment") }
+  }
+
+  const handleDeleteNote = async (noteId: number) => {
+    try {
+      await apiFetch(`/api/v1/orders/notes/${noteId}`, { method: "DELETE" })
+      fetchNotes(); fetchAuditLog()
+      toast.success("Comment removed from timeline")
+    } catch { toast.error("Failed to delete comment") }
+  }
+
+  const applyFormat = (before: string, after: string = before) => {
+    const el = composerRef.current
+    if (!el) return
+    const start = el.selectionStart ?? commentText.length
+    const end = el.selectionEnd ?? commentText.length
+    const next =
+      commentText.slice(0, start) + before + commentText.slice(start, end) + after + commentText.slice(end)
+    setCommentText(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(start + before.length, end + before.length)
+    })
+  }
+
+  const appendEmoji = (emoji: string) => {
+    const el = composerRef.current
+    const start = el?.selectionStart ?? commentText.length
+    const next = commentText.slice(0, start) + emoji + commentText.slice(start)
+    setCommentText(next)
+  }
+
   const handleSaveNote = async () => {
     if (!order) return
     try {
@@ -281,6 +325,33 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const tags = order.tags ? order.tags.split(",").map(t => t.trim()).filter(Boolean) : []
   const isPaid = order.payment_status === "paid"
   const isFulfilled = order.fulfillment_status === "fulfilled"
+
+  const feed: FeedItem[] = [
+    ...auditLogs.map((log): FeedItem => ({
+      kind: "event",
+      id: log.id,
+      description: log.description,
+      event_type: log.event_type,
+      actor_name: log.actor_name,
+      created_at: log.created_at,
+    })),
+    ...notes.map((n): FeedItem => ({
+      kind: "comment",
+      id: n.id,
+      body: n.body,
+      author_name: n.author_name,
+      is_customer_visible: n.is_customer_visible,
+      created_at: n.created_at,
+    })),
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+  const feedGroups: { label: string; items: FeedItem[] }[] = []
+  for (const item of feed) {
+    const label = dayLabel(item.created_at)
+    const lastGroup = feedGroups[feedGroups.length - 1]
+    if (lastGroup && lastGroup.label === label) lastGroup.items.push(item)
+    else feedGroups.push({ label, items: [item] })
+  }
 
   return (
     <div className="space-y-5 font-sans max-w-[1280px] mx-auto pb-10 animate-fade-in">
@@ -383,30 +454,82 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
           {/* Timeline */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-4">
             <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-3">Timeline</h3>
-            <form onSubmit={handlePostComment} className="flex items-start gap-2">
-              <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Add a comment to the timeline..." className="flex-1 h-9 px-3 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/20 focus:border-amber-800" />
-              <button type="submit" disabled={!commentText.trim()} className="px-3 h-9 bg-amber-800 hover:bg-amber-900 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shrink-0">Post</button>
+            <form onSubmit={handlePostComment} className="space-y-2">
+              <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-t-xl border-b-0 flex-wrap">
+                <button type="button" title="Bold" onClick={() => applyFormat("**")} className="p-1.5 rounded-md hover:bg-gray-200 text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"><TextB className="w-3.5 h-3.5" /></button>
+                <button type="button" title="Italic" onClick={() => applyFormat("_")} className="p-1.5 rounded-md hover:bg-gray-200 text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"><TextItalic className="w-3.5 h-3.5" /></button>
+                <button type="button" title="Strikethrough" onClick={() => applyFormat("~~")} className="p-1.5 rounded-md hover:bg-gray-200 text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"><TextStrikethrough className="w-3.5 h-3.5" /></button>
+                <span className="w-px h-4 bg-gray-300 mx-0.5" />
+                <button type="button" title="Quote" onClick={() => applyFormat("> ")} className="p-1.5 rounded-md hover:bg-gray-200 text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"><Quotes className="w-3.5 h-3.5" /></button>
+                <button type="button" title="Link" onClick={() => applyFormat("[", "](https://)")} className="p-1.5 rounded-md hover:bg-gray-200 text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"><LinkSimple className="w-3.5 h-3.5" /></button>
+                <span className="w-px h-4 bg-gray-300 mx-0.5" />
+                <span className="flex items-center gap-0.5">
+                  {["\u{1F44D}", "\u{1F4E6}", "\u{1F69A}", "\u2705", "\u26A0\uFE0F"].map((emoji) => (
+                    <button key={emoji} type="button" onClick={() => appendEmoji(emoji)} className="p-1 rounded-md hover:bg-gray-200 text-sm cursor-pointer transition-colors leading-none">{emoji}</button>
+                  ))}
+                  <Smiley className="w-3.5 h-3.5 text-gray-400 ml-0.5" />
+                </span>
+              </div>
+              <textarea
+                ref={composerRef}
+                rows={2}
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Add a comment to the timeline..."
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-b-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/20 focus:border-amber-800 resize-none"
+              />
+              <div className="flex justify-end">
+                <button type="submit" disabled={!commentText.trim()} className="px-3 h-8 bg-amber-800 hover:bg-amber-900 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shrink-0">Post</button>
+              </div>
             </form>
-            <div className="space-y-0">
-              {auditLogs.length === 0 ? <p className="text-xs text-gray-400 text-center py-4">No timeline events yet</p> : auditLogs.map((log, idx) => (
-                <div key={log.id} className="flex gap-3 relative">
-                  <div className="flex flex-col items-center">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 ${idx === 0 ? "bg-amber-100 ring-2 ring-amber-300" : "bg-gray-100"}`}>
-                      {idx === 0 ? <CheckCircle className="w-4 h-4 text-amber-800" /> : <span className="text-xs">{EVENT_ICONS[log.event_type] || "\u{1F4CC}"}</span>}
-                    </div>
-                    {idx < auditLogs.length - 1 && <div className="w-px flex-1 bg-gray-200 my-1" />}
+            <div className="space-y-5 pt-1">
+              {feedGroups.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">No timeline events yet</p>
+              ) : (
+                feedGroups.map((group) => (
+                  <div key={group.label} className="space-y-0">
+                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wide pb-2">{group.label}</div>
+                    {group.items.map((item) => (
+                      <div key={`${item.kind}-${item.id}`} className="flex gap-3 relative">
+                        <div className="flex flex-col items-center">
+                          <CheckCircle weight="fill" className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <div className="w-px flex-1 bg-gray-200 my-1" />
+                        </div>
+                        <div className="pb-4 flex-1 min-w-0">
+                          {item.kind === "event" ? (
+                            <>
+                              <p className="text-xs text-gray-800 leading-relaxed">{item.description}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] text-gray-400">{formatTime(item.created_at)}</span>
+                                {item.actor_name && <><span className="text-[10px] text-gray-300">{"\u00B7"}</span><span className="text-[10px] text-gray-500 font-semibold">{item.actor_name}</span></>}
+                              </div>
+                            </>
+                          ) : editingNoteId === item.id ? (
+                            <div className="space-y-2">
+                              <textarea rows={2} value={editNoteText} onChange={(e) => setEditNoteText(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/20 focus:border-amber-800 resize-none" />
+                              <div className="flex gap-1.5">
+                                <button onClick={() => handleSaveEditedNote(item.id)} className="px-2.5 h-7 bg-amber-800 hover:bg-amber-900 text-white text-[11px] font-bold rounded-lg cursor-pointer">Save</button>
+                                <button onClick={() => { setEditingNoteId(null); setEditNoteText("") }} className="px-2.5 h-7 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold rounded-lg cursor-pointer">Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{item.body}</p>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="text-[10px] text-gray-400">{formatTime(item.created_at)}</span>
+                                {item.author_name && <><span className="text-[10px] text-gray-300">{"\u00B7"}</span><span className="text-[10px] text-gray-500 font-semibold">{item.author_name}</span></>}
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-semibold">Comment</span>
+                                <button onClick={() => { setEditingNoteId(item.id); setEditNoteText(item.body) }} className="text-[10px] font-bold text-gray-500 hover:text-amber-800 cursor-pointer inline-flex items-center gap-0.5"><PencilSimple className="w-3 h-3" />Edit</button>
+                                <button onClick={() => handleDeleteNote(item.id)} className="text-[10px] font-bold text-gray-500 hover:text-red-600 cursor-pointer inline-flex items-center gap-0.5"><Trash className="w-3 h-3" />Delete</button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="pb-4 flex-1 min-w-0">
-                    <p className="text-xs text-gray-800 leading-relaxed">{log.description}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[10px] text-gray-400">{timeAgo(log.created_at)}</span>
-                      <span className="text-[10px] text-gray-300">{"\u00B7"}</span>
-                      <span className="text-[10px] text-gray-400">{formatTime(log.created_at)}</span>
-                      {log.actor_name && <><span className="text-[10px] text-gray-300">{"\u00B7"}</span><span className="text-[10px] text-gray-500 font-semibold">{log.actor_name}</span></>}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -429,17 +552,6 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
             <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2">Note</h3>
             <textarea rows={3} value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="Add a private note about this order..." className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/20 focus:border-amber-800 resize-none" />
             <button onClick={handleSaveNote} className="px-3 py-1.5 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Save Note</button>
-            {notes.length > 0 && <div className="pt-2 border-t border-gray-100 space-y-2">
-              {notes.map(n => (
-                <div key={n.id} className={`p-2 rounded-lg border ${n.is_customer_visible ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200"}`}>
-                  <p className="text-xs text-gray-700">{n.body}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] text-gray-400">{timeAgo(n.created_at)}</span>
-                    {n.author_name && <span className="text-[10px] text-gray-500 font-semibold">{"\u00B7"} {n.author_name}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>}
           </div>
 
           {/* Tags Card */}

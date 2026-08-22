@@ -12,22 +12,6 @@ const ProductCategorySchema = z.enum([
 
 const ProductStatusSchema = z.enum(["Active", "Draft", "Archived"])
 
-const ProductListOutSchema = z.object({
-  id: z.number(),
-  title: z.string(),
-  status: ProductStatusSchema,
-  category: ProductCategorySchema,
-  product_type: z.string().nullable(),
-  vendor: z.string(),
-  tags: z.string().nullable(),
-  url_handle: z.string().nullable().optional(),
-  price: z.string().nullable().optional(),
-  compare_at_price: z.string().nullable().optional(),
-  image_url: z.string().nullable().optional(),
-  created_at: z.string(),
-  updated_at: z.string(),
-})
-
 const VariantOutSchema = z.object({
   id: z.number(),
   product_id: z.number(),
@@ -58,6 +42,25 @@ const ProductImageOutSchema = z.object({
   created_at: z.string(),
 })
 
+const ProductListOutSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  status: ProductStatusSchema,
+  category: ProductCategorySchema,
+  product_type: z.string().nullable(),
+  vendor: z.string(),
+  tags: z.string().nullable(),
+  url_handle: z.string().nullable().optional(),
+  price: z.string().nullable().optional(),
+  compare_at_price: z.string().nullable().optional(),
+  image_url: z.string().nullable().optional(),
+  categories: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  variants: z.array(VariantOutSchema).optional().default([]),
+  images: z.array(ProductImageOutSchema).optional().default([]),
+})
+
 const ProductOutSchema = z.object({
   id: z.number(),
   title: z.string(),
@@ -70,8 +73,13 @@ const ProductOutSchema = z.object({
   theme_template: z.string(),
   seo_title: z.string().nullable(),
   seo_description: z.string().nullable(),
+  meta_description: z.string().nullish(),
+  material: z.string().nullish(),
+  dimensions: z.string().nullish(),
+  shipping_return_policy: z.string().nullish(),
   url_handle: z.string().nullable(),
   tags: z.string().nullable(),
+  categories: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
   variants: z.array(VariantOutSchema),
@@ -85,10 +93,12 @@ const CollectionOutSchema = z.object({
   image_url: z.string().nullable(),
   conditions: z.string().nullable().optional(),
   channels: z.string().nullable().optional(),
-  theme_template: z.string(),
-  seo_title: z.string().nullable(),
-  seo_description: z.string().nullable(),
-  url_handle: z.string().nullable(),
+  collection_type: z.string(),
+  seo_title: z.string().nullable().optional(),
+  seo_description: z.string().nullable().optional(),
+  meta_description: z.string().nullable().optional(),
+  url_handle: z.string().nullable().optional(),
+  parent_id: z.number().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 })

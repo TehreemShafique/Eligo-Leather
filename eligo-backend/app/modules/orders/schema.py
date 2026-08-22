@@ -113,6 +113,9 @@ class OrderOut(BaseModel):
     id: int
     order_number: str
     customer_id: int | None
+    customer_name: str | None = None
+    customer_email: str | None = None
+    customer_phone: str | None = None
     location_id: int | None
     fulfill_by: datetime | None
     cancelled_at: datetime | None

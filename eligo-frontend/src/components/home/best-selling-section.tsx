@@ -14,67 +14,20 @@ interface ProductItem {
   isSale?: boolean
 }
 
-const DEFAULT_BEST_SELLERS: ProductItem[] = [
-  {
-    id: 1,
-    title: "ARDOR - Handmade Leather Card Holder Wallet",
-    originalPrice: 5199,
-    salePrice: 1699,
-    rating: 5,
-    reviewCount: 35,
-    image: "/images/homepage/30_rectangle_1682.webp",
-    isSale: true,
-  },
-  {
-    id: 2,
-    title: "ARDOR - Handmade Leather Card Holder Wallet",
-    originalPrice: 5199,
-    salePrice: 1699,
-    rating: 5,
-    reviewCount: 35,
-    image: "/images/homepage/31_rectangle_1682.webp",
-  },
-  {
-    id: 3,
-    title: "ARDOR - Handmade Leather Card Holder Wallet",
-    originalPrice: 5199,
-    salePrice: 1699,
-    rating: 5,
-    reviewCount: 35,
-    image: "/images/homepage/32_rectangle_1682.webp",
-  },
-  {
-    id: 4,
-    title: "ARDOR - Handmade Leather Card Holder Wallet",
-    originalPrice: 5199,
-    salePrice: 1699,
-    rating: 5,
-    reviewCount: 35,
-    image: "/images/homepage/33_rectangle_1682.webp",
-    isSale: true,
-  },
-  {
-    id: 5,
-    title: "ARDOR - Handmade Leather Card Holder Wallet",
-    originalPrice: 5199,
-    salePrice: 1699,
-    rating: 5,
-    reviewCount: 35,
-    image: "/images/homepage/34_rectangle_1682.webp",
-  },
-]
-
-const FALLBACK_SECONDARY_IMAGE = "/images/homepage/26_rectangle_1682.webp"
-
 interface BestSellingSectionProps {
   products?: ProductItem[]
 }
 
 export function BestSellingSection({
-  products = DEFAULT_BEST_SELLERS,
+  products = [],
 }: BestSellingSectionProps) {
-  const displayItems =
-    products.length > 0 ? products.slice(0, 5) : DEFAULT_BEST_SELLERS
+  // Real catalog products only; the section hides itself while the store has
+  // nothing active in the database yet.
+  const displayItems = products.slice(0, 5)
+
+  if (displayItems.length === 0) {
+    return null
+  }
 
   return (
     <section className="overflow-hidden bg-slate-50 py-16 font-['Manrope'] sm:py-20 min-[1920px]:h-[670px] min-[1920px]:pt-[60px] min-[1920px]:pb-[34px]">
@@ -99,7 +52,7 @@ export function BestSellingSection({
                   className="object-cover opacity-100 transition-all duration-500 ease-in-out group-hover/image:scale-105 group-hover/image:opacity-0"
                 />
                 <Image
-                  src={item.secondaryImage || FALLBACK_SECONDARY_IMAGE}
+                  src={item.secondaryImage || item.image}
                   alt={`${item.title} alternate view`}
                   fill
                   sizes="(min-width: 1920px) 320px, (min-width: 1280px) 20vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"

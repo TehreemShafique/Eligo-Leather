@@ -5,10 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.catalog.model import (
-    Product, ProductVariant, ProductImage, Collection,
+    Product, ProductVariant, ProductImage, Collection, ProductCollection,
     Location, InventoryItem,
     PurchaseOrder, PurchaseOrderItem,
     Transfer, GiftCard,
+    CollectionType,
 )
 from app.modules.catalog.schema import (
     ProductCreate, ProductUpdate, ProductListOut,
@@ -23,6 +24,58 @@ from app.modules.catalog.schema import (
     GiftCardCreate, GiftCardUpdate,
     CatalogOverview,
 )
+
+
+def _collection_descendant_ids(
+    root_ids: set[int], all_collections: list[Collection],
+) -> set[int]:
+    """All ids reachable from root_ids through collections.parent_id."""
+    children_map: dict[int | None, list[int]] = {}
+    for col in all_collections:
+        children_map.setdefault(col.parent_id, []).append(col.id)
+    scope = set(root_ids)
+    frontier = list(root_ids)
+    while frontier:
+        current = frontier.pop()
+        for child_id in children_map.get(current, []):
+            if child_id not in scope:
+                scope.add(child_id)
+                frontier.append(child_id)
+    return scope
+
+
+async def _collection_scope_filter(
+    db: AsyncSession, collection_ref: str,
+) -> "list[Collection] | None":
+    """Resolve a collection reference (id or url_handle) plus any
+    collection_type group name into the scoped collection rows."""
+    all_rows = list((await db.execute(select(Collection))).scalars().all())
+
+    target: Collection | None = None
+    if collection_ref.isdigit():
+        target = next((c for c in all_rows if c.id == int(collection_ref)), None)
+    if target is None:
+        target = next(
+            (c for c in all_rows if c.url_handle == collection_ref), None,
+        )
+
+    if target is not None:
+        scope_ids = _collection_descendant_ids({target.id}, all_rows)
+        return [c for c in all_rows if c.id in scope_ids]
+
+    type_values = {t.value for t in CollectionType}
+    if collection_ref.lower() in type_values:
+        roots = [
+            c for c in all_rows if c.collection_type == collection_ref.lower()
+        ]
+        if not roots:
+            return []
+        scope_ids = _collection_descendant_ids(
+            {c.id for c in roots}, all_rows,
+        )
+        return [c for c in all_rows if c.id in scope_ids]
+
+    return []
 
 
 # ===========================================================================
@@ -53,6 +106,15 @@ async def create_product(db: AsyncSession, data: ProductCreate) -> Product:
         images=[ProductImage(**img.model_dump()) for img in data.images],
     )
     db.add(product)
+    await db.flush()
+
+    cat_names = [c.strip() for c in (categories_str or "").split(",") if c.strip()]
+    if cat_names:
+        cols_result = await db.execute(select(Collection).where(Collection.title.in_(cat_names)))
+        cols = list(cols_result.scalars().all())
+        for c in cols:
+            db.add(ProductCollection(product_id=product.id, collection_id=c.id))
+
     await db.commit()
     await db.refresh(product, attribute_names=["variants", "images"])
     return product
@@ -100,6 +162,7 @@ async def list_products(
     category: str | None = None,
     vendor: str | None = None,
     search: str | None = None,
+    collection: str | None = None,
     skip: int = 0,
     limit: int = 50,
 ) -> list[ProductListOut]:
@@ -113,6 +176,27 @@ async def list_products(
         query = query.where(Product.category == category)
     if vendor:
         query = query.where(Product.vendor.ilike(f"%{vendor}%"))
+    if collection:
+        scoped = await _collection_scope_filter(db, collection)
+        # Unknown collection reference -> nothing belongs to it.
+        if not scoped:
+            return []
+        scope_ids = [c.id for c in scoped]
+        title_predicates = [
+            Product.categories.ilike(f"%{c.title.strip()}%")
+            for c in scoped
+            if c.title.strip()
+        ]
+        query = query.where(
+            or_(
+                Product.id.in_(
+                    select(ProductCollection.product_id).where(
+                        ProductCollection.collection_id.in_(scope_ids),
+                    ),
+                ),
+                *title_predicates,
+            ),
+        )
     if search:
         query = query.where(
             or_(
@@ -238,8 +322,31 @@ async def create_collection(db: AsyncSession, data: CollectionCreate) -> Collect
     return obj
 
 
+async def _compute_products_count_for_collections(db: AsyncSession, collections: list[Collection]) -> list[Collection]:
+    for col in collections:
+        title_stripped = col.title.strip() if col.title else ""
+        conditions = [
+            Product.id.in_(
+                select(ProductCollection.product_id).where(
+                    ProductCollection.collection_id == col.id
+                )
+            )
+        ]
+        if title_stripped:
+            conditions.append(Product.categories.ilike(f"%{title_stripped}%"))
+        
+        query = select(func.count(func.distinct(Product.id))).where(or_(*conditions))
+        res = await db.execute(query)
+        count = res.scalar() or 0
+        setattr(col, "products_count", count)
+    return collections
+
+
 async def get_collection(db: AsyncSession, col_id: int) -> Collection | None:
-    return await db.get(Collection, col_id)
+    obj = await db.get(Collection, col_id)
+    if obj:
+        await _compute_products_count_for_collections(db, [obj])
+    return obj
 
 
 async def list_collections(
@@ -261,7 +368,9 @@ async def list_collections(
         query = query.where(Collection.collection_type == collection_type)
     query = query.order_by(Collection.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
-    return list(result.scalars().all())
+    cols = list(result.scalars().all())
+    await _compute_products_count_for_collections(db, cols)
+    return cols
 
 
 async def update_collection(db: AsyncSession, col_id: int, data: CollectionUpdate) -> Collection | None:

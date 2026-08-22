@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from "react"
 import { Star, X } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { submitReview } from "@/modules/reviews/api"
+import { getApiErrorMessage } from "@/lib/api-client"
 
 const INITIAL_REVIEW = {
   name: "",
@@ -11,17 +13,40 @@ const INITIAL_REVIEW = {
   rating: 5,
 }
 
-export function WriteReviewButton() {
+export function WriteReviewButton({
+  productId,
+}: {
+  productId?: string | number | null
+} = {}) {
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [newReview, setNewReview] = useState(INITIAL_REVIEW)
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmitReview = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmitReview = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    toast.success(
-      "Thank you for your review! It will be posted after verification.",
-    )
-    setReviewModalOpen(false)
-    setNewReview(INITIAL_REVIEW)
+    if (submitting) return
+
+    setSubmitting(true)
+    try {
+      // Stored as a pending review; visible on the storefront only after an
+      // admin approves it in Settings -> Apps -> Supabase Reviews.
+      await submitReview({
+        productId,
+        name: newReview.name,
+        rating: newReview.rating,
+        title: newReview.title,
+        content: newReview.content,
+      })
+      toast.success(
+        "Thank you for your review! It will be posted after verification.",
+      )
+      setReviewModalOpen(false)
+      setNewReview(INITIAL_REVIEW)
+    } catch (error) {
+      toast.error(getApiErrorMessage(error))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -153,9 +178,10 @@ export function WriteReviewButton() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-amber-800 px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-amber-900"
+                  disabled={submitting}
+                  className="rounded-lg bg-amber-800 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-opacity hover:bg-amber-900 disabled:opacity-60"
                 >
-                  Submit Review
+                  {submitting ? "Submitting..." : "Submit Review"}
                 </button>
               </div>
             </form>

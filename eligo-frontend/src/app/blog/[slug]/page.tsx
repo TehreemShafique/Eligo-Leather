@@ -4,10 +4,28 @@ import { getBlogPostByHandle } from "@/modules/content/api"
 import { sanitizeCmsHtml } from "@/lib/sanitize-html"
 import { truncate } from "@/lib/utils"
 import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
-import { BlogDetailContent } from "@/components/blog/blog-detail-content"
+import { BlogDetailContent, type BlogFaq } from "@/components/blog/blog-detail-content"
 
 type BlogPageProps = {
   params: Promise<{ slug: string }>
+}
+
+// Blog posts store their FAQ builder output as a JSON-encoded string.
+function parseBlogFaqs(raw: string | null | undefined): BlogFaq[] | undefined {
+  if (!raw) return undefined
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return undefined
+    const items = parsed
+      .map((entry) => ({
+        question: String((entry as Record<string, unknown>)?.question ?? "").trim(),
+        answer: String((entry as Record<string, unknown>)?.answer ?? "").trim(),
+      }))
+      .filter((faq) => faq.question && faq.answer)
+    return items.length > 0 ? items : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export async function generateMetadata({ params }: BlogPageProps): Promise<Metadata> {
@@ -98,7 +116,10 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(blogJsonLd).replace(/</g, "\\u003c") }}
       />
-      <BlogDetailContent post={{ ...post, body: sanitizeCmsHtml(post.body ?? "") }} />
+      <BlogDetailContent
+        post={{ ...post, body: sanitizeCmsHtml(post.body ?? "") }}
+        faqs={parseBlogFaqs(post.faqs)}
+      />
     </>
   )
 }

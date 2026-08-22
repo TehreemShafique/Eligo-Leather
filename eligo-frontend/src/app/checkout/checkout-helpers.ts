@@ -196,6 +196,13 @@ export interface GuestOrderPayload {
   payment_status: "pending"
   fulfillment_status: "unfulfilled"
   delivery_status: "pending"
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  city: string
+  postal_code: string
+  country: string
   shipping_address: string
   note: string
   destination: string
@@ -207,11 +214,10 @@ function round2(value: number): number {
 }
 
 /**
- * Builds the guest-order request payload using the field names the current
- * public endpoint actually accepts. The backend has no structured guest
- * name/email/phone columns yet, so the customer name and phone travel inside
- * `shipping_address` and an optional email inside `note`. No fallback email
- * is ever invented. Replace this helper once the structured contract exists.
+ * Builds the guest-order request payload for the public
+ * `POST /api/v1/orders/create-order` endpoint. Structured customer fields
+ * let the backend resolve/create the real Customer record; the combined
+ * `shipping_address` string is kept for display and courier booking.
  */
 export function buildGuestOrderPayload(
   form: CheckoutFormValues,
@@ -223,6 +229,7 @@ export function buildGuestOrderPayload(
     .trim()
   const phone = normalizePhoneNumber(form.phone.trim())
   const country = form.country.trim() || "Pakistan"
+  const contactEmail = form.email.trim()
 
   const shippingAddressParts = [
     form.address.trim(),
@@ -230,8 +237,6 @@ export function buildGuestOrderPayload(
     form.postalCode.trim(),
     country,
   ].filter(Boolean)
-
-  const contactEmail = form.email.trim()
 
   return {
     channel: "Online Store",
@@ -243,9 +248,16 @@ export function buildGuestOrderPayload(
     payment_status: "pending",
     fulfillment_status: "unfulfilled",
     delivery_status: "pending",
+    first_name: form.firstName.trim(),
+    last_name: form.lastName.trim(),
+    email: contactEmail,
+    phone,
+    city: form.city.trim(),
+    postal_code: form.postalCode.trim(),
+    country,
     shipping_address: `${customerName} | Phone: ${phone} | ${shippingAddressParts.join(", ")}`,
     note: contactEmail ? `Contact email: ${contactEmail}` : "",
-    destination: country,
+    destination: form.city.trim() || country,
     items: cart.map((item) => ({
       product_name: item.title,
       variant_title: item.color && item.color.trim() ? item.color.trim() : "Standard",

@@ -249,11 +249,12 @@ async def upload_file(
     """Upload any image format (PNG, JPG, GIF) - automatically converts to .webp format."""
     content = await file.read()
     webp_bytes, webp_filename, mime_type = service.convert_image_to_webp(content, file.filename or "image.png")
+    url_path = service.save_upload_to_disk(webp_bytes, webp_filename)
 
     file_data = FileCreate(
         filename=webp_filename,
         original_filename=file.filename or webp_filename,
-        url=f"/static/uploads/{webp_filename}",
+        url=url_path,
         mime_type=mime_type,
         size_bytes=len(webp_bytes),
         alt_text=alt_text or webp_filename,

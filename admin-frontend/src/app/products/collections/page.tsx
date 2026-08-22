@@ -34,6 +34,8 @@ const COLLECTION_HEADINGS: Record<string, string> = {
 
 const COLLECTION_ORDER = ["wallets", "belts", "cases", "keychains"]
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<CategoryItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -43,7 +45,7 @@ export default function AdminCategoriesPage() {
   const fetchCategoriesFromDB = async () => {
     setLoading(true)
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/catalog/collections/")
+      const res = await fetch(`${API_BASE}/api/v1/catalog/collections/`)
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data) && data.length > 0) {
@@ -51,9 +53,9 @@ export default function AdminCategoriesPage() {
             id: c.id,
             title: c.title,
             description: c.description,
-            productsCount: 12,
+            productsCount: c.products_count ?? 0,
             conditions: c.conditions || "Manual category collection",
-            image: c.image_url || "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=200",
+            image: c.image_url || "",
             collection_type: c.collection_type || "wallets",
           }))
           setCategories(mapped)
@@ -74,7 +76,7 @@ export default function AdminCategoriesPage() {
 
   const handleDeleteCategory = async (id: number) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/catalog/collections/${id}`, { method: "DELETE" })
+      const res = await fetch(`${API_BASE}/api/v1/catalog/collections/${id}`, { method: "DELETE" })
       if (res.ok || res.status === 204) {
         setCategories(prev => prev.filter(c => c.id !== id))
         toast.success("Category deleted successfully!")
@@ -204,26 +206,18 @@ export default function AdminCategoriesPage() {
                     <table className="eligo-table">
                       <thead>
                         <tr>
-                          <th className="eligo-th w-[12%]">Thumbnail</th>
                           <th className="eligo-th">Category Title</th>
-                          <th className="eligo-th w-[18%]">Products Count</th>
-                          <th className="eligo-th w-[22%]">Conditions / Rules</th>
-                          <th className="eligo-th w-[10%] text-right">Actions</th>
+                          <th className="eligo-th w-[25%]">Products Count</th>
+                          <th className="eligo-th w-[15%] text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {items.map((c) => (
                           <tr key={c.id} className="hover:bg-amber-50/40 transition-colors">
-                            <td className="eligo-td">
-                              <div className="w-12 h-12 rounded-xl bg-gray-100 relative overflow-hidden border border-gray-200">
-                                <Image src={c.image} alt={c.title} fill unoptimized className="object-cover" />
-                              </div>
-                            </td>
                             <td className="eligo-td font-bold text-amber-900">
                               <Link href="/products/collections/new" className="hover:underline">{c.title}</Link>
                             </td>
                             <td className="eligo-td font-semibold text-gray-900">{c.productsCount} products</td>
-                            <td className="eligo-td text-gray-600 font-mono text-[11px]">{c.conditions}</td>
                             <td className="eligo-td text-right">
                               <button
                                 type="button"

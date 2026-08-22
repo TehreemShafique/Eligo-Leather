@@ -132,24 +132,20 @@ function LeopardsCourierFormContent() {
   const [manualBookingDate, setManualBookingDate] = useState("08/12/2026")
   const [manualPieces, setManualPieces] = useState("1")
   const [manualWeightGrams, setManualWeightGrams] = useState("0")
-  const [manualCodAmount, setManualCodAmount] = useState("2799.00")
-  const [manualOrderId, setManualOrderId] = useState("#1339")
+  const [manualCodAmount, setManualCodAmount] = useState("")
+  const [manualOrderId, setManualOrderId] = useState("")
   const [manualShipperAddr, setManualShipperAddr] = useState(
     "Office # 407, 4th floor, Gulberg Empire, Executive Block, Gulberg Greens, Islamabad"
   )
   const [manualConsigneeType, setManualConsigneeType] = useState("Other")
-  const [manualDestinationCity, setManualDestinationCity] = useState("Lahore")
-  const [manualConsigneeName, setManualConsigneeName] = useState("Asjad Ali")
+  const [manualDestinationCity, setManualDestinationCity] = useState("")
+  const [manualConsigneeName, setManualConsigneeName] = useState("")
   const [manualConsigneeEmail, setManualConsigneeEmail] = useState("")
-  const [manualConsigneePhone, setManualConsigneePhone] = useState("03260890680")
+  const [manualConsigneePhone, setManualConsigneePhone] = useState("")
   const [manualConsigneePhone2, setManualConsigneePhone2] = useState("")
   const [manualConsigneePhone3, setManualConsigneePhone3] = useState("")
-  const [manualConsigneeAddress, setManualConsigneeAddress] = useState(
-    "House #302 street #14gulbahar block bahria town Lahore"
-  )
-  const [manualSpecialInstructions, setManualSpecialInstructions] = useState(
-    "GRACIOUS - Handmade Trifold Leather Wallet - Black(LW007) Qty=1"
-  )
+  const [manualConsigneeAddress, setManualConsigneeAddress] = useState("")
+  const [manualSpecialInstructions, setManualSpecialInstructions] = useState("")
 
   // Fetch single order details when redirected with ?order_id=
   useEffect(() => {
@@ -164,12 +160,14 @@ function LeopardsCourierFormContent() {
           if (data?.order) {
             const o = data.order
             setManualOrderId(o.order_number || `#${cleanId}`)
-            setManualCodAmount(String(o.total_price || "2799.00"))
-            setManualConsigneeName(o.customer_name || "Asjad Ali")
-            setManualConsigneePhone(o.customer_phone || "03260890680")
-            setManualConsigneeEmail(o.customer_email || "")
-            setManualConsigneeAddress(o.shipping_address || "House #302 street #14gulbahar block bahria town Lahore")
-            setManualDestinationCity(o.city || "Lahore")
+            setManualCodAmount(o.total_price != null ? String(o.total_price) : "")
+            setManualConsigneeName(o.customer_name || "")
+            setManualConsigneePhone(o.customer_phone || "")
+            setManualConsigneeEmail(
+              o.customer_email && o.customer_email !== "No email provided" ? o.customer_email : ""
+            )
+            setManualConsigneeAddress(o.shipping_address || "")
+            setManualDestinationCity(o.city || "")
             if (o.items && Array.isArray(o.items) && o.items.length > 0) {
               const itemSummary = o.items
                 .map((i: any) => `${i.product_name} - ${i.variant_title || ""} Qty=${i.quantity}`)

@@ -1,5 +1,11 @@
 import type { Metadata } from "next"
-import { listProducts } from "@/modules/catalog/api"
+import { listProducts, listCollections } from "@/modules/catalog/api"
+import {
+  buildCategoryGroups,
+  flattenCategoryGroups,
+  isCollectionTypeSlug,
+  COLLECTION_TYPE_LABELS,
+} from "@/modules/catalog/categories"
 import { getCategoryLabel, isCategorySlug, type ProductCategory } from "@/modules/catalog/types"
 import { CategoryContent, type CategoryProduct } from "@/components/category/category-content"
 import { FaqSection, createCategoryFaqs } from "@/components/home/faq-section"
@@ -9,54 +15,142 @@ type CategoryPageProps = {
   params: Promise<{ slug: string }>
 }
 
+// Backend product categories (FastAPI enum) that support direct filtering.
+const BACKEND_CATEGORY_ENUMS = ["belts", "wallets", "bags", "jackets", "shoes", "accessories"]
+
+// Subcategory slugs like "bifold-wallets" or "car-key-covers" don't match any
+// backend concept anymore; they are resolved with a keyword search so old
+// links keep working.
+function deriveSearchKeyword(slugValue: string): string | undefined {
+  const tokens = slugValue.split("-").filter(Boolean)
+  if (tokens.length === 0) return undefined
+  const token = tokens.reduce((longest, current) =>
+    current.length > longest.length ? current : longest,
+  )
+  // Plurals ("wallets" -> "wallet") match both singular and plural titles.
+  if (/ies$/.test(token) || token.endsWith("ss")) return token
+  return token.replace(/s$/, "")
+}
+
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params
-  if (!isCategorySlug(slug)) {
+
+  const collections = await listCollections()
+  const matchedCollection = collections.find(
+    (c) => c.url_handle?.trim() === slug,
+  )
+
+  let titleLabel: string
+  if (matchedCollection) {
+    titleLabel = matchedCollection.title.trim() || slug
+  } else if (isCollectionTypeSlug(slug)) {
+    titleLabel = COLLECTION_TYPE_LABELS[slug] ?? slug
+  } else if (!isCategorySlug(slug)) {
     return buildSeoMetadata({
       title: "Category Not Found",
       description: "The requested leather product category could not be found. Explore Eligo Leather wallets, belts, cases and accessories.",
       path: `/categories/${slug}`,
       noIndex: true,
     })
+  } else {
+    titleLabel = getCategoryLabel(slug)
   }
 
-  const label = getCategoryLabel(slug)
   return buildSeoMetadata({
-    title: `${label} – Handcrafted Leather Collection`,
-    description: `Shop handcrafted ${label.toLowerCase()} from Eligo Leather. Compare genuine leather designs, practical features and prices with delivery across Pakistan.`,
+    title: `${titleLabel} – Handcrafted Leather Collection`,
+    description: `Shop handcrafted ${titleLabel.toLowerCase()} from Eligo Leather. Compare genuine leather designs, practical features and prices with delivery across Pakistan.`,
     path: `/categories/${slug}`,
-    keywords: [`${label} Pakistan`, `buy ${label.toLowerCase()} online`, `genuine leather ${label.toLowerCase()}`],
+    keywords: [`${titleLabel} Pakistan`, `buy ${titleLabel.toLowerCase()} online`, `genuine leather ${titleLabel.toLowerCase()}`],
   })
 }
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = await params
 
+  // Admin-created collections drive both this page and its sidebar.
+  const collections = await listCollections()
+  const sidebarCategories = flattenCategoryGroups(buildCategoryGroups(collections))
+
+  const matchedCollection = collections.find(
+    (c) => c.url_handle?.trim() === slug,
+  )
+
   let productsList: CategoryProduct[] = []
+  let titleLabel: string
+  if (matchedCollection) {
+    titleLabel = `All ${matchedCollection.title.trim()} Category`
+  } else if (isCollectionTypeSlug(slug)) {
+    titleLabel = `All ${COLLECTION_TYPE_LABELS[slug]} Category`
+  } else if (isCategorySlug(slug)) {
+    titleLabel = `All ${getCategoryLabel(slug)} Category`
+  } else {
+    titleLabel = `${slug.toUpperCase()} Category`
+  }
+
   try {
-    const rawProducts = await listProducts({
-      status: "Active",
-      category: isCategorySlug(slug) ? (slug as ProductCategory) : undefined,
-    })
+    let rawProducts: Awaited<ReturnType<typeof listProducts>> = []
+
+    if (matchedCollection) {
+      // Specific admin-created category: strictly its own products
+      // (including products of nested sub-categories).
+      rawProducts = await listProducts({
+        status: "Active",
+        collection: matchedCollection.url_handle?.trim() || String(matchedCollection.id),
+        limit: 200,
+      })
+    } else if (isCollectionTypeSlug(slug)) {
+      // Collection level ("Wallets"): every admin-created category in it.
+      rawProducts = await listProducts({
+        status: "Active",
+        collection: slug,
+        limit: 200,
+      })
+    } else {
+      // Legacy slugs: backend category enum first, keyword search fallback.
+      const enumCategory = BACKEND_CATEGORY_ENUMS.includes(slug)
+        ? (slug as ProductCategory)
+        : undefined
+      if (enumCategory) {
+        rawProducts = await listProducts({
+          status: "Active",
+          category: enumCategory,
+          limit: 200,
+        })
+      }
+      if (rawProducts.length === 0 && !enumCategory) {
+        const keyword = deriveSearchKeyword(slug)
+        if (keyword) {
+          rawProducts = await listProducts({
+            status: "Active",
+            search: keyword,
+            limit: 200,
+          })
+        }
+      }
+    }
+
     if (Array.isArray(rawProducts)) {
-      productsList = rawProducts.map((p) => ({
-        id: p.id,
-        title: p.title || "Handmade Leather Product",
-        originalPrice: p.compare_at_price ? parseFloat(p.compare_at_price) : Math.round((p.price ? parseFloat(p.price) : 1699) * 1.5),
-        salePrice: p.price ? parseFloat(p.price) : 1699,
-        rating: 5.0,
-        reviewCount: 35,
-        image: p.image_url || "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=600",
-        isSale: true,
-      }))
+      productsList = rawProducts.map((p) => {
+        const sortedImgs = p.images ? [...p.images].sort((a, b) => a.position - b.position) : []
+        const primaryImg = sortedImgs[0]?.url || p.image_url || ""
+        const secondaryImg = sortedImgs[1]?.url || primaryImg
+        return {
+          id: p.id,
+          slug: p.url_handle?.trim() ? p.url_handle : String(p.id),
+          title: p.title || "Handmade Leather Product",
+          originalPrice: p.compare_at_price ? parseFloat(p.compare_at_price) : Math.round((p.price ? parseFloat(p.price) : 0) * 1.2),
+          salePrice: p.price ? parseFloat(p.price) : 0,
+          rating: 5.0,
+          reviewCount: 35,
+          image: primaryImg,
+          secondaryImage: secondaryImg,
+          isSale: Boolean(p.compare_at_price),
+        }
+      })
     }
   } catch (error) {
     console.error("Error fetching category products:", error)
   }
-
-  const titleLabel = isCategorySlug(slug)
-    ? `All ${getCategoryLabel(slug)} Category`
-    : `${slug.toUpperCase()} Category`
 
   const collectionJsonLd = {
     "@context": "https://schema.org",
@@ -81,7 +175,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             "item": {
               "@type": "Product",
               "name": p.title,
-              "url": absoluteUrl(`/products/${p.id}`),
+              "url": absoluteUrl(`/products/${p.slug ?? p.id}`),
               "image": p.image,
             },
           })),
@@ -132,6 +226,8 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       <CategoryContent
         initialProducts={productsList.length > 0 ? productsList : undefined}
         categoryTitle={titleLabel}
+        currentSlug={slug}
+        sidebarCategories={sidebarCategories}
       />
       <FaqSection
         title={`${getCategoryLabel(slug)} Questions`}

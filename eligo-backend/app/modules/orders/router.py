@@ -3,9 +3,12 @@ import json
 import logging
 import csv
 import io
+import re
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse, Response
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -14,7 +17,11 @@ from app.modules.orders import service
 from app.modules.orders import leopard_service
 from app.modules.orders import leopard_client
 from decimal import Decimal
-from app.modules.orders.model import Order, OrderItem, PaymentStatus, FulfillmentStatus, DeliveryStatus, LeopardShipment
+from app.modules.orders.model import (
+    Order, OrderItem, OrderAuditLog,
+    PaymentStatus, FulfillmentStatus, DeliveryStatus, LeopardShipment,
+)
+from app.modules.customers.model import Customer, CustomerAddress
 from app.modules.settings.apps.model import StoreIntegration
 from app.modules.orders.schema import (
     OrderCreate, OrderUpdate, OrderOut, OrderListOut, OrderNoteCreate, OrderNoteOut,
@@ -198,10 +205,18 @@ async def generate_leopard_cn_api(request: Request, db: AsyncSession = Depends(g
         clean_id = str(oid).replace("#", "").strip()
         order_row = None
         if clean_id.isdigit():
-            order_result = await db.execute(select(Order).where(Order.id == int(clean_id)))
+            order_result = await db.execute(
+                select(Order)
+                .options(selectinload(Order.customer), selectinload(Order.items))
+                .where(Order.id == int(clean_id))
+            )
             order_row = order_result.scalar_one_or_none()
         if not order_row:
-            order_result = await db.execute(select(Order).where(Order.order_number == order_number))
+            order_result = await db.execute(
+                select(Order)
+                .options(selectinload(Order.customer), selectinload(Order.items))
+                .where(Order.order_number == order_number)
+            )
             order_row = order_result.scalar_one_or_none()
 
         # Also check existing shipment to avoid double-booking
@@ -297,8 +312,33 @@ async def generate_leopard_cn_api(request: Request, db: AsyncSession = Depends(g
                         current_status="Booked",
                         raw_json=json.dumps(book_res, default=str),
                     ))
-                    # Cross-link Order.tracking_number
+                    # Cross-link Order.tracking_number + fulfillment sync
                     order_row.tracking_number = cn_number
+                    order_row.tracking_company = "Leopards Courier"
+                    was_unfulfilled = order_row.fulfillment_status != FulfillmentStatus.fulfilled
+                    order_row.fulfillment_status = FulfillmentStatus.fulfilled
+
+                    db.add(OrderAuditLog(
+                        order_id=order_row.id,
+                        event_type="courier_update",
+                        description=(
+                            f"Leopards Courier booked shipment CN #{cn_number} for "
+                            f"{consignee_name or 'customer'} to {destination_city}. "
+                            f"COD: Rs {cod_amount}"
+                        ),
+                        actor_name="Leopards Courier",
+                    ))
+                    if was_unfulfilled:
+                        db.add(OrderAuditLog(
+                            order_id=order_row.id,
+                            event_type="fulfillment_updated",
+                            description=(
+                                f"Leopards Courier marked {len(order_row.items) if order_row.items else 1} item(s) "
+                                f"as fulfilled from Office # 407, 4th floor, Gulberg Empire, "
+                                f"Executive Block, Gulberg Greens, Islamabad."
+                            ),
+                            actor_name="Leopards Courier",
+                        ))
                     await db.commit()
 
                     await leopard_service.record_log(
@@ -571,61 +611,124 @@ async def save_leopard_settings_api(request: Request, db: AsyncSession = Depends
 
 
 @public_webhook_router.get("/products-catalog")
-async def get_products_catalog_api():
-    """Get catalog of products & variants for the Create Order Select Products modal (Picture 2)."""
-    return {
-        "status": "success",
-        "products": [
+async def get_products_catalog_api(db: AsyncSession = Depends(get_db)):
+    """Real product catalog (products + variants) from the database for the Create Order page."""
+    from app.modules.catalog.model import Product, ProductVariant, ProductImage
+
+    result = await db.execute(
+        select(Product)
+        .options(selectinload(Product.variants), selectinload(Product.images))
+        .order_by(Product.title)
+    )
+    products = result.scalars().all()
+
+    catalog = []
+    for p in products:
+        image = None
+        if p.images:
+            image = sorted(p.images, key=lambda i: i.position or 0)[0].url
+        variants = [
             {
-                "id": 1,
-                "title": "APEX - Waxy Handmade Keychain",
-                "image": "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=200",
-                "variants": [
-                    {"id": 101, "title": "Tan", "available": 12, "price": 1199.00},
-                    {"id": 102, "title": "Dark Brown", "available": 24, "price": 1199.00},
-                    {"id": 103, "title": "Maroon", "available": 12, "price": 1199.00},
-                ],
-            },
-            {
-                "id": 2,
-                "title": "ARDOR - Handmade Leather Card Holder Wallet",
-                "image": "https://images.unsplash.com/photo-1606503153255-59d8b8b82176?auto=format&fit=crop&q=80&w=200",
-                "variants": [
-                    {"id": 201, "title": "Dark Grain", "available": 7, "price": 1699.00},
-                    {"id": 202, "title": "Maroon", "available": 7, "price": 1699.00},
-                    {"id": 203, "title": "Dark Brown", "available": 20, "price": 1699.00},
-                ],
-            },
-            {
-                "id": 3,
-                "title": "GRACIOUS - Handmade Trifold Leather Wallet",
-                "image": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=200",
-                "variants": [
-                    {"id": 301, "title": "Black LW007", "available": 15, "price": 2799.00},
-                    {"id": 302, "title": "Tan LW008", "available": 10, "price": 2799.00},
-                ],
-            },
-            {
-                "id": 4,
-                "title": "Executive Handmade Leather Laptop Sleeve",
-                "image": "https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&q=80&w=200",
-                "variants": [
-                    {"id": 401, "title": "Cognac Brown", "available": 8, "price": 3499.00},
-                ],
-            },
-        ],
-    }
+                "id": v.id,
+                "title": v.title,
+                "available": None,
+                "price": float(v.price),
+            }
+            for v in p.variants
+        ]
+        catalog.append({
+            "id": p.id,
+            "title": p.title,
+            "image": image,
+            "variants": variants,
+        })
+
+    return {"status": "success", "products": catalog}
 
 
 @public_webhook_router.post("/create-order")
 async def create_order_public_api(request: Request, db: AsyncSession = Depends(get_db)):
-    """Create a new order directly in the PostgreSQL database."""
+    """Create a new order directly in the PostgreSQL database.
+
+    Called by the storefront (eligo-frontend) checkout. Resolves/creates the
+    real Customer record from the checkout contact fields, links it to the
+    order and writes the initial timeline (audit log) events so the admin
+    panel order page reflects live database data.
+    """
     data = await request.json()
 
-    result = await db.execute(select(Order))
-    all_orders = result.scalars().all()
-    next_num = 1340 + len(all_orders)
-    order_number = f"#{next_num}"
+    # ---- Resolve customer (structured fields first, legacy string fallback) ----
+    first_name = (data.get("first_name") or "").strip()
+    last_name = (data.get("last_name") or "").strip()
+    email = (data.get("email") or "").strip() or None
+    phone = (data.get("phone") or "").strip() or None
+    city = (data.get("city") or "").strip()
+    postal_code = (data.get("postal_code") or "").strip()
+    country = (data.get("country") or "Pakistan").strip()
+
+    shipping_address_str = (data.get("shipping_address") or "").strip()
+    address_body = shipping_address_str
+
+    if not (first_name or phone or email):
+        # Legacy payload: "Name | Phone: 03xx | addr line" packed into shipping_address
+        parts = [p.strip() for p in shipping_address_str.split("|")]
+        if parts:
+            first_name = parts[0]
+            for p in parts[1:]:
+                if p.lower().startswith("phone"):
+                    phone = p.split(":", 1)[1].strip() if ":" in p else None
+                    address_body = ""
+                else:
+                    address_body = p
+        email = (data.get("note") or "").replace("Contact email:", "").strip() or None
+
+    full_name = f"{first_name} {last_name}".strip()
+
+    customer = None
+    if phone:
+        result = await db.execute(select(Customer).where(Customer.phone == phone))
+        customer = result.scalar_one_or_none()
+    if customer is None and email:
+        result = await db.execute(select(Customer).where(Customer.email == email))
+        customer = result.scalar_one_or_none()
+
+    is_new_customer = False
+    if customer is None:
+        customer = Customer(
+            first_name=first_name or None,
+            last_name=last_name or None,
+            email=email,
+            phone=phone,
+            location=", ".join(x for x in (city, country) if x) or None,
+            postal_code=postal_code or None,
+        )
+        db.add(customer)
+        await db.flush()
+        is_new_customer = True
+
+    if address_body and is_new_customer:
+        db.add(CustomerAddress(
+            customer_id=customer.id,
+            first_name=first_name or None,
+            last_name=last_name or None,
+            address_line1=address_body or "—",
+            city=city or "—",
+            province=None,
+            postal_code=postal_code or None,
+            country=country,
+            phone=phone,
+            is_default=True,
+            address_type="shipping",
+        ))
+
+    # ---- Order number: max existing numeric suffix + 1 ----
+    result = await db.execute(select(Order.order_number))
+    max_num = 1339
+    for (num,) in result.all():
+        match = re.search(r"(\d+)", str(num or ""))
+        if match:
+            max_num = max(max_num, int(match.group(1)))
+    order_number = f"#{max_num + 1}"
 
     items = data.get("items", [])
     subtotal = Decimal(str(data.get("subtotal", 0)))
@@ -635,6 +738,7 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
 
     new_order = Order(
         order_number=order_number,
+        customer_id=customer.id,
         channel=data.get("channel", "Online Store"),
         currency=data.get("currency", "PKR"),
         subtotal=subtotal,
@@ -648,15 +752,16 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         shipping_address=data.get("shipping_address", ""),
         customer_note=data.get("note", ""),
         tags=data.get("tags", ""),
-        destination=data.get("destination", "Pakistan"),
+        destination=data.get("destination", country or "Pakistan"),
     )
     db.add(new_order)
-    await db.commit()
-    await db.refresh(new_order)
+    await db.flush()
 
     for item in items:
         db_item = OrderItem(
             order_id=new_order.id,
+            product_id=item.get("product_id"),
+            variant_id=item.get("variant_id"),
             product_name=item.get("product_name", "Custom Item"),
             variant_title=item.get("variant_title", ""),
             quantity=int(item.get("quantity", 1)),
@@ -664,80 +769,99 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
             total_price=Decimal(str(item.get("total_price", 0))),
         )
         db.add(db_item)
+
+    # ---- Customer aggregate metrics stay in sync with real orders ----
+    customer.total_orders = (customer.total_orders or 0) + 1
+    customer.amount_spent = Decimal(str(customer.amount_spent or 0)) + total
+    now = datetime.now()
+    customer.last_order_date = now
+    if customer.first_order_date is None:
+        customer.first_order_date = now
+
+    # ---- Initial timeline events (real, persisted, shown on the admin order page) ----
+    placed_by = full_name or customer.email or "Customer"
+    db.add(OrderAuditLog(
+        order_id=new_order.id,
+        event_type="order_created",
+        description=f"{placed_by} placed this order on {new_order.channel}.",
+        actor_name=placed_by,
+    ))
+    if new_order.payment_status == PaymentStatus.pending:
+        db.add(OrderAuditLog(
+            order_id=new_order.id,
+            event_type="payment_updated",
+            description=(
+                f"A Rs{total:,.2f} {new_order.currency} payment is pending on "
+                f"Cash on Delivery (COD)."
+            ),
+        ))
+    confirmation_code = secrets.token_urlsafe(6).upper().replace("-", "").replace("_", "")[:10]
+    db.add(OrderAuditLog(
+        order_id=new_order.id,
+        event_type="status_changed",
+        description=f"Confirmation #{confirmation_code} was generated for this order.",
+        metadata_json=json.dumps({"confirmation_number": confirmation_code}),
+    ))
+
     await db.commit()
+    await db.refresh(new_order)
 
     return {
         "status": "success",
         "message": f"Order {order_number} created successfully in database!",
         "order_id": new_order.id,
         "order_number": order_number,
+        "confirmation_number": confirmation_code,
+        "customer_id": customer.id,
     }
 
 
 @public_webhook_router.get("/detail/{order_id}")
 async def get_public_order_detail_api(order_id: str, db: AsyncSession = Depends(get_db)):
-    """Fetch order details for order detail page."""
+    """Fetch order details live from the database. 404 when the order does not exist."""
     clean_id = order_id.replace("#", "").strip()
-    
+
     # Try finding by numeric id or order_number
     search_num = f"#{clean_id}"
-    result = await db.execute(select(Order).where(Order.order_number == search_num))
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.customer), selectinload(Order.items))
+        .where(Order.order_number == search_num)
+    )
     order = result.scalar_one_or_none()
 
     if not order and clean_id.isdigit():
-        result = await db.execute(select(Order).where(Order.id == int(clean_id)))
+        result = await db.execute(
+            select(Order)
+            .options(selectinload(Order.customer), selectinload(Order.items))
+            .where(Order.id == int(clean_id))
+        )
         order = result.scalar_one_or_none()
 
     if not order:
-        # Default formatted response matching Picture 4
-        return {
-            "status": "success",
-            "order": {
-                "id": clean_id,
-                "order_number": f"#{clean_id}",
-                "customer_name": "Asjad Ali",
-                "customer_phone": "+92 326 0890680",
-                "customer_email": "No email provided",
-                "shipping_address": "House #302 street #14 gulbahar block bahria town Lahore",
-                "city": "Lahore",
-                "country": "Pakistan",
-                "payment_status": "pending",
-                "fulfillment_status": "fulfilled",
-                "delivery_status": "delivered",
-                "tracking_number": "ID7540816875",
-                "items": [
-                    {
-                        "product_name": "GRACIOUS - Handmade Trifold Leather Wallet",
-                        "variant_title": "Black LW007",
-                        "quantity": 1,
-                        "unit_price": 2799.00,
-                        "total_price": 2799.00,
-                    }
-                ],
-                "subtotal": 2799.00,
-                "shipping_cost": 0.00,
-                "tax": 0.00,
-                "total_price": 2799.00,
-                "paid_amount": 0.00,
-                "date": "7 August 2026 at 4:46 pm",
-            },
-        }
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    customer = order.customer
+    customer_name = None
+    if customer:
+        parts = [customer.first_name or "", customer.last_name or ""]
+        customer_name = " ".join(p for p in parts if p).strip() or customer.email
 
     return {
         "status": "success",
         "order": {
             "id": order.id,
             "order_number": order.order_number,
-            "customer_name": order.customer.name if order.customer else "Asjad Ali",
-            "customer_phone": order.customer.phone if order.customer else "+92 326 0890680",
-            "customer_email": order.customer.email if order.customer else "No email provided",
-            "shipping_address": order.shipping_address or "House #302 street #14 gulbahar block bahria town Lahore",
-            "city": order.destination or "Lahore",
+            "customer_name": customer_name,
+            "customer_phone": customer.phone if customer else None,
+            "customer_email": customer.email if customer else None,
+            "shipping_address": order.shipping_address,
+            "city": order.destination,
             "country": "Pakistan",
             "payment_status": order.payment_status.value,
             "fulfillment_status": order.fulfillment_status.value,
             "delivery_status": order.delivery_status.value,
-            "tracking_number": order.tracking_number or "ID7540816875",
+            "tracking_number": order.tracking_number,
             "items": [
                 {
                     "product_name": item.product_name,
@@ -747,21 +871,13 @@ async def get_public_order_detail_api(order_id: str, db: AsyncSession = Depends(
                     "total_price": float(item.total_price),
                 }
                 for item in order.items
-            ] if order.items else [
-                {
-                    "product_name": "GRACIOUS - Handmade Trifold Leather Wallet",
-                    "variant_title": "Black LW007",
-                    "quantity": 1,
-                    "unit_price": 2799.00,
-                    "total_price": 2799.00,
-                }
             ],
-            "subtotal": float(order.subtotal or 2799.00),
-            "shipping_cost": float(order.shipping_cost or 0.00),
-            "tax": float(order.tax or 0.00),
-            "total_price": float(order.total_price or 2799.00),
-            "paid_amount": float(order.paid_amount or 0.00),
-            "date": order.created_at.strftime("%d %B %Y at %I:%M %p") if order.created_at else "7 August 2026 at 4:46 pm",
+            "subtotal": float(order.subtotal or 0),
+            "shipping_cost": float(order.shipping_cost or 0),
+            "tax": float(order.tax or 0),
+            "total_price": float(order.total_price or 0),
+            "paid_amount": float(order.paid_amount or 0),
+            "date": order.created_at.strftime("%d %B %Y at %I:%M %p") if order.created_at else None,
         },
     }
 
@@ -772,37 +888,62 @@ async def mark_order_paid_public_api(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Mark an order as Paid in PostgreSQL DB."""
+    """Mark an order as Paid in PostgreSQL DB and persist a timeline event."""
     clean_id = order_id.replace("#", "").strip()
     search_num = f"#{clean_id}"
 
-    result = await db.execute(select(Order).where(Order.order_number == search_num))
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.customer))
+        .where(Order.order_number == search_num)
+    )
     order = result.scalar_one_or_none()
 
     if not order and clean_id.isdigit():
-        result = await db.execute(select(Order).where(Order.id == int(clean_id)))
+        result = await db.execute(
+            select(Order)
+            .options(selectinload(Order.customer))
+            .where(Order.id == int(clean_id))
+        )
         order = result.scalar_one_or_none()
 
-    if order:
-        order.payment_status = PaymentStatus.paid
-        order.paid_amount = order.total_price
-        await db.commit()
-        await db.refresh(order)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
 
-        from app.modules.settings.notifications.service import background_dispatch_event
-        background_tasks.add_task(
-            background_dispatch_event,
-            "order_paid",
-            {
-                "email": getattr(order, "customer_email", None),
-                "customer_email": getattr(order, "customer_email", None),
-                "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
-                "order_number": order.order_number,
-                "total_price": str(order.total_price),
-                "paid_amount": str(order.paid_amount),
-                "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
-            },
-        )
+    customer = order.customer
+    parts = [customer.first_name or "", customer.last_name or ""] if customer else []
+    customer_name = " ".join(p for p in parts if p).strip() or (customer.email if customer else None)
+
+    already_paid = order.payment_status == PaymentStatus.paid
+    order.payment_status = PaymentStatus.paid
+    order.paid_amount = order.total_price
+    if not already_paid:
+        db.add(OrderAuditLog(
+            order_id=order.id,
+            event_type="payment_updated",
+            description=(
+                f"A Rs{order.total_price:,.2f} {order.currency} payment was captured "
+                f"and the order is marked as Paid."
+            ),
+            actor_name="Admin",
+        ))
+    await db.commit()
+    await db.refresh(order)
+
+    from app.modules.settings.notifications.service import background_dispatch_event
+    background_tasks.add_task(
+        background_dispatch_event,
+        "order_paid",
+        {
+            "email": customer.email if customer else None,
+            "customer_email": customer.email if customer else None,
+            "customer_name": customer_name or "Valued Customer",
+            "order_number": order.order_number,
+            "total_price": str(order.total_price),
+            "paid_amount": str(order.paid_amount),
+            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+        },
+    )
 
     return {
         "status": "success",
@@ -817,38 +958,65 @@ async def mark_order_delivered_public_api(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Mark an order as Delivered in PostgreSQL DB."""
+    """Mark an order as Delivered in PostgreSQL DB and persist a timeline event."""
     clean_id = order_id.replace("#", "").strip()
     search_num = f"#{clean_id}"
 
-    result = await db.execute(select(Order).where(Order.order_number == search_num))
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.customer), selectinload(Order.items))
+        .where(Order.order_number == search_num)
+    )
     order = result.scalar_one_or_none()
 
     if not order and clean_id.isdigit():
-        result = await db.execute(select(Order).where(Order.id == int(clean_id)))
+        result = await db.execute(
+            select(Order)
+            .options(selectinload(Order.customer), selectinload(Order.items))
+            .where(Order.id == int(clean_id))
+        )
         order = result.scalar_one_or_none()
 
-    if order:
-        order.delivery_status = DeliveryStatus.delivered
-        order.fulfillment_status = FulfillmentStatus.fulfilled
-        await db.commit()
-        await db.refresh(order)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
 
-        from app.modules.settings.notifications.service import background_dispatch_event
-        background_tasks.add_task(
-            background_dispatch_event,
-            "order_delivered",
-            {
-                "email": getattr(order, "customer_email", None),
-                "customer_email": getattr(order, "customer_email", None),
-                "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
-                "order_number": order.order_number,
-                "tracking_number": order.tracking_number,
-                "tracking_company": order.tracking_company or "Leopards Courier",
-                "total_price": str(order.total_price),
-                "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
-            },
-        )
+    customer = order.customer
+    parts = [customer.first_name or "", customer.last_name or ""] if customer else []
+    customer_display_name = " ".join(p for p in parts if p).strip() or (customer.email if customer else None)
+
+    already_delivered = order.delivery_status == DeliveryStatus.delivered
+    order.delivery_status = DeliveryStatus.delivered
+    order.fulfillment_status = FulfillmentStatus.fulfilled
+    if not already_delivered:
+        items_count = len(order.items or [])
+        courier = order.tracking_company or "Leopards Courier"
+        db.add(OrderAuditLog(
+            order_id=order.id,
+            event_type="delivery_updated",
+            description=(
+                f"{courier} marked {items_count or 1} item(s) as delivered"
+                + (f" (Tracking #{order.tracking_number})." if order.tracking_number else ".")
+            ),
+            actor_name=courier,
+        ))
+    await db.commit()
+    await db.refresh(order)
+
+    from app.modules.settings.notifications.service import background_dispatch_event
+    background_tasks.add_task(
+        background_dispatch_event,
+        "order_delivered",
+        {
+            "email": customer.email if customer else None,
+            "customer_email": customer.email if customer else None,
+            "customer_name": customer_display_name or "Valued Customer",
+            "order_number": order.order_number,
+            "tracking_number": order.tracking_number,
+            "tracking_company": order.tracking_company or "Leopards Courier",
+            "total_price": str(order.total_price),
+            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+        },
+    )
 
     return {
         "status": "success",

@@ -1,6 +1,9 @@
 import time
+from pathlib import Path
+
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.db import models_registry 
 from app.modules.auth.router import router as auth_router
 from app.modules.orders.router import router as orders_router, public_webhook_router as orders_webhook_router
@@ -39,6 +42,11 @@ from app.modules.settings.checkout.service import seed_default_config
 from app.modules.settings.shipping_and_delivery.service import seed_defaults as seed_shipping_defaults
 
 app = FastAPI(title="Eligo Backend")
+
+# Serve uploaded media (product images etc.) written by /api/v1/files/upload.
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+_STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
 @app.on_event("startup")

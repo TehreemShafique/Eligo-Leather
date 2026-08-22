@@ -154,6 +154,14 @@ class Order(Base):
         name = " ".join(p for p in parts if p).strip()
         return name or self.customer.email
 
+    @property
+    def customer_email(self) -> str | None:
+        return self.customer.email if self.customer else None
+
+    @property
+    def customer_phone(self) -> str | None:
+        return self.customer.phone if self.customer else None
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"
