@@ -24,21 +24,31 @@ vi.mock("@/lib/api-client", () => {
   }
 })
 
-const { clearCartMock } = vi.hoisted(() => ({ clearCartMock: vi.fn() }))
-
-vi.mock("@/context/cart-context", () => ({
-  useCart: () => ({
+const { clearCartMock, cartStoreFixture } = vi.hoisted(() => {
+  const clearCartMock = vi.fn()
+  const cartStoreFixture = {
     cart: [
-      { id: 1, title: "Test Wallet", price: 1500, quantity: 1, color: "Black", image: "/wallet.jpg" },
+      { id: 1, title: "Test Wallet", price: 1500, quantity: 1, color: "Black", image: "/wallet.jpg", variantId: 11 },
       { id: 2, title: "Test Belt", price: 1000, quantity: 2, image: "/belt.jpg" },
     ],
-    cartCount: 3,
-    cartSubtotal: 3500,
     addToCart: vi.fn(),
     removeFromCart: vi.fn(),
     updateQuantity: vi.fn(),
     clearCart: clearCartMock,
-  }),
+  }
+  return { clearCartMock, cartStoreFixture }
+})
+
+// Selector-aware mock: every call receives a selector and must resolve it
+// against the fixture instead of handing back the whole store.
+vi.mock("@/modules/cart/store", () => ({
+  selectCart: (state: typeof cartStoreFixture) => state.cart,
+  selectCartCount: (state: typeof cartStoreFixture) =>
+    state.cart.reduce((total, item) => total + item.quantity, 0),
+  selectCartSubtotal: (state: typeof cartStoreFixture) =>
+    state.cart.reduce((total, item) => total + item.price * item.quantity, 0),
+  useCartStore: (selector: (state: typeof cartStoreFixture) => unknown) =>
+    selector(cartStoreFixture),
 }))
 
 vi.mock("next/image", async () => {

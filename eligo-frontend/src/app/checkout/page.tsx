@@ -12,7 +12,11 @@ import {
   Truck,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import { useCart } from "@/context/cart-context"
+import {
+  useCartStore,
+  selectCart,
+  selectCartSubtotal,
+} from "@/modules/cart/store"
 import { PageBreadcrumb } from "@/components/ui/page-breadcrumb"
 import { api, ApiError, getApiErrorMessage } from "@/lib/api-client"
 import {
@@ -42,7 +46,9 @@ function resolveSubmitErrorMessage(error: unknown): string {
 }
 
 export default function CheckoutPage() {
-  const { cart, cartSubtotal, clearCart } = useCart()
+  const cart = useCartStore(selectCart)
+  const cartSubtotal = useCartStore(selectCartSubtotal)
+  const clearCart = useCartStore((state) => state.clearCart)
   const [formData, setFormData] = useState<CheckoutFormValues>(defaultCheckoutFormValues)
   const [appliedDiscount, setAppliedDiscount] = useState(0)
   const [loading, setLoading] = useState(false)

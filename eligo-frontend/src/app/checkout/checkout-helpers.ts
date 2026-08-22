@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { CartItem } from "@/context/cart-context"
+import type { CartItem } from "@/modules/cart/store"
 
 export interface CheckoutFormValues {
   email: string
