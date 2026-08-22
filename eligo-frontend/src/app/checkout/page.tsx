@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import {
@@ -14,45 +14,54 @@ import {
 import { toast } from "sonner"
 import { useCart } from "@/context/cart-context"
 import { PageBreadcrumb } from "@/components/ui/page-breadcrumb"
-import { api } from "@/lib/api-client"
+import { api, ApiError, getApiErrorMessage } from "@/lib/api-client"
+import {
+  buildGuestOrderPayload,
+  CHECKOUT_FIELD_ORDER,
+  defaultCheckoutFormValues,
+  parseOrderResponse,
+  validateCheckoutFields,
+  type CheckoutErrorKey,
+  type CheckoutFieldErrors,
+  type CheckoutFieldKey,
+  type CheckoutFormValues,
+  type GuestOrderPayload,
+} from "./checkout-helpers"
 
 const fieldClassName =
   "h-12 w-full rounded-[10px] border border-neutral-300 bg-white px-4 text-sm text-black outline-none transition-colors placeholder:text-neutral-400 focus:border-amber-800 focus:ring-2 focus:ring-amber-800/10"
 
+const ORDER_CONFIRM_ERROR =
+  "We could not confirm your order with the store. Nothing has been charged — your details and cart are unchanged, so you can safely try again."
+
+function resolveSubmitErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return getApiErrorMessage(error)
+  }
+  return "We could not reach the store to place your order. Please check your connection and try again."
+}
+
 export default function CheckoutPage() {
   const { cart, cartSubtotal, clearCart } = useCart()
-  const [formData, setFormData] = useState({
-    email: "",
-    emailNews: false,
-    country: "Pakistan",
-    firstName: "",
-    lastName: "",
-    address: "",
-    city: "",
-    postalCode: "",
-    phone: "",
-    saveInfo: false,
-    shippingMethod: "standard",
-    paymentMethod: "cod",
-    billingAddress: "same",
-    billingFirstName: "",
-    billingLastName: "",
-    billingAddressLine: "",
-    billingCity: "",
-    discountCode: "",
-  })
+  const [formData, setFormData] = useState<CheckoutFormValues>(defaultCheckoutFormValues)
   const [appliedDiscount, setAppliedDiscount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [orderComplete, setOrderComplete] = useState(false)
-  const [completedOrderId, setCompletedOrderId] = useState<string | number>("")
+  const [completedOrderId, setCompletedOrderId] = useState("")
+  const [fieldErrors, setFieldErrors] = useState<CheckoutFieldErrors>({})
+  const [submitError, setSubmitError] = useState<string | null>(null)
+
+  // Synchronous lock so rapid double clicks cannot fire a second request.
+  const pendingRef = useRef(false)
+  const inputRefs = useRef<Partial<Record<CheckoutFieldKey, HTMLElement | null>>>({})
 
   const baseShippingFee = cartSubtotal >= 2000 ? 0 : 250
   const finalShippingFee = Math.max(0, baseShippingFee - appliedDiscount)
   const orderTotal = cartSubtotal + finalShippingFee
 
-  const updateField = <K extends keyof typeof formData>(
+  const updateField = <K extends keyof CheckoutFormValues>(
     field: K,
-    value: (typeof formData)[K],
+    value: CheckoutFormValues[K],
   ) => setFormData((current) => ({ ...current, [field]: value }))
 
   const handleApplyDiscount = () => {
@@ -66,69 +75,61 @@ export default function CheckoutPage() {
     }
   }
 
+  const fieldAriaProps = (key: CheckoutFieldKey) => ({
+    "aria-invalid": fieldErrors[key] ? ("true" as const) : undefined,
+    "aria-describedby": fieldErrors[key] ? `checkout-error-${key}` : undefined,
+  })
+
   const handleSubmitOrder = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!cart.length) {
-      toast.error("Your cart is empty.")
-      return
-    }
+    if (loading || pendingRef.current) return
 
-    if (
-      !formData.firstName.trim() ||
-      !formData.lastName.trim() ||
-      !formData.address.trim() ||
-      !formData.city.trim() ||
-      !formData.phone.trim()
-    ) {
-      toast.error("Please complete all required delivery fields.")
-      return
-    }
-
-    if (
-      formData.billingAddress === "different" &&
-      (!formData.billingFirstName.trim() ||
-        !formData.billingLastName.trim() ||
-        !formData.billingAddressLine.trim() ||
-        !formData.billingCity.trim())
-    ) {
-      toast.error("Please complete the billing address.")
-      return
-    }
-
-    setLoading(true)
-    const generatedId = `ORD-${Math.floor(100000 + Math.random() * 900000)}`
-    const orderPayload = {
-      order_id: generatedId,
-      customer_name: `${formData.firstName} ${formData.lastName}`.trim(),
-      email: formData.email.trim() || "customer@eligoleather.com",
-      phone: formData.phone,
-      shipping_address: `${formData.address}, ${formData.city}${formData.postalCode ? `, ${formData.postalCode}` : ""}, ${formData.country}`,
-      items: cart.map((item) => ({
-        id: item.id,
-        title: item.title,
-        price: item.price,
-        quantity: item.quantity,
-        color: item.color || "Standard",
-      })),
+    const totals = {
       subtotal: cartSubtotal,
-      shipping_fee: finalShippingFee,
-      total_price: orderTotal,
-      payment_method: "Cash on Delivery (COD)",
-      status: "Unfulfilled",
-      payment_status: "Pending",
+      shippingCost: finalShippingFee,
+      total: orderTotal,
     }
+    const errors = validateCheckoutFields(formData, cart, totals)
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      setSubmitError(null)
+      const firstInvalid = CHECKOUT_FIELD_ORDER.find((key) => Boolean(errors[key]))
+      if (firstInvalid) {
+        const element = inputRefs.current[firstInvalid]
+        element?.focus()
+        element?.scrollIntoView({ block: "center", behavior: "smooth" })
+      }
+      return
+    }
+
+    setFieldErrors({})
+    setSubmitError(null)
+    setLoading(true)
+    pendingRef.current = true
+
+    const payload = buildGuestOrderPayload(formData, cart, totals)
 
     try {
-      await api.post("/orders/create-order", orderPayload, { auth: false })
-    } catch (error) {
-      console.warn("Backend order API fallback sync:", error)
-    } finally {
-      setCompletedOrderId(generatedId)
+      const response = await api.post<unknown, GuestOrderPayload>(
+        "/orders/create-order",
+        payload,
+        { auth: false },
+      )
+      const parsed = parseOrderResponse(response)
+      if (!parsed.ok) {
+        // Malformed or non-success response: treat truthfully as failure.
+        setSubmitError(ORDER_CONFIRM_ERROR)
+        return
+      }
+      setCompletedOrderId(parsed.orderNumber)
       setOrderComplete(true)
       clearCart()
+    } catch (error) {
+      setSubmitError(resolveSubmitErrorMessage(error))
+    } finally {
+      pendingRef.current = false
       setLoading(false)
-      toast.success(`Order #${generatedId} placed successfully.`)
     }
   }
 
@@ -149,7 +150,7 @@ export default function CheckoutPage() {
             Your Cash on Delivery order has been received. We will contact you when it is ready to ship.
           </p>
           <div className="mx-auto mt-6 max-w-sm rounded-[10px] bg-slate-50 px-4 py-3 text-sm">
-            Order reference: <strong className="text-amber-800">#{completedOrderId}</strong>
+            Order reference: <strong className="text-amber-800">{completedOrderId}</strong>
           </div>
           <Link
             href="/products"
@@ -177,6 +178,8 @@ export default function CheckoutPage() {
     )
   }
 
+  const hasValidationErrors = Object.keys(fieldErrors).length > 0
+
   return (
     <main className="min-h-screen bg-slate-50 font-['Manrope'] text-black">
       <div className="mx-auto w-full max-w-[1680px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
@@ -187,14 +190,25 @@ export default function CheckoutPage() {
           <p className="mt-3 max-w-2xl text-base text-neutral-600">Complete your delivery details and review your order before placing it.</p>
         </div>
 
-        <form onSubmit={handleSubmitOrder} className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)] xl:gap-12">
+        <form onSubmit={handleSubmitOrder} noValidate className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)] xl:gap-12">
           <div className="space-y-6">
             <CheckoutSection number="01" title="Contact information">
               <div className="flex items-center justify-between gap-4">
                 <p className="text-sm text-neutral-600">We will use these details for order updates.</p>
                 <Link href="/login" className="shrink-0 text-sm font-semibold text-amber-800 hover:underline">Sign in</Link>
               </div>
-              <input type="email" value={formData.email} onChange={(event) => updateField("email", event.target.value)} placeholder="Email address (optional)" className={fieldClassName} />
+              <div>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(event) => updateField("email", event.target.value)}
+                  placeholder="Email address (optional)"
+                  className={`${fieldClassName}${fieldErrors.email ? " border-red-500" : ""}`}
+                  {...fieldAriaProps("email")}
+                  ref={(element) => { inputRefs.current.email = element }}
+                />
+                <FieldErrorMessage idName="email" message={fieldErrors.email} />
+              </div>
               <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-600">
                 <input type="checkbox" checked={formData.emailNews} onChange={(event) => updateField("emailNews", event.target.checked)} className="h-4 w-4 accent-amber-800" />
                 Email me about new products and offers
@@ -206,15 +220,30 @@ export default function CheckoutPage() {
                 <option value="Pakistan">Pakistan</option>
               </select>
               <div className="grid gap-4 sm:grid-cols-2">
-                <input required value={formData.firstName} onChange={(event) => updateField("firstName", event.target.value)} placeholder="First name *" className={fieldClassName} />
-                <input required value={formData.lastName} onChange={(event) => updateField("lastName", event.target.value)} placeholder="Last name *" className={fieldClassName} />
+                <div>
+                  <input value={formData.firstName} onChange={(event) => updateField("firstName", event.target.value)} placeholder="First name *" className={`${fieldClassName}${fieldErrors.firstName ? " border-red-500" : ""}`} autoComplete="given-name" {...fieldAriaProps("firstName")} ref={(element) => { inputRefs.current.firstName = element }} />
+                  <FieldErrorMessage idName="firstName" message={fieldErrors.firstName} />
+                </div>
+                <div>
+                  <input value={formData.lastName} onChange={(event) => updateField("lastName", event.target.value)} placeholder="Last name *" className={`${fieldClassName}${fieldErrors.lastName ? " border-red-500" : ""}`} autoComplete="family-name" {...fieldAriaProps("lastName")} ref={(element) => { inputRefs.current.lastName = element }} />
+                  <FieldErrorMessage idName="lastName" message={fieldErrors.lastName} />
+                </div>
               </div>
-              <input required value={formData.address} onChange={(event) => updateField("address", event.target.value)} placeholder="House, street and area *" className={fieldClassName} />
+              <div>
+                <input value={formData.address} onChange={(event) => updateField("address", event.target.value)} placeholder="House, street and area *" className={`${fieldClassName}${fieldErrors.address ? " border-red-500" : ""}`} autoComplete="street-address" {...fieldAriaProps("address")} ref={(element) => { inputRefs.current.address = element }} />
+                <FieldErrorMessage idName="address" message={fieldErrors.address} />
+              </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <input required value={formData.city} onChange={(event) => updateField("city", event.target.value)} placeholder="City *" className={fieldClassName} />
-                <input value={formData.postalCode} onChange={(event) => updateField("postalCode", event.target.value)} placeholder="Postal code (optional)" className={fieldClassName} />
+                <div>
+                  <input value={formData.city} onChange={(event) => updateField("city", event.target.value)} placeholder="City *" className={`${fieldClassName}${fieldErrors.city ? " border-red-500" : ""}`} autoComplete="address-level2" {...fieldAriaProps("city")} ref={(element) => { inputRefs.current.city = element }} />
+                  <FieldErrorMessage idName="city" message={fieldErrors.city} />
+                </div>
+                <input value={formData.postalCode} onChange={(event) => updateField("postalCode", event.target.value)} placeholder="Postal code (optional)" className={fieldClassName} autoComplete="postal-code" />
               </div>
-              <input required type="tel" value={formData.phone} onChange={(event) => updateField("phone", event.target.value)} placeholder="Phone number *" className={fieldClassName} />
+              <div>
+                <input type="tel" value={formData.phone} onChange={(event) => updateField("phone", event.target.value)} placeholder="Phone number *" className={`${fieldClassName}${fieldErrors.phone ? " border-red-500" : ""}`} autoComplete="tel" inputMode="tel" {...fieldAriaProps("phone")} ref={(element) => { inputRefs.current.phone = element }} />
+                <FieldErrorMessage idName="phone" message={fieldErrors.phone} />
+              </div>
               <label className="flex cursor-pointer items-center gap-3 text-sm text-neutral-600">
                 <input type="checkbox" checked={formData.saveInfo} onChange={(event) => updateField("saveInfo", event.target.checked)} className="h-4 w-4 accent-amber-800" />
                 Save these details for next time
@@ -239,27 +268,6 @@ export default function CheckoutPage() {
                 <ShieldCheck className="h-6 w-6 text-amber-800" />
                 <span><strong className="block text-sm">Cash on Delivery</strong><span className="text-xs text-neutral-500">Pay securely when your parcel arrives</span></span>
               </label>
-            </CheckoutSection>
-
-            <CheckoutSection number="05" title="Billing address">
-              <div className="overflow-hidden rounded-[10px] border border-neutral-300">
-                <label className="flex cursor-pointer items-center gap-3 border-b border-neutral-200 p-4 text-sm">
-                  <input type="radio" name="billing" checked={formData.billingAddress === "same"} onChange={() => updateField("billingAddress", "same")} className="h-4 w-4 accent-amber-800" />
-                  Same as delivery address
-                </label>
-                <label className="flex cursor-pointer items-center gap-3 p-4 text-sm">
-                  <input type="radio" name="billing" checked={formData.billingAddress === "different"} onChange={() => updateField("billingAddress", "different")} className="h-4 w-4 accent-amber-800" />
-                  Use a different billing address
-                </label>
-              </div>
-              {formData.billingAddress === "different" ? (
-                <div className="grid gap-4 border-l-2 border-amber-800 pl-4 sm:grid-cols-2">
-                  <input value={formData.billingFirstName} onChange={(event) => updateField("billingFirstName", event.target.value)} placeholder="Billing first name *" className={fieldClassName} />
-                  <input value={formData.billingLastName} onChange={(event) => updateField("billingLastName", event.target.value)} placeholder="Billing last name *" className={fieldClassName} />
-                  <input value={formData.billingAddressLine} onChange={(event) => updateField("billingAddressLine", event.target.value)} placeholder="Billing address *" className={`${fieldClassName} sm:col-span-2`} />
-                  <input value={formData.billingCity} onChange={(event) => updateField("billingCity", event.target.value)} placeholder="Billing city *" className={fieldClassName} />
-                </div>
-              ) : null}
             </CheckoutSection>
           </div>
 
@@ -294,7 +302,31 @@ export default function CheckoutPage() {
               <div className="flex justify-between"><span className="flex items-center gap-1 text-neutral-600">Shipping <Question className="h-4 w-4" /></span><strong>{finalShippingFee ? `Rs.${finalShippingFee.toLocaleString("en-PK")}` : "Free"}</strong></div>
               {appliedDiscount ? <div className="flex justify-between text-green-700"><span>Discount</span><strong>-Rs.{appliedDiscount}</strong></div> : null}
               <div className="flex items-end justify-between border-t border-neutral-200 pt-4"><span className="text-base font-bold">Total</span><span><small className="mr-2 text-xs text-neutral-500">PKR</small><strong className="text-2xl text-amber-800">Rs.{orderTotal.toLocaleString("en-PK")}</strong></span></div>
-              <button type="submit" disabled={loading} className="mt-3 inline-flex h-14 w-full items-center justify-center gap-2 rounded-[10px] bg-amber-800 px-6 text-base font-semibold text-white transition-colors hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-60">
+
+              {hasValidationErrors ? (
+                <div role="alert" className="rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-xs leading-5 text-red-700">
+                  <strong className="block font-semibold">Please fix the highlighted fields:</strong>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {(Object.keys(fieldErrors) as CheckoutErrorKey[]).map((key) => (
+                      <li key={key}>{fieldErrors[key]}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {submitError ? (
+                <div role="alert" className="rounded-[10px] border border-red-300 bg-red-50 px-4 py-3 text-xs leading-5 text-red-700">
+                  <strong className="block font-semibold">Order not placed.</strong>
+                  <p className="mt-1">{submitError}</p>
+                </div>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={loading}
+                aria-busy={loading}
+                className="mt-1 inline-flex h-14 w-full items-center justify-center gap-2 rounded-[10px] bg-amber-800 px-6 text-base font-semibold text-white transition-colors hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 <LockKey className="h-5 w-5" />{loading ? "Placing order..." : "Place order"}
               </button>
               <p className="text-center text-xs leading-5 text-neutral-500">By placing your order, you agree to our <Link href="/terms-of-service" className="underline">terms</Link> and <Link href="/refund-policy" className="underline">refund policy</Link>.</p>
@@ -303,6 +335,15 @@ export default function CheckoutPage() {
         </form>
       </div>
     </main>
+  )
+}
+
+function FieldErrorMessage({ idName, message }: { idName: CheckoutFieldKey; message?: string }) {
+  if (!message) return null
+  return (
+    <p id={`checkout-error-${idName}`} className="mt-1 text-xs font-medium text-red-600">
+      {message}
+    </p>
   )
 }
 

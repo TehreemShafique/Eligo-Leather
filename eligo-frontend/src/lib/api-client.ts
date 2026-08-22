@@ -73,12 +73,6 @@ async function request<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  // Default Stale-While-Revalidate caching options (< 0.6s TTFB & < 0.4s content load guarantee)
-  const defaultNextConfig: NextFetchRequestConfig =
-    method === "GET"
-      ? { revalidate: 60, tags: ["catalog", "menus", "settings"] }
-      : {};
-
   const fetchOptions: RequestInit = {
     method,
     headers,
@@ -87,9 +81,22 @@ async function request<T>(
         ? JSON.stringify(body)
         : (body as BodyInit | undefined),
     signal: options.signal,
-    cache: options.cache,
-    next: options.next ?? defaultNextConfig,
-  };
+  }
+
+  // Cache policy:
+  // - an explicit caller `cache` option always wins and is copied alone
+  //   (`next` is never combined with it);
+  // - otherwise an explicit caller `next` config is used on its own;
+  // - otherwise GET requests default to `no-store` (safe for authenticated,
+  //   customer-specific or order-related reads); non-GET requests get no
+  //   cache directive.
+  if (options.cache !== undefined) {
+    fetchOptions.cache = options.cache
+  } else if (options.next !== undefined) {
+    fetchOptions.next = options.next
+  } else if (method === "GET") {
+    fetchOptions.cache = "no-store"
+  }
 
   const response = await fetch(`${env.NEXT_PUBLIC_API_URL}${API_PREFIX}${path}`, fetchOptions);
 

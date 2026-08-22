@@ -19,10 +19,13 @@ export const DEFAULT_STOREFRONT_CONFIG: StorefrontConfig = {
   headerScripts: "",
 }
 
+// Public storefront settings/brand: safe to cache at the edge for a short window.
+const STORE_SETTINGS_CACHE = { next: { revalidate: 60, tags: ["settings"] } }
+
 export async function fetchStorefrontConfig(): Promise<StorefrontConfig> {
   const [settingsResult, brandResult] = await Promise.allSettled([
-    api.get("/settings/general/store-settings", { auth: false }),
-    api.get("/settings/general/store-brand", { auth: false }),
+    api.get("/settings/general/store-settings", { auth: false, ...STORE_SETTINGS_CACHE }),
+    api.get("/settings/general/store-brand", { auth: false, ...STORE_SETTINGS_CACHE }),
   ])
 
   const config: StorefrontConfig = { ...DEFAULT_STOREFRONT_CONFIG }

@@ -2,7 +2,7 @@
 
 export const metadata = buildSeoMetadata({
   title: "Secure Checkout",
-  description: "Complete delivery and billing details to securely place your Eligo Leather order for delivery across Pakistan.",
+  description: "Complete your delivery details to securely place your Eligo Leather order for delivery across Pakistan.",
   path: "/checkout",
   noIndex: true,
 })

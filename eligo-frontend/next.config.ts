@@ -17,14 +17,11 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
+    const noStore = { key: "Cache-Control", value: "private, no-store" }
     return [
       {
         source: "/:path*",
         headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=60, s-maxage=3600, stale-while-revalidate=86400",
-          },
           {
             key: "X-Server-Response-Time-Target",
             value: "< 0.6s",
@@ -38,6 +35,28 @@ const nextConfig: NextConfig = {
             value: "4MB",
           },
         ],
+      },
+      // Customer-specific or authentication-state routes must never be cached
+      // by browsers or shared caches.
+      {
+        source: "/cart",
+        headers: [noStore],
+      },
+      {
+        source: "/checkout",
+        headers: [noStore],
+      },
+      {
+        source: "/account/:path*",
+        headers: [noStore],
+      },
+      {
+        source: "/login",
+        headers: [noStore],
+      },
+      {
+        source: "/register",
+        headers: [noStore],
       },
     ]
   },

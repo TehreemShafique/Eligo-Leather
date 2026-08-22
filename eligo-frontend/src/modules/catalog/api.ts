@@ -29,6 +29,9 @@ function buildQueryString(params: Record<string, string | number | undefined>): 
   return query ? `?${query}` : ""
 }
 
+// Public catalog content: safe to cache at the edge for a short window.
+const CATALOG_CACHE = { next: { revalidate: 60, tags: ["catalog"] } }
+
 export async function listProducts(params: ListProductsParams = {}): Promise<ProductListOut[]> {
   try {
     const {
@@ -40,7 +43,7 @@ export async function listProducts(params: ListProductsParams = {}): Promise<Pro
     } = params
 
     const query = buildQueryString({ status, category, search, skip, limit })
-    const data = await api.get(`/catalog/products${query}`, { auth: false })
+    const data = await api.get(`/catalog/products${query}`, { auth: false, ...CATALOG_CACHE })
     if (!data || !Array.isArray(data)) return []
     return ProductListOutSchema.array().parse(data)
   } catch (error) {
@@ -51,7 +54,7 @@ export async function listProducts(params: ListProductsParams = {}): Promise<Pro
 
 export async function getProduct(productId: number): Promise<ProductOut | null> {
   try {
-    const data = await api.get(`/catalog/products/${productId}`, { auth: false })
+    const data = await api.get(`/catalog/products/${productId}`, { auth: false, ...CATALOG_CACHE })
     if (!data) return null
     return ProductOutSchema.parse(data)
   } catch (error) {
@@ -62,7 +65,7 @@ export async function getProduct(productId: number): Promise<ProductOut | null> 
 
 export async function listCollections(): Promise<CollectionOut[]> {
   try {
-    const data = await api.get(`/catalog/collections`, { auth: false })
+    const data = await api.get(`/catalog/collections`, { auth: false, ...CATALOG_CACHE })
     if (!data || !Array.isArray(data)) return []
     return CollectionOutSchema.array().parse(data)
   } catch (error) {
@@ -73,7 +76,7 @@ export async function listCollections(): Promise<CollectionOut[]> {
 
 export async function getCollection(collectionId: number): Promise<CollectionOut | null> {
   try {
-    const data = await api.get(`/catalog/collections/${collectionId}`, { auth: false })
+    const data = await api.get(`/catalog/collections/${collectionId}`, { auth: false, ...CATALOG_CACHE })
     if (!data) return null
     return CollectionOutSchema.parse(data)
   } catch (error) {

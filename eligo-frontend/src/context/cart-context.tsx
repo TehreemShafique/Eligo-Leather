@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect } from "react"
 
 export interface CartItem {
   id: string | number
+  /** Selected variant ID from the PDP, when the product has variants. */
+  variantId?: string | number
   title: string
   price: number
   originalPrice?: number

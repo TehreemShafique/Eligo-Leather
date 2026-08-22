@@ -21,11 +21,14 @@ function buildQueryString(params: Record<string, string | number | undefined>): 
   return query ? `?${query}` : ""
 }
 
+// Public blog content: safe to cache at the edge for a short window.
+const BLOG_CACHE = { next: { revalidate: 60, tags: ["blog"] } }
+
 export async function listBlogPosts(params: ListBlogPostsParams = {}): Promise<BlogPostOut[]> {
   try {
     const { visibility, search, author, blog, skip = 0, limit = 50 } = params
     const query = buildQueryString({ visibility, search, author, blog, skip, limit })
-    const data = await api.get(`/blog-posts${query}`, { auth: false })
+    const data = await api.get(`/blog-posts${query}`, { auth: false, ...BLOG_CACHE })
     if (!data || !Array.isArray(data)) return []
     return BlogPostOutSchema.array().parse(data)
   } catch (error) {
