@@ -11,7 +11,7 @@ import {
   PinterestLogo,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import { useCart } from "@/context/cart-context"
+import { useCartStore } from "@/modules/cart/store"
 
 export interface VariantColorOption {
   name: string
@@ -48,7 +48,7 @@ export function ProductBuyBox({
 }: ProductBuyBoxProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { addToCart } = useCart()
+  const addToCart = useCartStore((state) => state.addToCart)
 
   const initialVariantId = searchParams.get("variant")
   const initialColorObj = colors.length > 0

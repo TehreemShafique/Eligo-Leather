@@ -5,7 +5,7 @@ import {
   type CheckoutFormValues,
   type CheckoutTotals,
 } from "@/app/checkout/checkout-helpers"
-import type { CartItem } from "@/context/cart-context"
+import type { CartItem } from "@/modules/cart/store"
 
 const validForm: CheckoutFormValues = {
   email: "",

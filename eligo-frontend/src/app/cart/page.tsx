@@ -2,11 +2,20 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useCart } from "@/context/cart-context"
+import {
+  useCartStore,
+  selectCart,
+  selectCartSubtotal,
+  cartLineKey,
+} from "@/modules/cart/store"
 import { Trash, ArrowLeft, ShoppingBag } from "@phosphor-icons/react"
 
 export default function CartPage() {
-  const { cart, cartSubtotal, updateQuantity, removeFromCart, clearCart } = useCart()
+  const cart = useCartStore(selectCart)
+  const cartSubtotal = useCartStore(selectCartSubtotal)
+  const updateQuantity = useCartStore((state) => state.updateQuantity)
+  const removeFromCart = useCartStore((state) => state.removeFromCart)
+  const clearCart = useCartStore((state) => state.clearCart)
 
   if (cart.length === 0) {
     return (
@@ -48,9 +57,9 @@ export default function CartPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Items List */}
           <div className="lg:col-span-8 space-y-4">
-            {cart.map((item, idx) => (
+            {cart.map((item) => (
               <div
-                key={`${item.id}-${item.color}-${idx}`}
+                key={cartLineKey(item)}
                 className="bg-white rounded-[20px] p-4 sm:p-6 border border-gray-200 shadow-2xs flex flex-col sm:flex-row items-center gap-6"
               >
                 <div className="relative w-24 h-24 sm:w-28 sm:h-28 bg-zinc-100 rounded-[15px] overflow-hidden shrink-0">
@@ -74,7 +83,7 @@ export default function CartPage() {
                   <div className="inline-flex items-center border border-gray-300 rounded-[5px] overflow-hidden bg-white">
                     <button
                       type="button"
-                      onClick={() => updateQuantity(item.id, item.quantity - 1, item.color)}
+                      onClick={() => updateQuantity(item, item.quantity - 1)}
                       className="w-8 h-8 flex items-center justify-center text-sm font-semibold text-gray-700 hover:bg-gray-100"
                     >
                       &minus;
@@ -84,7 +93,7 @@ export default function CartPage() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => updateQuantity(item.id, item.quantity + 1, item.color)}
+                      onClick={() => updateQuantity(item, item.quantity + 1)}
                       className="w-8 h-8 flex items-center justify-center text-sm font-semibold text-black hover:bg-gray-100"
                     >
                       &#43;
@@ -93,7 +102,7 @@ export default function CartPage() {
 
                   <button
                     type="button"
-                    onClick={() => removeFromCart(item.id, item.color)}
+                    onClick={() => removeFromCart(item)}
                     className="p-2 text-gray-400 hover:text-red-600 transition-colors"
                     title="Remove item"
                   >

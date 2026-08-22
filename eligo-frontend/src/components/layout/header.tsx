@@ -15,7 +15,7 @@ import {
   List,
   X,
 } from "@phosphor-icons/react"
-import { useCart } from "@/context/cart-context"
+import { useCartStore, selectCartCount } from "@/modules/cart/store"
 import { DEFAULT_HEADER_MENU, getHeaderMenu } from "@/modules/menu/api"
 import type { MenuItem } from "@/modules/menu/types"
 import { searchProducts } from "@/modules/catalog/api"
@@ -147,7 +147,7 @@ export function Header() {
 
 function HeaderInteractive() {
   const pathname = usePathname()
-  const { cartCount } = useCart()
+  const cartCount = useCartStore(selectCartCount)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [menuItems, setMenuItems] =
     useState<MenuItem[]>(DEFAULT_HEADER_MENU)
