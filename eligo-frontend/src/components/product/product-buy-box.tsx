@@ -50,6 +50,14 @@ export function ProductBuyBox({
   const searchParams = useSearchParams()
   const addToCart = useCartStore((state) => state.addToCart)
 
+  // Description arrives sanitized from the server; derive a short
+  // plain-text teaser so the collapsed preview never leaks raw markup.
+  const plainDescription = description
+    ? description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+    : ""
+  const teaserLength = 180
+  const needsTruncation = plainDescription.length > teaserLength
+
   const initialVariantId = searchParams.get("variant")
   const initialColorObj = colors.length > 0
     ? (colors.find((c) => String(c.variantId) === initialVariantId) || colors[0])

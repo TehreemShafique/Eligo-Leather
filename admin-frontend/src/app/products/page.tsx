@@ -78,6 +78,7 @@ export default function AdminProductsPage() {
   const [sendingCampaign, setSendingCampaign] = useState(false)
 
   const [products, setProducts] = useState<ProductItem[]>([])
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -109,19 +110,29 @@ export default function AdminProductsPage() {
     fetchProducts()
   }, [])
 
-  const handleDeleteProduct = async (id: number) => {
+  const handleDeleteProduct = async (product: ProductItem) => {
+    if (
+      !window.confirm(
+        `Delete "${product.title}" permanently? It will also disappear from the store frontend.`,
+      )
+    ) {
+      return
+    }
+    setDeletingId(product.id)
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/catalog/products/${id}`, { method: "DELETE" })
+      const res = await fetch(`http://127.0.0.1:8000/api/v1/catalog/products/${product.id}`, { method: "DELETE" })
       if (res.ok || res.status === 204) {
-        setProducts(prev => prev.filter(p => p.id !== id))
-        toast.success("Product deleted from database successfully!")
+        setProducts(prev => prev.filter(p => p.id !== product.id))
+        toast.success(`"${product.title}" deleted from database successfully!`)
       } else {
-        setProducts(prev => prev.filter(p => p.id !== id))
-        toast.info("Product removed from list.")
+        const detail = await res.text().catch(() => "")
+        toast.error(`Backend refused to delete product (${res.status}). ${detail.slice(0, 120)}`)
       }
     } catch (err) {
-      setProducts(prev => prev.filter(p => p.id !== id))
-      toast.info("Product removed from list.")
+      console.error("Failed to delete product:", err)
+      toast.error("Could not reach the backend. Product was NOT deleted.")
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -380,6 +391,7 @@ export default function AdminProductsPage() {
                 <th className="eligo-th w-[22%]">Inventory</th>
                 <th className="eligo-th w-[13%]">Sales Channels</th>
                 <th className="eligo-th w-[11%] text-right">Price</th>
+                <th className="eligo-th w-[8%] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -410,6 +422,17 @@ export default function AdminProductsPage() {
                     <td className="eligo-td font-semibold text-gray-900">{p.inventory}</td>
                     <td className="eligo-td text-gray-600">{p.channels}</td>
                     <td className="eligo-td text-right font-bold text-gray-900">{p.price}</td>
+                    <td className="eligo-td text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProduct(p)}
+                        disabled={deletingId === p.id}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Delete product permanently"
+                      >
+                        <Trash className="w-4 h-4" />
+                      </button>
+                    </td>
                   </tr>
                 )
               })}

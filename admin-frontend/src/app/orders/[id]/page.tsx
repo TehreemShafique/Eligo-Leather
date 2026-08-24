@@ -9,6 +9,7 @@ import {
   Truck,
   Printer,
   FileText,
+  ArrowCounterClockwise,
   User,
   EnvelopeSimple,
   Phone,
@@ -37,11 +38,15 @@ type OrderDetailPageProps = {
 
 interface OrderItem {
   id: number
+  product_id?: number | null
+  variant_id?: number | null
+  sku?: string | null
   product_name: string
   variant_title: string | null
   quantity: number
   unit_price: number
   total_price: number
+  restocked?: boolean
 }
 
 interface AuditLog {
@@ -145,6 +150,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const [moreActionsOpen, setMoreActionsOpen] = useState(false)
   const [packingSlipOpen, setPackingSlipOpen] = useState(false)
   const [editAddressOpen, setEditAddressOpen] = useState(false)
+  const [restocking, setRestocking] = useState(false)
 
   const [editShippingAddress, setEditShippingAddress] = useState("")
   const [commentText, setCommentText] = useState("")
@@ -209,6 +215,40 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
       toast.success("Order marked as delivered!")
       fetchOrder(); fetchAuditLog()
     } catch { toast.error("Failed to update delivery status") }
+  }
+
+  // Returns every non-restocked order item back to its variant's inventory
+  // (same product + same color variant that was ordered). The order itself
+  // stays in the system for courier (Leopards) return claims.
+  const handleRestock = async () => {
+    if (!order || restocking) return
+    const restockable = order.items.filter(i => !i.restocked)
+    if (restockable.length === 0) {
+      toast.info("All items in this order are already restocked.")
+      return
+    }
+    const summary = restockable
+      .map(i => `${i.product_name} (${i.variant_title || "Standard"}) x ${i.quantity}`)
+      .join(", ")
+    if (
+      !window.confirm(
+        `Return these items back to inventory?\n\n${summary}\n\n` +
+        `Stock becomes available again on the exact color variants ordered. ` +
+        `The order stays in the system for the Leopards return claim.`,
+      )
+    ) {
+      return
+    }
+    setRestocking(true)
+    try {
+      await apiFetch(`/api/v1/orders/${id}/restock`, { method: "POST" })
+      toast.success(`${restockable.length} item(s) returned to inventory!`)
+      fetchOrder(); fetchAuditLog()
+    } catch {
+      toast.error("Failed to restock items")
+    } finally {
+      setRestocking(false)
+    }
   }
 
   const handleUpdateTags = async (newTags: string) => {
@@ -325,6 +365,9 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const tags = order.tags ? order.tags.split(",").map(t => t.trim()).filter(Boolean) : []
   const isPaid = order.payment_status === "paid"
   const isFulfilled = order.fulfillment_status === "fulfilled"
+  const restockableItems = order.items.filter(i => !i.restocked)
+  const allRestocked = order.items.length > 0 && restockableItems.length === 0
+  const totalRestockUnits = order.items.reduce((sum, i) => sum + i.quantity, 0)
 
   const feed: FeedItem[] = [
     ...auditLogs.map((log): FeedItem => ({
@@ -381,6 +424,17 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
         <div className="flex items-center gap-2 relative">
           {!isPaid && <button onClick={handleMarkPaid} className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Paid</button>}
           {!isFulfilled && <button onClick={handleMarkDelivered} className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Delivered</button>}
+          {restockableItems.length > 0 && (
+            <button
+              onClick={handleRestock}
+              disabled={restocking}
+              title="Return ordered items back to their variant inventory"
+              className="px-3.5 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {restocking ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : <ArrowCounterClockwise className="w-3.5 h-3.5" />}
+              <span>{restocking ? "Restocking..." : `Restock ${restockableItems.length} item${restockableItems.length > 1 ? "s" : ""}`}</span>
+            </button>
+          )}
           <div className="relative">
             <button onClick={() => setMoreActionsOpen(!moreActionsOpen)} className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-800 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 cursor-pointer">
               <span>More actions</span>
@@ -410,14 +464,26 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-sm font-bold text-gray-900">Fulfillment</h3>
-              {isFulfilled && <span className="eligo-badge bg-blue-100 text-blue-800 border-blue-200"><Truck className="w-3 h-3" />Fulfilled</span>}
+              <div className="flex items-center gap-2">
+                {allRestocked && (
+                  <span className="eligo-badge bg-violet-100 text-violet-800 border-violet-200 cursor-default" title={`${totalRestockUnits} unit(s) returned to inventory`}>
+                    <ArrowCounterClockwise className="w-3 h-3" />Restocked
+                  </span>
+                )}
+                {isFulfilled && <span className="eligo-badge bg-blue-100 text-blue-800 border-blue-200"><Truck className="w-3 h-3" />Fulfilled</span>}
+              </div>
             </div>
             <div className="space-y-3">
               {order.items.map((item) => (
                 <div key={item.id} className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500"><span className="text-sm">📦</span></div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-bold text-gray-900 truncate">{item.product_name}</div>
+                    <div className="text-xs font-bold text-gray-900 truncate flex items-center gap-2">
+                      <span className="truncate">{item.product_name}</span>
+                      {item.restocked && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-[10px] font-bold">Restocked to inventory</span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-gray-500">{item.variant_title || "Default"} x {item.quantity}</div>
                   </div>
                   <div className="text-xs font-bold text-gray-900">Rs. {Number(item.total_price).toLocaleString()}</div>

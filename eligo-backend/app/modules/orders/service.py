@@ -198,6 +198,26 @@ async def archive_order(db: AsyncSession, order_id: int) -> Order | None:
 # Restock
 # ================================================================
 
+async def get_variant_commitments(db: AsyncSession) -> dict[int, int]:
+    """Committed units per variant id.
+
+    A unit is "committed" while it belongs to an order that is neither
+    cancelled (``orders.cancelled_at`` set) nor restocked. Available stock on
+    the storefront/admin side is ``on_hand - committed``.
+    """
+    result = await db.execute(
+        select(OrderItem.variant_id, func.coalesce(func.sum(OrderItem.quantity), 0))
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(
+            OrderItem.variant_id.isnot(None),
+            Order.cancelled_at.is_(None),
+            OrderItem.restocked.is_(False),
+        )
+        .group_by(OrderItem.variant_id)
+    )
+    return {int(variant_id): int(qty) for variant_id, qty in result.all()}
+
+
 async def restock_order_items(db: AsyncSession, order_id: int) -> Order | None:
     """Return cancelled/returned order items back to inventory."""
     order = await get_order(db, order_id)

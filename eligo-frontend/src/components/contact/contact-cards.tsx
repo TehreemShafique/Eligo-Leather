@@ -94,7 +94,8 @@ export function ContactCards() {
 
           <div className="pt-2">
             <a
-              href={googleMapsUrl}
+              href="https://maps.app.goo.gl/qf5psEBjZ2DZBAT19"
+              //href="https://www.google.com/maps/place/Gulberg+Empire/@33.6005967,73.1525973,17z/data=!4m14!1m7!3m6!1s0x38dfed8e1fe5ae65:0x8b8839f7a8567077!2sGulberg+Empire!8m2!3d33.6005967!4d73.1525973!16s%2Fg%2F11frdrb6ml!3m5!1s0x38dfed8e1fe5ae65:0x8b8839f7a8567077!8m2!3d33.6005967!4d73.1525973!16s%2Fg%2F11frdrb6ml?entry=ttu&g_ep=EgoyMDI2MDgxOS4wIKXMDSoASAFQAw%3D%3D"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-amber-800 text-amber-800 text-xs font-normal uppercase tracking-wide hover:bg-amber-800 hover:text-white transition-colors"

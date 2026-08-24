@@ -179,6 +179,8 @@ export function parseOrderResponse(payload: unknown): ParsedOrderResponse {
 }
 
 export interface GuestOrderItemPayload {
+  product_id?: number | string
+  variant_id?: number | string
   product_name: string
   variant_title: string
   quantity: number
@@ -259,6 +261,8 @@ export function buildGuestOrderPayload(
     note: contactEmail ? `Contact email: ${contactEmail}` : "",
     destination: form.city.trim() || country,
     items: cart.map((item) => ({
+      product_id: item.id,
+      variant_id: item.variantId,
       product_name: item.title,
       variant_title: item.color && item.color.trim() ? item.color.trim() : "Standard",
       quantity: item.quantity,

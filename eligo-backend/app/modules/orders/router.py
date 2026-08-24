@@ -1045,6 +1045,19 @@ async def get_orders_analytics(
 
 
 # ================================================================
+# Inventory commitments
+# ================================================================
+
+@router.get("/inventory-commitments")
+async def get_inventory_commitments(db: AsyncSession = Depends(get_db)):
+    """Committed units per variant id (open, non-restocked order items).
+
+    Admin inventory uses this to display: available = on_hand - committed.
+    """
+    return await service.get_variant_commitments(db)
+
+
+# ================================================================
 # Export
 # ================================================================
 

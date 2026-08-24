@@ -74,19 +74,26 @@ export default function AdminCategoriesPage() {
     fetchCategoriesFromDB()
   }, [])
 
-  const handleDeleteCategory = async (id: number) => {
+  const handleDeleteCategory = async (category: CategoryItem) => {
+    if (
+      !window.confirm(
+        `Delete "${category.title}" permanently? It will also disappear from the store frontend.`,
+      )
+    ) {
+      return
+    }
     try {
-      const res = await fetch(`${API_BASE}/api/v1/catalog/collections/${id}`, { method: "DELETE" })
+      const res = await fetch(`${API_BASE}/api/v1/catalog/collections/${category.id}`, { method: "DELETE" })
       if (res.ok || res.status === 204) {
-        setCategories(prev => prev.filter(c => c.id !== id))
-        toast.success("Category deleted successfully!")
+        setCategories(prev => prev.filter(c => c.id !== category.id))
+        toast.success(`"${category.title}" deleted from database successfully!`)
       } else {
-        setCategories(prev => prev.filter(c => c.id !== id))
-        toast.info("Category removed from list.")
+        const detail = await res.text().catch(() => "")
+        toast.error(`Backend refused to delete category (${res.status}). ${detail.slice(0, 120)}`)
       }
     } catch (err) {
-      setCategories(prev => prev.filter(c => c.id !== id))
-      toast.info("Category removed from list.")
+      console.error("Failed to delete category:", err)
+      toast.error("Could not reach the backend. Category was NOT deleted.")
     }
   }
 
@@ -221,7 +228,7 @@ export default function AdminCategoriesPage() {
                             <td className="eligo-td text-right">
                               <button
                                 type="button"
-                                onClick={() => handleDeleteCategory(c.id)}
+                                onClick={() => handleDeleteCategory(c)}
                                 className="p-1 text-gray-400 hover:text-red-600 cursor-pointer"
                                 title="Delete category"
                               >
