@@ -237,7 +237,9 @@ async def generate_leopard_cn_api(request: Request, db: AsyncSession = Depends(g
 
             consignee_name = customer_name or "Customer"
             consignee_phone = customer_phone or "0000000000"
-            consignee_address = order_row.shipping_address or ""
+            consignee_address = leopard_service.clean_consignee_address(
+                order_row.shipping_address
+            )
             destination_city = order_row.destination or "Islamabad"
             cod_amount = str(order_row.total_price or 0)
             weight = "500"
@@ -1037,10 +1039,9 @@ async def mark_order_delivered_public_api(
 async def get_orders_analytics(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
-    location_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.get_orders_analytics(db, date_from, date_to, location_id)
+    return await service.get_orders_analytics(db, date_from, date_to)
 
 
 # ================================================================
@@ -1116,13 +1117,14 @@ async def list_orders(
     channel: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    customer_id: int | None = None,
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
 ):
     return await service.list_orders(
         db, is_archived, payment_status, fulfillment_status, search,
-        date_from, date_to, channel, skip, limit,
+        date_from, date_to, channel, skip, limit, customer_id,
     )
 
 

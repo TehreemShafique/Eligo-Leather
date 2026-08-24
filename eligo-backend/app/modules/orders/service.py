@@ -54,7 +54,6 @@ async def create_order(db: AsyncSession, data: OrderCreate) -> Order:
     order = Order(
         order_number=data.order_number,
         customer_id=data.customer_id,
-        location_id=data.location_id,
         fulfill_by=data.fulfill_by,
         channel=data.channel,
         currency=data.currency,
@@ -125,11 +124,15 @@ async def list_orders(
     channel: str | None = None,
     skip: int = 0,
     limit: int = 50,
+    customer_id: int | None = None,
 ) -> list[Order]:
     query = select(Order).options(selectinload(Order.items), selectinload(Order.customer))
 
     if is_archived is not None:
         query = query.where(Order.is_archived == is_archived)
+
+    if customer_id is not None:
+        query = query.where(Order.customer_id == customer_id)
 
     if payment_status is not None:
         query = query.where(Order.payment_status == payment_status)
@@ -333,16 +336,17 @@ async def get_orders_analytics(
     db: AsyncSession,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
-    location_id: int | None = None,
 ) -> OrdersAnalyticsSummary:
-    query = select(Order).where(Order.is_archived == False)
+    query = (
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.is_archived == False)
+    )
 
     if date_from:
         query = query.where(Order.created_at >= date_from)
     if date_to:
         query = query.where(Order.created_at <= date_to)
-    if location_id:
-        query = query.where(Order.location_id == location_id)
 
     result = await db.execute(query)
     orders = list(result.scalars().all())
@@ -558,7 +562,6 @@ async def convert_draft_to_order(db: AsyncSession, draft_id: int, order_number: 
     order = Order(
         order_number=order_number,
         customer_id=draft.customer_id,
-        location_id=None,
         channel="Draft Order",
         currency=draft.currency,
         subtotal=draft.subtotal,

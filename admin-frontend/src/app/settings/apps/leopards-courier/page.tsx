@@ -29,6 +29,18 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
+// Legacy orders pack "Name | Phone: 03xx | street, city" into shipping_address;
+// the Leopards form needs the street address only.
+function cleanConsigneeAddress(raw: string): string {
+  const s = (raw || "").trim()
+  if (!s.includes("|")) return s
+  const parts = s.split("|").map((p) => p.trim()).filter(Boolean)
+  const phoneIdx = parts.findIndex((p) => p.toLowerCase().startsWith("phone"))
+  if (phoneIdx === -1) return s
+  const address = parts.slice(phoneIdx + 1).join(", ").trim()
+  return address || s
+}
+
 function LeopardsCourierFormContent() {
   const searchParams = useSearchParams()
   const [mounted, setMounted] = useState(false)
@@ -166,7 +178,7 @@ function LeopardsCourierFormContent() {
             setManualConsigneeEmail(
               o.customer_email && o.customer_email !== "No email provided" ? o.customer_email : ""
             )
-            setManualConsigneeAddress(o.shipping_address || "")
+            setManualConsigneeAddress(cleanConsigneeAddress(o.shipping_address || ""))
             setManualDestinationCity(o.city || "")
             if (o.items && Array.isArray(o.items) && o.items.length > 0) {
               const itemSummary = o.items

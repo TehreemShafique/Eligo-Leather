@@ -66,9 +66,14 @@ async def add_performance_and_cache_headers(request: Request, call_next):
     
     # Server response execution time tracking header
     response.headers["X-Response-Time"] = f"{process_time:.4f}s"
-    
-    # Cache Control Header for GET endpoints (Excluding auth and leopard real-time endpoints)
-    if request.method == "GET" and not request.url.path.startswith("/api/v1/auth") and not "/leopard" in request.url.path:
+
+    # API responses must never be cached publicly: the admin panel and
+    # storefront poll live data, and browser-cached JSON caused stale
+    # orders/customers to appear after a refresh.
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    elif request.method == "GET" and not request.url.path.startswith("/api/v1/auth") and not "/leopard" in request.url.path:
+        # Cache Control Header for GET endpoints (Excluding auth and leopard real-time endpoints)
         response.headers["Cache-Control"] = "public, max-age=60, s-maxage=3600, stale-while-revalidate=86400"
     elif "/leopard" in request.url.path:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"

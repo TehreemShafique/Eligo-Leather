@@ -26,8 +26,46 @@ from app.modules.orders.model import (
     LeopardShipment, LeopardLoadSheet, LeopardLog,
     Order, OrderAuditLog, FulfillmentStatus,
 )
+from app.modules.settings.general.model import StoreSettings
 
 logger = logging.getLogger(__name__)
+
+# Fallback used only when the store has not saved its business address in
+# Settings -> General yet.
+DEFAULT_BUSINESS_ADDRESS = (
+    "Office # 407, 4th floor, Gulberg Empire, Civic Center, "
+    "Executive Block, Gulberg Greens, Islamabad"
+)
+
+
+def clean_consignee_address(raw: str | None) -> str:
+    """Return the street address from a packed shipping address.
+
+    Legacy storefront orders pack "Name | Phone: 03xx | street, city, country"
+    into orders.shipping_address. Leopards booking slips must show the street
+    address only - the name and phone already travel in their own fields.
+    """
+    s = str(raw or "").strip()
+    if "|" not in s:
+        return s
+    parts = [p.strip() for p in s.split("|") if p.strip()]
+    phone_idx = next(
+        (i for i, p in enumerate(parts) if p.lower().startswith("phone")),
+        None,
+    )
+    if phone_idx is None:
+        return s
+    address = ", ".join(parts[phone_idx + 1:]).strip()
+    return address or s
+
+
+async def get_business_address(db: AsyncSession) -> str:
+    """The merchant business address (Settings -> General -> Store address)."""
+    result = await db.execute(select(StoreSettings).limit(1))
+    row = result.scalar_one_or_none()
+    if row is not None and row.address and str(row.address).strip():
+        return str(row.address).strip()
+    return DEFAULT_BUSINESS_ADDRESS
 
 
 # ================================================================
@@ -921,7 +959,7 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
     cod_amount = str(payload.get("cod_amount", "0"))
     consignee_name = str(payload.get("consignee_name", "")).strip()
     consignee_phone = str(payload.get("consignee_phone", "")).strip()
-    consignee_address = str(payload.get("consignee_address", "")).strip()
+    consignee_address = clean_consignee_address(payload.get("consignee_address", ""))
     destination_city = str(payload.get("destination_city", "")).strip()
     special_instructions = str(payload.get("special_instructions", "N/A"))
     weight = str(payload.get("weight", payload.get("weight_grams", "500")))
@@ -1069,6 +1107,8 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
 
     await db.commit()
 
+    business_address = await get_business_address(db)
+
     return {
         "status": "success",
         "cn_number": cn_number,
@@ -1090,9 +1130,9 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
             "shipper_name": "ELIGO LEATHER",
             "shipper_ac": "102620 / ELIGO LEATHER",
             "shipper_contact": "03345399470",
-            "shipper_address": "OFFICE # 407, 4TH FLOOR, GULBERG EMPIRE, CIVIC CENTER, EXECUTIVE BLOCK, GULBERG GREENS, ISLAMABAD",
-            "return_address": "Office # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad",
-            "business_address": "OFFICE#407, 4TH FLOOR, GULBERG EMPIRE, EXECUTIVE BLOCK, GULBERG GREENS, ISB",
+            "shipper_address": business_address,
+            "return_address": business_address,
+            "business_address": business_address,
             "origin_city": "ISLAMABAD",
         },
     }

@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
+import { apiFetch } from "@/lib/api"
 
 interface OrderItem {
   id: number
@@ -60,13 +61,8 @@ export default function AdminOrdersPage() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const token = localStorage.getItem("eligo_admin_token")
-      const res = await fetch("http://localhost:8000/api/v1/orders/?limit=100&skip=0", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!res.ok) throw new Error("Failed to fetch orders")
-      const data = await res.json()
-      setOrders(data)
+      const data = await apiFetch<Order[]>("/api/v1/orders/?limit=100&skip=0")
+      setOrders(Array.isArray(data) ? data : [])
     } catch {
       toast.error("Could not load orders from database")
     } finally {

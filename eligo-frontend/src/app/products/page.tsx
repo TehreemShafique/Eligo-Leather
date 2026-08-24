@@ -30,7 +30,14 @@ export default async function ProductsCatalogPage() {
       productsList = rawProducts.map((p) => {
         const sortedImgs = p.images ? [...p.images].sort((a, b) => a.position - b.position) : []
         const primaryImg = sortedImgs[0]?.url || p.image_url || ""
-        const secondaryImg = sortedImgs[1]?.url || primaryImg
+        // Prefer the second pic of the same color variant; fall back to the next product image.
+        const primaryTag = sortedImgs[0]?.color_tag || null
+        const hoverImg =
+          (primaryTag
+            ? sortedImgs.find((img, idx) => idx > 0 && img.color_tag === primaryTag)?.url
+            : undefined) ||
+          sortedImgs[1]?.url ||
+          primaryImg
         return {
           id: p.id,
           slug: p.url_handle?.trim() ? p.url_handle : String(p.id),
@@ -40,7 +47,7 @@ export default async function ProductsCatalogPage() {
           rating: 5.0,
           reviewCount: 35,
           image: primaryImg,
-          secondaryImage: secondaryImg,
+          secondaryImage: hoverImg,
           isSale: Boolean(p.compare_at_price),
         }
       })

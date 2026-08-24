@@ -116,7 +116,9 @@ class OrderOut(BaseModel):
     customer_name: str | None = None
     customer_email: str | None = None
     customer_phone: str | None = None
-    location_id: int | None
+    # The Order model has no locations feature yet; kept optional so ORM
+    # serialization does not crash with AttributeError -> 500.
+    location_id: int | None = None
     fulfill_by: datetime | None
     cancelled_at: datetime | None
     closed_at: datetime | None

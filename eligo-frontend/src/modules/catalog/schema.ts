@@ -36,6 +36,7 @@ const ProductImageOutSchema = z.object({
   product_id: z.number(),
   url: z.string(),
   alt_text: z.string().nullable(),
+  color_tag: z.string().nullable().optional(),
   focal_point_x: z.number().nullable().optional(),
   focal_point_y: z.number().nullable().optional(),
   position: z.number(),

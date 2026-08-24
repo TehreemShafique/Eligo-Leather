@@ -1,10 +1,15 @@
 import enum
 from app.db.base import Base
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Boolean, ForeignKey, Numeric, func, Text, DateTime, Integer
 from sqlalchemy import Enum as SAEnum
+
+# ==== Timestamps ====
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 # ==== Enums ====
 
@@ -135,8 +140,8 @@ class Order(Base):
 
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     customer = relationship("Customer", back_populates="orders")
@@ -194,8 +199,8 @@ class OrderNote(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     is_customer_visible: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     order = relationship("Order", back_populates="notes")
 
@@ -210,7 +215,7 @@ class OrderAuditLog(Base):
     actor_name: Mapped[str | None] = mapped_column(String, nullable=True)
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     order = relationship("Order", back_populates="audit_logs")
 
@@ -250,8 +255,8 @@ class DraftOrder(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     customer = relationship("Customer")
     items = relationship("DraftOrderItem", back_populates="draft_order", cascade="all, delete-orphan")
@@ -310,8 +315,8 @@ class AbandonedCheckout(Base):
     ip_address: Mapped[str | None] = mapped_column(String, nullable=True)
     browser_info: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     customer = relationship("Customer")
     items = relationship("AbandonedCheckoutItem", back_populates="checkout", cascade="all, delete-orphan")
@@ -359,8 +364,8 @@ class LeopardShipment(Base):
     current_status: Mapped[str | None] = mapped_column(String, nullable=True)
     raw_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
 
 class LeopardLoadSheet(Base):
@@ -382,7 +387,7 @@ class LeopardLoadSheet(Base):
     total_packets: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_cod: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class LeopardLog(Base):
@@ -397,4 +402,4 @@ class LeopardLog(Base):
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     date: Mapped[str] = mapped_column(String, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

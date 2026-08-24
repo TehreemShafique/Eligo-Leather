@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, use } from "react"
+import { useState, use, useEffect } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -8,74 +8,169 @@ import {
   Printer,
   Barcode,
   CheckCircle,
-  Clock,
-  Phone,
-  Envelope,
-  MapPin,
-  Package,
-  Sparkle,
-  Copy,
   Check,
-  Building,
-  User,
   ArrowsClockwise,
   X,
-  QrCode,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+// Legacy orders pack "Name | Phone: 03xx | street, city" into shipping_address;
+// the slip must show the street address only.
+function cleanConsigneeAddress(raw: string): string {
+  const s = (raw || "").trim()
+  if (!s.includes("|")) return s
+  const parts = s.split("|").map((p) => p.trim()).filter(Boolean)
+  const phoneIdx = parts.findIndex((p) => p.toLowerCase().startsWith("phone"))
+  if (phoneIdx === -1) return s
+  const address = parts.slice(phoneIdx + 1).join(", ").trim()
+  return address || s
+}
+
+interface OrderDetail {
+  id: number
+  order_number: string
+  customer_name: string | null
+  customer_phone: string | null
+  customer_email: string | null
+  shipping_address: string | null
+  city: string | null
+  total_price: number | string | null
+  items?: Array<{ product_name: string; variant_title?: string; quantity: number }>
+}
 
 export default function AdminLeopardShipmentPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const orderId = resolvedParams.id
 
-  // Form State for Manual Editing (Destination City is MANUAL TEXT INPUT)
-  const [recipientName, setRecipientName] = useState("KUMAIL")
-  const [recipientPhone, setRecipientPhone] = useState("03130032626")
-  const [recipientSecondaryPhone, setRecipientSecondaryPhone] = useState("03167670124")
-  const [recipientEmail, setRecipientEmail] = useState("kumail@example.com")
-  const [shippingAddress, setShippingAddress] = useState("Liberty, Gulberg, Nazimabad, Abdul Hakeem")
-  const [city, setCity] = useState("ABDUL HAKIM") // Manual text input
-  const [postalCode, setPostalCode] = useState("58100")
-  const [weightGrams, setWeightGrams] = useState("1,500.00")
-  const [pieces, setPieces] = useState("3")
-  const [codAmount, setCodAmount] = useState("1,321.00")
-  const [specialInstructions, setSpecialInstructions] = useState("3 pc Car Wax / Handcrafted Leather Goods")
+  // Consignee details (prefilled live from the database)
+  const [loadingOrder, setLoadingOrder] = useState(true)
+  const [orderNumber, setOrderNumber] = useState("")
+  const [recipientName, setRecipientName] = useState("")
+  const [recipientPhone, setRecipientPhone] = useState("")
+  const [shippingAddress, setShippingAddress] = useState("")
+  const [city, setCity] = useState("") // Manual text input
+  const [weightGrams, setWeightGrams] = useState("500")
+  const [pieces, setPieces] = useState("1")
+  const [codAmount, setCodAmount] = useState("0")
+  const [specialInstructions, setSpecialInstructions] = useState("")
 
-  // Shipper & Business Info
-  const [accountName, setAccountName] = useState("227662 / QA VENDOR ONE")
-  const [businessAddress, setBusinessAddress] = useState("2ND FLOOR SAEED ALAM TOWER 37 COMMERCIAL ZONE LIBERTY MARKET GULBERG III LAHORE")
-  const [shipperContact, setShipperContact] = useState("03167670124")
-  const [shipperReturnAddress, setShipperReturnAddress] = useState("Testing Vendor")
+  // Shipper & Business Info (from Settings -> General store settings)
+  const [accountName, setAccountName] = useState("102620 / ELIGO LEATHER")
+  const [businessAddress, setBusinessAddress] = useState(
+    "Office # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad"
+  )
+  const [shipperContact, setShipperContact] = useState("03345399470")
+  // Shipper Address and Return Address are both the business address
+  const shipperReturnAddress = businessAddress
 
   // Courier Booking State
-  const [isBooked, setIsBooked] = useState(true)
-  const [cnNumber, setCnNumber] = useState("981677615")
-  const [bookingDate, setBookingDate] = useState("2026-02-11")
+  const [isBooked, setIsBooked] = useState(false)
+  const [cnNumber, setCnNumber] = useState<string>("")
+  const [bookingDate, setBookingDate] = useState("")
   const [bookingLoading, setBookingLoading] = useState(false)
   const [showSlipModal, setShowSlipModal] = useState(false)
 
-  // Tracking Timeline Stages
+  // Load order + business address on mount
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/orders/detail/${orderId}`)
+        if (res.ok) {
+          const data = await res.json()
+          const o: OrderDetail | undefined = data?.order
+          if (o && !cancelled) {
+            setOrderNumber(o.order_number || `#${orderId}`)
+            setRecipientName(o.customer_name || "")
+            setRecipientPhone(o.customer_phone || "")
+            setShippingAddress(cleanConsigneeAddress(o.shipping_address || ""))
+            setCity((o.city || "").toUpperCase())
+            setCodAmount(o.total_price != null ? String(o.total_price) : "0")
+            if (o.items && Array.isArray(o.items) && o.items.length > 0) {
+              setSpecialInstructions(
+                o.items
+                  .map((i) => `${i.product_name}${i.variant_title ? ` - ${i.variant_title}` : ""} Qty=${i.quantity}`)
+                  .join(", ")
+              )
+            }
+          }
+        } else {
+          toast.error("Could not load order details from database")
+        }
+
+        try {
+          const settings = await apiFetch<{ store_name?: string; store_phone?: string; address?: string }>(
+            "/api/v1/settings/general/store-settings"
+          )
+          if (settings && !cancelled) {
+            if (settings.address && settings.address.trim()) setBusinessAddress(settings.address.trim())
+            if (settings.store_phone) setShipperContact(settings.store_phone)
+            if (settings.store_name) setAccountName(`102620 / ${settings.store_name.toUpperCase()}`)
+          }
+        } catch {
+          // Not logged in as admin or endpoint unavailable - keep defaults
+        }
+      } finally {
+        if (!cancelled) setLoadingOrder(false)
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [orderId])
+
   const trackingStages = [
-    { stage: "CN Booked", desc: "Shipment registered via Leopard API", time: "2026-02-11 14:45", completed: true },
-    { stage: "Picked Up", desc: "Rider picked up parcel from Lahore Hub", time: "2026-02-11 16:30", completed: true },
-    { stage: "In Transit", desc: "Dispatched to Destination Hub (ABDUL HAKIM)", time: "2026-02-11 21:00", completed: isBooked },
+    { stage: "CN Booked", desc: "Shipment registered via Leopard API", time: isBooked ? `${cnNumber}` : "Pending", completed: isBooked },
+    { stage: "Picked Up", desc: "Rider picked up parcel from Islamabad Hub", time: "Pending", completed: false },
+    { stage: "In Transit", desc: `Dispatched to Destination Hub (${city || "-"})`, time: "Pending", completed: false },
     { stage: "Out for Delivery", desc: "Assigned to Leopard Rider for delivery", time: "Pending", completed: false },
     { stage: "Delivered & COD Collected", desc: "Handed to customer & cash collected", time: "Pending", completed: false },
   ]
 
-  const handleBookShipment = (e: React.FormEvent) => {
+  const handleBookShipment = async (e: React.FormEvent) => {
     e.preventDefault()
     setBookingLoading(true)
-    toast.info("Connecting to Leopard Courier API & registering shipment...")
 
-    setTimeout(() => {
-      const generatedCn = String(Math.floor(100000000 + Math.random() * 900000000))
-      setCnNumber(generatedCn)
-      setIsBooked(true)
-      setBookingDate("2026-02-11")
+    try {
+      const res = await fetch(`${API_URL}/api/v1/orders/leopard/book-packet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_id: orderNumber || `#${orderId}`,
+          cod_amount: codAmount,
+          consignee_name: recipientName,
+          consignee_phone: recipientPhone,
+          consignee_email: "",
+          consignee_address: shippingAddress,
+          destination_city: city,
+          special_instructions: specialInstructions || "N/A",
+          weight: weightGrams || "500",
+          weight_grams: parseInt(weightGrams.replace(/[^0-9]/g, "")) || 500,
+          pieces: parseInt(pieces) || 1,
+        }),
+      })
+
+      const data = await res.json()
+      if (res.ok && data.status === "success" && data.cn_number) {
+        const details = data.booking_details || {}
+        setCnNumber(String(data.cn_number))
+        setBookingDate(details.booking_date || new Date().toISOString().slice(0, 10))
+        setIsBooked(true)
+        toast.success(`Leopard Shipment Booked! Consignment CN Number: ${data.cn_number}`)
+      } else {
+        toast.error(data.message || "Leopards booking failed. Check destination city and try again.")
+      }
+    } catch {
+      toast.error("Could not reach the Leopards booking service.")
+    } finally {
       setBookingLoading(false)
-      toast.success(`Leopard Shipment Booked! Consignment CN Number: LE${generatedCn}`)
-    }, 700)
+    }
   }
 
   const handlePrintSlip = () => {
@@ -88,14 +183,14 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
       <div className="eligo-card animate-slide-up px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <Link
-            href="/orders"
+            href={`/orders/${orderId}`}
             className="p-2 bg-gray-50 rounded-xl border border-gray-200 text-gray-600 hover:text-amber-800 hover:border-amber-300 transition-all cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div className="min-w-0">
             <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
-              Leopard Courier Shipment &amp; Pay Slip (#EL-{orderId})
+              Leopard Courier Shipment &amp; Pay Slip ({orderNumber || `#${orderId}`})
             </h1>
           </div>
         </div>
@@ -119,11 +214,11 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
         <div className="lg:col-span-7 eligo-card p-6 space-y-5 text-xs hover:border-[#d4c9b4]">
           <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
             <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-              <User className="w-4 h-4 text-amber-800" />
+              <Truck className="w-4 h-4 text-amber-800" />
               <span>Customer Shipping Information</span>
             </h2>
             <span className="px-2.5 py-0.5 bg-amber-50 text-amber-900 font-bold text-[10px] rounded-full border border-amber-200">
-              Leopard CN Booking
+              {loadingOrder ? "Loading from DB..." : "Loaded from Database"}
             </span>
           </div>
 
@@ -171,7 +266,7 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
                   required
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  placeholder="e.g. ABDUL HAKIM or LAHORE"
+                  placeholder="e.g. ISLAMABAD or LAHORE"
                   className="w-full h-10 px-3 bg-white border border-gray-300 rounded-xl font-bold text-amber-900 uppercase focus:outline-hidden"
                 />
               </div>
@@ -252,26 +347,39 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
                 <Barcode className="w-5 h-5 text-amber-800" />
                 <span>Leopard Courier Consignment (CN)</span>
               </span>
-              <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-full border border-emerald-200">
-                Active CN #
+              <span className={`px-2.5 py-0.5 font-bold text-[10px] rounded-full border ${
+                isBooked
+                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                  : "bg-gray-100 text-gray-500 border-gray-200"
+              }`}>
+                {isBooked ? "Active CN #" : "Not Booked"}
               </span>
             </div>
 
-            <div className="p-4 bg-amber-50/60 rounded-2xl border border-amber-200 text-center space-y-2">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block">Consignment CN Number</span>
-              <div className="text-2xl font-black font-mono text-amber-900 tracking-wider block">LE{cnNumber}</div>
-              <span className="text-[11px] text-gray-600 block">Booking Date: {bookingDate}</span>
-              <span className="text-[11px] font-bold text-emerald-800 block">Destination: {city.toUpperCase()}</span>
+            {isBooked ? (
+              <div className="p-4 bg-amber-50/60 rounded-2xl border border-amber-200 text-center space-y-2">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block">Consignment CN Number</span>
+                <div className="text-2xl font-black font-mono text-amber-900 tracking-wider block">{cnNumber}</div>
+                <span className="text-[11px] text-gray-600 block">Booking Date: {bookingDate}</span>
+                <span className="text-[11px] font-bold text-emerald-800 block">Destination: {(city || "-").toUpperCase()}</span>
 
-              <button
-                type="button"
-                onClick={() => setShowSlipModal(true)}
-                className="w-full py-2 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl shadow-2xs inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-              >
-                <Printer className="w-4 h-4" />
-                <span>View Official Airway Bill Label</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSlipModal(true)}
+                  className="w-full py-2 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl shadow-2xs inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>View Official Airway Bill Label</span>
+                </button>
+              </div>
+            ) : (
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 text-center space-y-2">
+                <CheckCircle className="w-6 h-6 text-gray-300 mx-auto" />
+                <span className="text-[11px] text-gray-500 block">
+                  Fill the form and book to generate a real Leopards CN for this order.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Real-World Live Tracking Timeline */}
@@ -309,14 +417,14 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
         </div>
       </div>
 
-      {/* Official Leopard Courier Airway Bill Label Modal (Replicating User Screenshot Exactly) */}
+      {/* Official Leopard Courier Airway Bill Label Modal */}
       {showSlipModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 print:p-0 print:bg-white print:static print:z-auto">
           <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[95vh] print:max-h-none print:border-none print:shadow-none print:w-full">
             <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-100 text-xs font-sans print:hidden">
               <div>
-                <h3 className="text-sm font-bold text-gray-900">Official Leopard Courier Airway Bill Label (CN # LE{cnNumber})</h3>
-                <p className="text-[11px] text-gray-500">Official Leopard format generated for order #{orderId}</p>
+                <h3 className="text-sm font-bold text-gray-900">Official Leopard Courier Airway Bill Label (CN # {cnNumber})</h3>
+                <p className="text-[11px] text-gray-500">Official Leopard format generated for order {orderNumber || `#${orderId}`}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -333,7 +441,7 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
               </div>
             </div>
 
-            {/* Exact Replicated Leopard Courier Airway Bill Label matching screenshot */}
+            {/* Printable Airway Bill Label */}
             <div className="p-6 bg-white overflow-y-auto text-[11px] text-black font-sans leading-snug print:p-0">
               {/* Outer Printable Container */}
               <div className="border-2 border-black p-3 space-y-2 bg-white max-w-3xl mx-auto shadow-sm print:shadow-none print:max-w-none">
@@ -379,7 +487,7 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
                       >
                         <span className="font-bold">Name :</span> <span className="font-bold uppercase">{recipientName}</span>
                       </div>
-                      <div><span className="font-bold">Address :</span> <span>{shippingAddress}, {city}</span></div>
+                      <div><span className="font-bold">Address :</span> <span>{shippingAddress}{city ? `, ${city}` : ""}</span></div>
                       <div
                         onClick={() => {
                           navigator.clipboard.writeText(recipientPhone)
@@ -402,13 +510,13 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
                     <div className="border-t border-gray-400 pt-1 space-y-1">
                       <div className="font-bold underline text-[11px] text-center">Shipper / Return Information</div>
                       <div><span className="font-bold">AC / Name :</span> <span className="underline">{accountName}</span></div>
-                      <div><span className="font-bold">Address :</span> <span className="underline">TESTING VENDOR</span></div>
+                      <div><span className="font-bold">Address :</span> <span className="underline">{shipperReturnAddress}</span></div>
                       <div><span className="font-bold">Contact #:</span> <span className="font-mono">{shipperContact}</span></div>
                       <div><span className="font-bold">Return Address :</span> <span>{shipperReturnAddress}</span></div>
                     </div>
                   </div>
 
-                  {/* Column 2: Consignment Information (Readable Format - No Barcodes) */}
+                  {/* Column 2: Consignment Information */}
                   <div className="col-span-4 p-2 space-y-3 flex flex-col justify-between">
                     <div className="text-center font-bold underline border-b border-black pb-1 uppercase text-[10px]">
                       Consignment Information
@@ -417,7 +525,7 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
                     <div className="space-y-2 text-xs font-sans p-2 bg-gray-50 border border-gray-300 rounded-lg">
                       <div className="flex justify-between items-center border-b border-gray-200 pb-1">
                         <span className="font-bold text-gray-700">Consignment CN #:</span>
-                        <span className="font-mono font-black text-amber-900 text-sm">LE{cnNumber}</span>
+                        <span className="font-mono font-black text-amber-900 text-sm">{cnNumber}</span>
                       </div>
 
                       <div className="flex justify-between items-center border-b border-gray-200 pb-1">
@@ -441,7 +549,7 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
                     </div>
                   </div>
 
-                  {/* Column 3: Shipment Information (4 cols) */}
+                  {/* Column 3: Shipment Information */}
                   <div className="col-span-4 p-2 space-y-2">
                     <div className="text-center font-bold underline border-b border-black pb-1 uppercase text-[10px]">
                       Shipment Information
@@ -465,12 +573,12 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
 
                       <div className="flex justify-between">
                         <span className="font-bold">Order ID :</span>
-                        <span className="font-mono font-bold">{orderId}</span>
+                        <span className="font-mono font-bold">{orderNumber || `#${orderId}`}</span>
                       </div>
 
                       <div className="flex justify-between">
                         <span className="font-bold">Origin :</span>
-                        <span className="font-bold uppercase">LAHORE</span>
+                        <span className="font-bold uppercase">ISLAMABAD</span>
                       </div>
 
                       <div className="flex justify-between">

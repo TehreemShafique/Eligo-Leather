@@ -53,10 +53,6 @@ async def _seed_order(db_session, order_number="ORD-SEED", **kwargs):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: create_order passes location_id to Order() (service.py:56) but Order has no location_id column",
-)
 async def test_create_order_computes_totals(db_session):
     data = OrderCreate(
         order_number="ORD-1001",
@@ -349,10 +345,6 @@ async def test_add_and_remove_draft_order_item(db_session):
     assert await service.remove_draft_order_item(db_session, 9999, 1) is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: convert_draft_to_order passes location_id=None to Order() (service.py:558) but Order has no location_id column",
-)
 async def test_convert_draft_to_order(db_session):
     draft = await service.create_draft_order(
         db_session,

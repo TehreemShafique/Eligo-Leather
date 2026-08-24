@@ -12,10 +12,10 @@ async def test_discounts_require_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_create_discount(client, auth_headers):
+async def test_create_discount(client, admin_headers):
     response = await client.post(
         "/api/v1/discounts/",
-        headers=auth_headers,
+        headers=admin_headers,
         json={"title": "Welcome Offer", "code": "WELCOME15"},
     )
     assert response.status_code == 201
@@ -26,48 +26,48 @@ async def test_create_discount(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_list_discounts(client, auth_headers):
+async def test_list_discounts(client, admin_headers):
     await client.post(
         "/api/v1/discounts/",
-        headers=auth_headers,
+        headers=admin_headers,
         json={"title": "First", "code": "FIRST"},
     )
-    response = await client.get("/api/v1/discounts/", headers=auth_headers)
+    response = await client.get("/api/v1/discounts/", headers=admin_headers)
     assert response.status_code == 200
     assert len(response.json()) == 1
 
 
 @pytest.mark.asyncio
-async def test_get_discount_by_id(client, auth_headers):
+async def test_get_discount_by_id(client, admin_headers):
     created = await client.post(
         "/api/v1/discounts/",
-        headers=auth_headers,
+        headers=admin_headers,
         json={"title": "By Id", "code": "BYID"},
     )
     discount_id = created.json()["id"]
-    response = await client.get(f"/api/v1/discounts/{discount_id}", headers=auth_headers)
+    response = await client.get(f"/api/v1/discounts/{discount_id}", headers=admin_headers)
     assert response.status_code == 200
     assert response.json()["code"] == "BYID"
 
 
 @pytest.mark.asyncio
-async def test_get_discount_missing_returns_404(client, auth_headers):
-    response = await client.get("/api/v1/discounts/99999", headers=auth_headers)
+async def test_get_discount_missing_returns_404(client, admin_headers):
+    response = await client.get("/api/v1/discounts/99999", headers=admin_headers)
     assert response.status_code == 404
     assert response.json()["detail"] == "Discount not found"
 
 
 @pytest.mark.asyncio
-async def test_update_discount(client, auth_headers):
+async def test_update_discount(client, admin_headers):
     created = await client.post(
         "/api/v1/discounts/",
-        headers=auth_headers,
+        headers=admin_headers,
         json={"title": "Before", "code": "BEFORE"},
     )
     discount_id = created.json()["id"]
     response = await client.patch(
         f"/api/v1/discounts/{discount_id}",
-        headers=auth_headers,
+        headers=admin_headers,
         json={"title": "After"},
     )
     assert response.status_code == 200
@@ -75,27 +75,27 @@ async def test_update_discount(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_delete_discount(client, auth_headers):
+async def test_delete_discount(client, admin_headers):
     created = await client.post(
         "/api/v1/discounts/",
-        headers=auth_headers,
+        headers=admin_headers,
         json={"title": "Delete me", "code": "DEL"},
     )
     discount_id = created.json()["id"]
-    response = await client.delete(f"/api/v1/discounts/{discount_id}", headers=auth_headers)
+    response = await client.delete(f"/api/v1/discounts/{discount_id}", headers=admin_headers)
     assert response.status_code == 204
 
 
 @pytest.mark.asyncio
-async def test_delete_discount_missing_returns_404(client, auth_headers):
-    response = await client.delete("/api/v1/discounts/99999", headers=auth_headers)
+async def test_delete_discount_missing_returns_404(client, admin_headers):
+    response = await client.delete("/api/v1/discounts/99999", headers=admin_headers)
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_welcome_settings_requires_discount_manager(client, auth_headers):
     response = await client.get("/api/v1/discounts/welcome", headers=auth_headers)
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

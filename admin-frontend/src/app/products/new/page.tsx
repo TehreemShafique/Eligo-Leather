@@ -196,7 +196,42 @@ interface VariantItem {
   stockQty: string
   isCanonical: boolean
   handleSuffix: string
-  imageUrl: string
+  imageUrls: string[]
+}
+
+// Auto-suggested swatch hex values for common leather color names.
+const COLOR_HEX_MAP: Record<string, string> = {
+  black: "#1c1c1c",
+  brown: "#6b4226",
+  "dark brown": "#4a2c17",
+  tan: "#d2a25c",
+  maroon: "#5c1f2e",
+  burgundy: "#5c1a24",
+  red: "#b91c1c",
+  orange: "#c2621a",
+  cognac: "#9a4f1e",
+  chestnut: "#7c3f21",
+  olive: "#5f5b2f",
+  green: "#2f5d3a",
+  emerald: "#0f766e",
+  blue: "#1e3a8a",
+  navy: "#16254f",
+  teal: "#116465",
+  purple: "#5b2a86",
+  plum: "#6e2a4d",
+  pink: "#c08497",
+  beige: "#d9c9a8",
+  cream: "#efe6cf",
+  white: "#f5f5f0",
+  grey: "#8a8a85",
+  gray: "#8a8a85",
+  charcoal: "#36454f",
+  mustard: "#c99a2e",
+  yellow: "#d9a520",
+  camel: "#b78453",
+  taupe: "#8b7d6b",
+  chocolate: "#3f2a1d",
+  whiskey: "#8e5a2b",
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -278,17 +313,27 @@ export default function AdminNewProductPage() {
   const totalStockQuantity = colorVariants.reduce((sum, v) => sum + (parseInt(v.stockQty) || 0), 0)
 
   // Handlers
+  // Rebuilds each variant's pic list (index 0 = main, index 1 = hover) from all media bound to its color.
+  const syncVariantImages = (mediaList: MediaItem[], variants: VariantItem[]) =>
+    variants.map((v) => ({
+      ...v,
+      imageUrls: mediaList.filter((m) => m.colorTag === v.colorName).map((m) => m.url),
+    }))
+
   const handleAssignMediaColor = (mediaId: number, colorName: string) => {
     const updatedMedia = mediaItems.map((m) => (m.id === mediaId ? { ...m, colorTag: colorName } : m))
     setMediaItems(updatedMedia)
+    setColorVariants(prev => syncVariantImages(updatedMedia, prev))
 
-    const targetMedia = updatedMedia.find((m) => m.id === mediaId)
-    if (targetMedia && colorName !== "Unassigned") {
-      setColorVariants(
-        colorVariants.map((v) => (v.colorName === colorName ? { ...v, imageUrl: targetMedia.url } : v))
-      )
+    if (colorName !== "Unassigned") {
       toast.success(`Assigned photo to "${colorName}" variant!`)
     }
+  }
+
+  const handleRemoveMedia = (mediaId: number) => {
+    const updatedMedia = mediaItems.filter((m) => m.id !== mediaId)
+    setMediaItems(updatedMedia)
+    setColorVariants(prev => syncVariantImages(updatedMedia, prev))
   }
 
   const handleUpdateMediaAltText = (mediaId: number, altText: string) => {
@@ -334,7 +379,7 @@ export default function AdminNewProductPage() {
       stockQty: "50",
       isCanonical: false,
       handleSuffix: `?variant=${generatedId}`,
-      imageUrl: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=600",
+      imageUrls: [],
     }
 
     setColorVariants([...colorVariants, newVar])
@@ -462,7 +507,7 @@ export default function AdminNewProductPage() {
         color_name: v.colorName,
         color_hex: v.hex,
         is_canonical: v.isCanonical,
-        image_url: v.imageUrl,
+        image_url: v.imageUrls[0] || null,
         sku: v.sku,
         price: parseFloat(v.price || price || "0"),
         compare_at_price: compareAtPrice ? parseFloat(compareAtPrice) : null,
@@ -591,7 +636,7 @@ export default function AdminNewProductPage() {
             {/* Gallery Image */}
             <div className="md:col-span-6 space-y-4">
               <div className="relative w-full h-96 rounded-2xl overflow-hidden bg-gray-100 border border-gray-200 shadow-md">
-                <Image src={selectedVariantObj.imageUrl} alt={title} fill unoptimized className="object-cover" />
+                <Image src={selectedVariantObj.imageUrls[0] || "https://images.unsplash.com/photo-1627123424574-724758594e93?w=600"} alt={title} fill unoptimized className="object-cover" />
                 <span className="absolute top-3 left-3 bg-black/70 text-white text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-xs">
                   Active Swatch: {selectedPreviewColor}
                 </span>
@@ -607,7 +652,7 @@ export default function AdminNewProductPage() {
                       selectedPreviewColor === v.colorName ? "border-amber-800 ring-2 ring-amber-800/30" : "border-gray-200"
                     }`}
                   >
-                    <Image src={v.imageUrl} alt={v.colorName} fill unoptimized className="object-cover" />
+                    <Image src={v.imageUrls[0] || "https://images.unsplash.com/photo-1627123424574-724758594e93?w=600"} alt={v.colorName} fill unoptimized className="object-cover" />
                   </button>
                 ))}
               </div>
@@ -798,7 +843,7 @@ export default function AdminNewProductPage() {
                         />
                         <button
                           type="button"
-                          onClick={() => setMediaItems(mediaItems.filter((m) => m.id !== item.id))}
+                          onClick={() => handleRemoveMedia(item.id)}
                           className="absolute top-2 right-2 p-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full opacity-90 transition-opacity cursor-pointer shadow-xs"
                           title="Remove photo"
                         >
@@ -869,7 +914,12 @@ export default function AdminNewProductPage() {
                     type="text"
                     placeholder="e.g. Purple or Emerald"
                     value={newColorName}
-                    onChange={(e) => setNewColorName(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setNewColorName(val)
+                      const suggested = COLOR_HEX_MAP[val.trim().toLowerCase()]
+                      if (suggested) setNewColorHex(suggested)
+                    }}
                     className="flex-1 h-10 px-3 rounded-xl bg-white border border-gray-300 text-xs font-bold text-gray-900 w-full sm:w-auto"
                   />
 
@@ -912,9 +962,29 @@ export default function AdminNewProductPage() {
                     {colorVariants.map((v) => (
                       <tr key={v.id} className="hover:bg-gray-50/80 transition-colors">
                         <td className="px-4 py-3">
-                          <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-gray-300 bg-gray-100">
-                            <Image src={v.imageUrl} alt={v.colorName} fill unoptimized className="object-cover" />
-                          </div>
+                          {v.imageUrls.length > 0 ? (
+                            <div className="flex items-center gap-1.5">
+                              {v.imageUrls.slice(0, 2).map((url, idx) => (
+                                <div
+                                  key={idx}
+                                  className="relative w-10 h-10 rounded-lg overflow-hidden border border-gray-300 bg-gray-100 shrink-0"
+                                  title={idx === 0 ? "Main pic" : "Hover pic (second view)"}
+                                >
+                                  <Image src={url} alt={`${v.colorName} view ${idx + 1}`} fill unoptimized className="object-cover" />
+                                  <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[7px] font-bold text-center leading-3">
+                                    {idx === 0 ? "MAIN" : "HOVER"}
+                                  </span>
+                                </div>
+                              ))}
+                              {v.imageUrls.length > 2 && (
+                                <span className="text-[9px] font-bold text-gray-500">+{v.imageUrls.length - 2}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg overflow-hidden border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center">
+                              <span className="text-[8px] font-bold text-gray-400 text-center leading-tight">Bind<br />pics</span>
+                            </div>
+                          )}
                         </td>
 
                         <td className="px-4 py-3 font-bold text-gray-900 flex items-center gap-2">
