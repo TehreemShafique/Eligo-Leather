@@ -41,9 +41,23 @@ interface ShippingProfile {
 interface ShippingSettings {
   routing_strategy: "primary_stock_first" | "closest_to_customer"
   allow_split_shipments: boolean
+  shipping_charge: string
+  free_shipping_threshold: string
   sender_name: string
   sender_address: string
+  sender_city: string
+  sender_province: string
+  sender_country: string
+  sender_postal_code: string
   sender_phone: string
+  return_same_as_sender: boolean
+  return_name: string
+  return_phone: string
+  return_address: string
+  return_city: string
+  return_province: string
+  return_postal_code: string
+  return_country: string
 }
 
 interface PackageRecord {
@@ -57,7 +71,7 @@ interface PackageRecord {
 }
 
 export default function AdminSettingsShippingPage() {
-  const [activeTab, setActiveTab] = useState<"rates" | "routing" | "packaging">("rates")
+  const [activeTab, setActiveTab] = useState<"charges" | "rates" | "routing" | "packaging">("charges")
 
   const [settings, setSettings] = useState<ShippingSettings | null>(null)
   const [carriers, setCarriers] = useState<Carrier[]>([])
@@ -254,6 +268,17 @@ export default function AdminSettingsShippingPage() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs">
         <div className="flex border-b border-gray-200 gap-6 text-xs font-bold px-6">
           <button
+            onClick={() => setActiveTab("charges")}
+            className={`pb-3 transition-colors border-b-2 flex items-center gap-2 ${
+              activeTab === "charges"
+                ? "border-amber-800 text-amber-800"
+                : "border-transparent text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            <span>1. Delivery &amp; Charges</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("rates")}
             className={`pb-3 transition-colors border-b-2 flex items-center gap-2 ${
               activeTab === "rates"
@@ -262,7 +287,7 @@ export default function AdminSettingsShippingPage() {
             }`}
           >
             <Globe className="w-4 h-4" />
-            <span>1. Shipping Profiles &amp; Rates</span>
+            <span>2. Shipping Profiles &amp; Rates</span>
           </button>
 
           <button
@@ -274,7 +299,7 @@ export default function AdminSettingsShippingPage() {
             }`}
           >
             <MapPin className="w-4 h-4" />
-            <span>2. Locations &amp; Order Routing</span>
+            <span>3. Locations &amp; Order Routing</span>
           </button>
 
           <button
@@ -286,10 +311,361 @@ export default function AdminSettingsShippingPage() {
             }`}
           >
             <PackageIcon className="w-4 h-4" />
-            <span>3. Packages &amp; Packing Slips</span>
+            <span>4. Packages &amp; Packing Slips</span>
           </button>
         </div>
       </div>
+
+      {/* TAB: Delivery & Charges */}
+      {activeTab === "charges" && settings && (
+        <div className="space-y-6 text-xs">
+          {/* Shipper address */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
+            <div className="border-b border-gray-100 pb-3">
+              <h2 className="text-sm font-bold text-gray-900">Shipper Address</h2>
+              <p className="text-xs text-gray-500">
+                Sender details used as the parcel origin on Leopards Courier waybills.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                  Shipper Name *
+                </label>
+                <input
+                  type="text"
+                  value={settings.sender_name ?? ""}
+                  onChange={(e) => setSettings({ ...settings, sender_name: e.target.value })}
+                  placeholder="e.g. Eligo Leather"
+                  className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                  Shipper Phone *
+                </label>
+                <input
+                  type="tel"
+                  value={settings.sender_phone ?? ""}
+                  onChange={(e) => setSettings({ ...settings, sender_phone: e.target.value })}
+                  placeholder="e.g. 03001234567"
+                  className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                Street Address *
+              </label>
+              <input
+                type="text"
+                value={settings.sender_address ?? ""}
+                onChange={(e) => setSettings({ ...settings, sender_address: e.target.value })}
+                placeholder="House, street and area"
+                className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                  City *
+                </label>
+                <input
+                  type="text"
+                  value={settings.sender_city ?? ""}
+                  onChange={(e) => setSettings({ ...settings, sender_city: e.target.value })}
+                  placeholder="e.g. Islamabad"
+                  className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                  Province / State
+                </label>
+                <input
+                  type="text"
+                  value={settings.sender_province ?? ""}
+                  onChange={(e) => setSettings({ ...settings, sender_province: e.target.value })}
+                  placeholder="e.g. Punjab"
+                  className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                  Postal Code
+                </label>
+                <input
+                  type="text"
+                  value={settings.sender_postal_code ?? ""}
+                  onChange={(e) => setSettings({ ...settings, sender_postal_code: e.target.value })}
+                  placeholder="e.g. 44000"
+                  className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-mono text-gray-900"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                Country
+              </label>
+              <select
+                value={settings.sender_country || "Pakistan"}
+                onChange={(e) => setSettings({ ...settings, sender_country: e.target.value })}
+                className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+              >
+                <option value="Pakistan">Pakistan</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-gray-100">
+              <button
+                onClick={() =>
+                  saveRouting({
+                    sender_name: settings.sender_name,
+                    sender_phone: settings.sender_phone,
+                    sender_address: settings.sender_address,
+                    sender_city: settings.sender_city,
+                    sender_province: settings.sender_province,
+                    sender_postal_code: settings.sender_postal_code,
+                    sender_country: settings.sender_country || "Pakistan",
+                  })
+                }
+                disabled={routingSaving}
+                className="px-5 py-2 bg-amber-800 hover:bg-amber-900 disabled:opacity-60 text-white rounded-xl font-bold cursor-pointer"
+              >
+                {routingSaving ? "Saving..." : "Save Shipper Address"}
+              </button>
+            </div>
+          </div>
+
+          {/* Return address */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">Return Address</h2>
+                <p className="text-xs text-gray-500">
+                  Where refused or undeliverable parcels come back to.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={settings.return_same_as_sender}
+                  onChange={(e) =>
+                    saveRouting({ return_same_as_sender: e.target.checked })
+                  }
+                  disabled={routingSaving}
+                  className="w-4 h-4 accent-amber-800"
+                />
+                Same as Shipper Address
+              </label>
+            </div>
+
+            {!settings.return_same_as_sender ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                      Return Contact Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.return_name ?? ""}
+                      onChange={(e) => setSettings({ ...settings, return_name: e.target.value })}
+                      className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                      Return Phone *
+                    </label>
+                    <input
+                      type="tel"
+                      value={settings.return_phone ?? ""}
+                      onChange={(e) => setSettings({ ...settings, return_phone: e.target.value })}
+                      className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                    Return Street Address *
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.return_address ?? ""}
+                    onChange={(e) => setSettings({ ...settings, return_address: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                      City *
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.return_city ?? ""}
+                      onChange={(e) => setSettings({ ...settings, return_city: e.target.value })}
+                      className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                      Province / State
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.return_province ?? ""}
+                      onChange={(e) => setSettings({ ...settings, return_province: e.target.value })}
+                      className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                      Postal Code
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.return_postal_code ?? ""}
+                      onChange={(e) => setSettings({ ...settings, return_postal_code: e.target.value })}
+                      className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-mono text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2 border-t border-gray-100">
+                  <button
+                    onClick={() =>
+                      saveRouting({
+                        return_name: settings.return_name,
+                        return_phone: settings.return_phone,
+                        return_address: settings.return_address,
+                        return_city: settings.return_city,
+                        return_province: settings.return_province,
+                        return_postal_code: settings.return_postal_code,
+                        return_country: settings.return_country || "Pakistan",
+                      })
+                    }
+                    disabled={routingSaving}
+                    className="px-5 py-2 bg-amber-800 hover:bg-amber-900 disabled:opacity-60 text-white rounded-xl font-bold cursor-pointer"
+                  >
+                    {routingSaving ? "Saving..." : "Save Return Address"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-gray-700">
+                Returned parcels will be addressed to the shipper details above.
+              </div>
+            )}
+          </div>
+
+          {/* Shipping charges */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
+            <div className="border-b border-gray-100 pb-3">
+              <h2 className="text-sm font-bold text-gray-900">Shipping Charges (PKR)</h2>
+              <p className="text-xs text-gray-500">
+                Applies storewide at checkout. Orders at or above the free-shipping threshold ship free.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                  Shipping Charge (Rs.) *
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={10}
+                  value={settings.shipping_charge ?? ""}
+                  onChange={(e) => setSettings({ ...settings, shipping_charge: e.target.value })}
+                  className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-mono font-bold text-gray-900"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                  Free Shipping Above (Rs.) *
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={settings.free_shipping_threshold ?? ""}
+                  onChange={(e) => setSettings({ ...settings, free_shipping_threshold: e.target.value })}
+                  className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-mono font-bold text-gray-900"
+                />
+              </div>
+            </div>
+
+            <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-[11px] text-gray-700">
+              Preview: a Rs {(parseFloat(settings.free_shipping_threshold) || 0).toLocaleString()} cart ships free;
+              below that, shipping costs Rs {(parseFloat(settings.shipping_charge) || 0).toLocaleString()}. Changes
+              apply to new orders only &mdash; placed orders keep their original amounts.
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  const charge = parseFloat(settings.shipping_charge)
+                  const threshold = parseFloat(settings.free_shipping_threshold)
+                  if (!Number.isFinite(charge) || charge < 0) {
+                    toast.error("Shipping charge must be zero or greater.")
+                    return
+                  }
+                  if (!Number.isFinite(threshold) || threshold < 0) {
+                    toast.error("Free shipping threshold must be zero or greater.")
+                    return
+                  }
+                  saveRouting({
+                    shipping_charge: String(charge),
+                    free_shipping_threshold: String(threshold),
+                  })
+                }}
+                disabled={routingSaving}
+                className="px-5 py-2 bg-amber-800 hover:bg-amber-900 disabled:opacity-60 text-white rounded-xl font-bold cursor-pointer"
+              >
+                {routingSaving ? "Saving..." : "Save Charges"}
+              </button>
+            </div>
+          </div>
+
+          {/* Courier */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
+            <h2 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2">Courier Integration</h2>
+            <p className="text-xs text-gray-500">
+              Orders are booked with the courier automatically using the shipper address above; tracking numbers and
+              delivery status updates flow back through the courier webhook.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {carriers.map((carrier) => (
+                <div key={carrier.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Truck className="w-6 h-6 text-amber-800 shrink-0" />
+                    <div>
+                      <span className="font-bold text-gray-900 block">{carrier.name}</span>
+                      <span className="text-gray-500 text-xs uppercase">{carrier.code}</span>
+                    </div>
+                  </div>
+                  <span
+                    className={`px-3 py-1 font-bold rounded-full text-xs ${
+                      carrier.is_active ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    {carrier.is_active ? "Enabled" : "Disabled"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: Shipping Profiles & Rates */}
       {activeTab === "rates" && (

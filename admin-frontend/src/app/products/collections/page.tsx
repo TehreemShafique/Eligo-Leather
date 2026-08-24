@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -33,8 +35,6 @@ const COLLECTION_HEADINGS: Record<string, string> = {
 }
 
 const COLLECTION_ORDER = ["wallets", "belts", "cases", "keychains"]
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<CategoryItem[]>([])

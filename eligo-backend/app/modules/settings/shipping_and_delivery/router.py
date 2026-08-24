@@ -36,6 +36,8 @@ from app.modules.settings.shipping_and_delivery.schema import (
     PackageOut,
     ShippingSettingsUpdate,
     ShippingSettingsOut,
+    ShippingCalculationRequest,
+    ShippingCalculationOut,
 )
 
 router = APIRouter(
@@ -340,6 +342,17 @@ async def calculate_shipping_rates(payload: ShippingRateCalculationRequest, db: 
 
     calculated.sort(key=lambda r: r.amount)
     return calculated
+
+
+@public_shipping_router.post("/calculate", response_model=ShippingCalculationOut)
+async def calculate_store_shipping(payload: ShippingCalculationRequest, db: AsyncSession = Depends(get_db)):
+    """Storewide shipping calculation for the storefront checkout.
+
+    Applies the configured flat charge / free-shipping threshold to the given
+    cart subtotal. The same service function is re-applied when the order is
+    created, so this value is display-only and never authoritative.
+    """
+    return await service.calculate_public_shipping(payload.subtotal, db)
 
 
 def _compute_rate_amount(rate: ShippingRate, subtotal: float, weight_kg: float) -> float:

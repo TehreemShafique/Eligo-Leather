@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -55,8 +57,8 @@ function MergeCustomersContent() {
     const fetchPair = async () => {
       try {
         const [res1, res2] = await Promise.all([
-          fetch(`http://127.0.0.1:8000/api/v1/customers/${id1}`),
-          fetch(`http://127.0.0.1:8000/api/v1/customers/${id2}`),
+          fetch(`${API_BASE}/api/v1/customers/${id1}`),
+          fetch(`${API_BASE}/api/v1/customers/${id2}`),
         ])
         if (res1.ok) {
           const c1 = await res1.json()
@@ -96,7 +98,7 @@ function MergeCustomersContent() {
   const handleExecuteMerge = async () => {
     setMerging(true)
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/customers/merge?primary_id=${customer2.id}&secondary_id=${customer1.id}`, {
+      const res = await fetch(`${API_BASE}/api/v1/customers/merge?primary_id=${customer2.id}&secondary_id=${customer1.id}`, {
         method: "POST",
       })
 

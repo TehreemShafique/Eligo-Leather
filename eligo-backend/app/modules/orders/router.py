@@ -648,6 +648,93 @@ async def get_products_catalog_api(db: AsyncSession = Depends(get_db)):
     return {"status": "success", "products": catalog}
 
 
+async def _auto_book_leopards(db: AsyncSession, order: Order, shipping_settings) -> None:
+    """Best-effort Leopards Courier booking right after order creation.
+
+    Uses the admin shipper configuration (Settings -> Shipping) as the parcel
+    origin and the customer's delivery-address snapshot as the destination.
+    On success the CN is stored against the order and delivery moves to
+    `booked`. Any failure is logged but never raised: checkout must succeed
+    even when the courier API is down. Manual CN generation remains available
+    from the admin panel.
+    """
+    logger = logging.getLogger(__name__)
+
+    consignee_name = order.shipping_name or "Customer"
+    consignee_phone = order.shipping_phone or ""
+    consignee_address = order.shipping_address_line1 or leopard_service.clean_consignee_address(
+        order.shipping_address
+    )
+    destination_city = order.shipping_city or order.destination or "Islamabad"
+    cod_amount = str(order.total_price or 0) if order.payment_status == PaymentStatus.pending else "0"
+
+    book_payload = {
+        "order_id": order.order_number,
+        "cod_amount": cod_amount,
+        "consignee_name": consignee_name,
+        "consignee_phone": consignee_phone,
+        "consignee_email": "",
+        "consignee_address": consignee_address,
+        "destination_city": destination_city,
+        # Admin shipper address acts as the origin city on the waybill.
+        "origin_city": getattr(shipping_settings, "sender_city", None) or "self",
+        "special_instructions": f"Return to: {getattr(shipping_settings, 'return_address', '') or 'N/A'}",
+        "weight": "500",
+        "pieces": 1,
+    }
+
+    book_res = await leopard_client.book_packet_api(book_payload)
+    api_status = book_res.get("status")
+    live_cn = (
+        book_res.get("track_number")
+        or book_res.get("cn_number")
+        or book_res.get("track_no")
+    )
+    if not live_cn or api_status == 0:
+        logger.warning("Leopards auto-booking did not return a CN for %s: %s", order.order_number, book_res)
+        await leopard_service.record_log(
+            db, order.order_number, "Auto Booking", "Failed",
+            f"Automatic booking failed: {book_res.get('error') or book_res.get('message') or 'no CN returned'}",
+        )
+        return
+
+    cn_number = str(live_cn).strip()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    db.add(LeopardShipment(
+        cn_number=cn_number,
+        order_number=order.order_number,
+        booking_date=now_str,
+        destination_city=destination_city,
+        consignee_name=consignee_name,
+        consignee_phone=consignee_phone,
+        consignee_address=consignee_address,
+        collect_amount=cod_amount,
+        weight="500",
+        pieces=1,
+        current_status="Booked",
+        raw_json=json.dumps(book_res, default=str),
+    ))
+    order.tracking_number = cn_number
+    order.tracking_company = "Leopards Courier"
+    order.delivery_status = DeliveryStatus.booked
+    db.add(OrderAuditLog(
+        order_id=order.id,
+        event_type="courier_update",
+        description=(
+            f"Leopards Courier booked shipment CN #{cn_number} for "
+            f"{consignee_name} to {destination_city}. COD: Rs {cod_amount}"
+        ),
+        actor_name="Leopards Courier (auto)",
+    ))
+    await db.commit()
+
+    await leopard_service.record_log(
+        db, order.order_number, "Auto Booking", "Success",
+        f"CN #{cn_number} booked automatically for {consignee_name} to {destination_city}. COD: Rs {cod_amount}",
+    )
+
+
 @public_webhook_router.post("/create-order")
 async def create_order_public_api(request: Request, db: AsyncSession = Depends(get_db)):
     """Create a new order directly in the PostgreSQL database.
@@ -734,9 +821,32 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
 
     items = data.get("items", [])
     subtotal = Decimal(str(data.get("subtotal", 0)))
-    shipping = Decimal(str(data.get("shipping_cost", 0)))
+    if items:
+        # Prefer the line-item totals over the browser-declared subtotal.
+        computed_subtotal = Decimal(0)
+        for item in items:
+            line_total = item.get("total_price")
+            if line_total in (None, ""):
+                unit = Decimal(str(item.get("unit_price") or 0))
+                qty = Decimal(str(item.get("quantity") or 1))
+                line_total = unit * qty
+            try:
+                computed_subtotal += Decimal(str(line_total))
+            except Exception:
+                continue
+        if computed_subtotal > 0:
+            subtotal = computed_subtotal
+
+    # ---- Authoritative shipping recalculation (never trust the browser) ----
+    from app.modules.settings.shipping_and_delivery.service import (
+        get_settings as get_shipping_settings,
+        calculate_shipping,
+    )
+    shipping_settings = await get_shipping_settings(db)
     tax = Decimal(str(data.get("tax", 0)))
-    total = Decimal(str(data.get("total_price", subtotal + shipping + tax)))
+    shipping = calculate_shipping(subtotal, shipping_settings)
+    total = subtotal + tax + shipping
+    is_cod = data.get("payment_status") != "paid"
 
     new_order = Order(
         order_number=order_number,
@@ -747,14 +857,23 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         shipping_cost=shipping,
         tax=tax,
         total_price=total,
-        paid_amount=total if data.get("payment_status") == "paid" else Decimal(0),
-        payment_status=PaymentStatus.paid if data.get("payment_status") == "paid" else PaymentStatus.pending,
+        paid_amount=Decimal(0) if is_cod else total,
+        payment_method="COD" if is_cod else str(data.get("payment_method") or "") or None,
+        payment_status=PaymentStatus.pending if is_cod else PaymentStatus.paid,
         fulfillment_status=FulfillmentStatus.fulfilled if data.get("fulfillment_status") == "fulfilled" else FulfillmentStatus.unfulfilled,
         delivery_status=DeliveryStatus.delivered if data.get("delivery_status") == "delivered" else DeliveryStatus.pending,
         shipping_address=data.get("shipping_address", ""),
         customer_note=data.get("note", ""),
         tags=data.get("tags", ""),
         destination=data.get("destination", country or "Pakistan"),
+        # Delivery-address snapshot taken now; later edits never rewrite it.
+        shipping_name=full_name or None,
+        shipping_phone=phone,
+        shipping_address_line1=address_body or None,
+        shipping_city=city or None,
+        shipping_province=(data.get("province") or "").strip() or None,
+        shipping_postal_code=postal_code or None,
+        shipping_country=country or None,
     )
     db.add(new_order)
     await db.flush()
@@ -808,6 +927,14 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
     await db.commit()
     await db.refresh(new_order)
 
+    # ---- Auto-book with Leopards (best effort; must never break checkout) ----
+    try:
+        await _auto_book_leopards(db, new_order, shipping_settings)
+    except Exception as booking_exc:
+        logging.getLogger(__name__).warning(
+            "Leopards auto-booking failed for %s: %s", order_number, booking_exc
+        )
+
     return {
         "status": "success",
         "message": f"Order {order_number} created successfully in database!",
@@ -815,6 +942,10 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         "order_number": order_number,
         "confirmation_number": confirmation_code,
         "customer_id": customer.id,
+        # Server-authoritative amounts actually stored on the order.
+        "subtotal": float(subtotal),
+        "shipping_cost": float(new_order.shipping_cost),
+        "total_price": float(new_order.total_price),
     }
 
 

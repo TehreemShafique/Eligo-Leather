@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -91,7 +93,7 @@ export default function CreateDiscountPage() {
     let isMounted = true
     const fetchCatalog = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/catalog/products/?limit=500")
+        const res = await fetch(`${API_BASE}/api/v1/catalog/products/?limit=500`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted && Array.isArray(data) && data.length > 0) {
@@ -193,7 +195,7 @@ export default function CreateDiscountPage() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/discounts/", {
+      const res = await fetch(`${API_BASE}/api/v1/discounts/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

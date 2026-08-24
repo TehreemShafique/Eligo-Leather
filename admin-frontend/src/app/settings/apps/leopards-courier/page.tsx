@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect, Suspense, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
@@ -166,7 +168,7 @@ function LeopardsCourierFormContent() {
       setSingleBookingOrderId(qOrderId)
       setActiveTab("Orders")
       const cleanId = qOrderId.replace("#", "")
-      fetch(`http://localhost:8000/api/v1/orders/detail/${cleanId}`)
+      fetch(`${API_BASE}/api/v1/orders/detail/${cleanId}`)
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data?.order) {
@@ -210,7 +212,7 @@ function LeopardsCourierFormContent() {
     }
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/book-packet", {
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/book-packet`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -241,7 +243,7 @@ function LeopardsCourierFormContent() {
     setSyncing(true)
     toast.info("Connecting to Leopards API & syncing all CNs...")
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/sync-all", { cache: "no-store" })
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/sync-all`, { cache: "no-store" })
       const data = await res.json()
       if (res.ok && data.status === "success") {
         const s = data.summary || {}
@@ -285,7 +287,7 @@ function LeopardsCourierFormContent() {
 
     try {
       const csvContent = await file.text()
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/import-csv", {
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/import-csv`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ csv_content: csvContent }),
@@ -327,7 +329,7 @@ function LeopardsCourierFormContent() {
     }
     toast.info(`Downloading airway bill PDF for CN #${cnNumber} from Leopards API...`)
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/orders/leopard/cn/${cnNumber}/download-pdf`)
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/cn/${cnNumber}/download-pdf`)
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
         throw new Error(errData.detail || `HTTP ${res.status}`)
@@ -355,7 +357,7 @@ function LeopardsCourierFormContent() {
   const fetchOrdersFromAPI = async () => {
     setLoading(true)
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/all-orders", { cache: "no-store" })
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/all-orders`, { cache: "no-store" })
       if (res.ok) {
         const data = await res.json()
         if (data.orders && Array.isArray(data.orders)) {
@@ -377,7 +379,7 @@ function LeopardsCourierFormContent() {
   // 2. FETCH DISPATCHED PARCELS API
   const fetchDispatchedFromAPI = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/dispatched", { cache: "no-store" })
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/dispatched`, { cache: "no-store" })
       if (res.ok) {
         const data = await res.json()
         if (data.dispatched && Array.isArray(data.dispatched)) {
@@ -394,7 +396,7 @@ function LeopardsCourierFormContent() {
   // 3. FETCH GENERATED LOAD SHEETS API
   const fetchLoadSheetsFromAPI = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/load-sheets", { cache: "no-store" })
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/load-sheets`, { cache: "no-store" })
       if (res.ok) {
         const data = await res.json()
         if (data.load_sheets && Array.isArray(data.load_sheets)) {
@@ -412,7 +414,7 @@ function LeopardsCourierFormContent() {
   const handleDownloadLoadSheet = async (challanNo: string) => {
     try {
       toast.info(`Downloading Load Sheet Challan #${challanNo} from Leopards...`)
-      const res = await fetch(`http://localhost:8000/api/v1/orders/leopard/load-sheets/${challanNo}/download`)
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/load-sheets/${challanNo}/download`)
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
         throw new Error(errData.detail || `HTTP ${res.status}`)
@@ -446,7 +448,7 @@ function LeopardsCourierFormContent() {
     toast.info(`Connecting to Leopards API & verifying ${rawList.length} challan(s)...`)
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/load-sheets/sync", {
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/load-sheets/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ challan_numbers: rawList }),
@@ -471,7 +473,7 @@ function LeopardsCourierFormContent() {
   // 4. FETCH LOGS API
   const fetchLogsFromAPI = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/logs", { cache: "no-store" })
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/logs`, { cache: "no-store" })
       if (res.ok) {
         const data = await res.json()
         if (data.logs && Array.isArray(data.logs)) {
@@ -488,7 +490,7 @@ function LeopardsCourierFormContent() {
   // 5. FETCH SETTINGS API
   const fetchSettingsFromAPI = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/settings", { cache: "no-store" })
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/settings`, { cache: "no-store" })
       if (res.ok) {
         const data = await res.json()
         if (data.settings) {
@@ -521,7 +523,7 @@ function LeopardsCourierFormContent() {
     toast.info(`Connecting to Leopards API & generating CN for ${selectedOrderIds.length} order(s)...`)
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/generate-cn", {
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/generate-cn`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_ids: selectedOrderIds }),
@@ -577,7 +579,7 @@ function LeopardsCourierFormContent() {
   // SAVE SETTINGS TO API & AUTO-SAVE TO DATABASE
   const autoSaveSettingsToAPI = async (newData: any) => {
     try {
-      await fetch("http://localhost:8000/api/v1/orders/leopard/settings", {
+      await fetch(`${API_BASE}/api/v1/orders/leopard/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newData),
@@ -781,7 +783,7 @@ function LeopardsCourierFormContent() {
   const handleExportLogsCSV = async () => {
     toast.info("Exporting logs as CSV...")
     try {
-      const res = await fetch("http://localhost:8000/api/v1/orders/leopard/logs/export-csv")
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/logs/export-csv`)
       if (!res.ok) throw new Error("Export failed")
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)

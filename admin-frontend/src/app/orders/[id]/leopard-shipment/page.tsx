@@ -13,9 +13,7 @@ import {
   X,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import { apiFetch } from "@/lib/api"
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+import { apiFetch, API_BASE } from "@/lib/api"
 
 // Legacy orders pack "Name | Phone: 03xx | street, city" into shipping_address;
 // the slip must show the street address only.
@@ -79,7 +77,7 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
 
     async function load() {
       try {
-        const res = await fetch(`${API_URL}/api/v1/orders/detail/${orderId}`)
+        const res = await fetch(`${API_BASE}/api/v1/orders/detail/${orderId}`)
         if (res.ok) {
           const data = await res.json()
           const o: OrderDetail | undefined = data?.order
@@ -138,7 +136,7 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
     setBookingLoading(true)
 
     try {
-      const res = await fetch(`${API_URL}/api/v1/orders/leopard/book-packet`, {
+      const res = await fetch(`${API_BASE}/api/v1/orders/leopard/book-packet`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

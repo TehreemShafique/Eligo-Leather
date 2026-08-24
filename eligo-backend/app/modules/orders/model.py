@@ -28,6 +28,8 @@ class FulfillmentStatus(str, enum.Enum):
 
 class DeliveryStatus(str, enum.Enum):
     pending = "pending"
+    booked = "booked"
+    picked_up = "picked_up"
     in_transit = "in_transit"
     out_for_delivery = "out_for_delivery"
     delivered = "delivered"
@@ -110,6 +112,8 @@ class Order(Base):
     tax: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     total_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     paid_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
+    # "COD" for cash on delivery storefront orders; None for legacy orders.
+    payment_method: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Statuses
     payment_status: Mapped[PaymentStatus] = mapped_column(SAEnum(PaymentStatus), default=PaymentStatus.pending)
@@ -126,6 +130,17 @@ class Order(Base):
     # Addresses (stored as JSON text)
     shipping_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     billing_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Structured delivery-address snapshot taken at order creation so later
+    # edits to the customer profile or shipping settings never rewrite the
+    # history of existing orders.
+    shipping_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_phone: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_address_line1: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shipping_city: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_province: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_postal_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_country: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Notes & metadata
     customer_note: Mapped[str | None] = mapped_column(Text, nullable=True)

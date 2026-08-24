@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import {
@@ -45,6 +45,16 @@ function resolveSubmitErrorMessage(error: unknown): string {
   return "We could not reach the store to place your order. Please check your connection and try again."
 }
 
+interface ShippingCalculation {
+  currency: string
+  subtotal: number
+  shipping_charge: number
+  free_shipping_threshold: number
+  shipping_cost: number
+  is_free_shipping: boolean
+  amount_to_free_shipping: number | null
+}
+
 export default function CheckoutPage() {
   const cart = useCartStore(selectCart)
   const cartSubtotal = useCartStore(selectCartSubtotal)
@@ -56,14 +66,33 @@ export default function CheckoutPage() {
   const [completedOrderId, setCompletedOrderId] = useState("")
   const [fieldErrors, setFieldErrors] = useState<CheckoutFieldErrors>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // Server-authoritative shipping configuration (charge + free threshold).
+  const [shippingCalc, setShippingCalc] = useState<ShippingCalculation | null>(null)
 
   // Synchronous lock so rapid double clicks cannot fire a second request.
   const pendingRef = useRef(false)
   const inputRefs = useRef<Partial<Record<CheckoutFieldKey, HTMLElement | null>>>({})
 
-  const baseShippingFee = cartSubtotal >= 2000 ? 0 : 250
+  useEffect(() => {
+    let cancelled = false
+    api
+      .post<unknown, ShippingCalculation>("/shipping/calculate", { subtotal: cartSubtotal }, { auth: false })
+      .then((data) => {
+        if (!cancelled) setShippingCalc(data)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [cartSubtotal])
+
+  const baseShippingFee = shippingCalc?.shipping_cost ?? 0
   const finalShippingFee = Math.max(0, baseShippingFee - appliedDiscount)
   const orderTotal = cartSubtotal + finalShippingFee
+  const amountToFreeShipping =
+    shippingCalc && !shippingCalc.is_free_shipping && shippingCalc.amount_to_free_shipping != null
+      ? Math.ceil(shippingCalc.amount_to_free_shipping)
+      : null
 
   const updateField = <K extends keyof CheckoutFormValues>(
     field: K,
@@ -90,6 +119,11 @@ export default function CheckoutPage() {
     event.preventDefault()
 
     if (loading || pendingRef.current) return
+    // Never place an order before the authoritative shipping amount arrived.
+    if (!shippingCalc) {
+      setSubmitError("One moment — we are still calculating your shipping cost.")
+      return
+    }
 
     const totals = {
       subtotal: cartSubtotal,
@@ -263,7 +297,7 @@ export default function CheckoutPage() {
                   <Truck className="h-6 w-6 text-amber-800" />
                   <span><strong className="block text-sm">Standard delivery</strong><span className="text-xs text-neutral-500">Usually 2–4 working days</span></span>
                 </span>
-                <strong className="text-sm text-amber-800">{finalShippingFee ? `Rs.${finalShippingFee}` : "Free"}</strong>
+                <strong className="text-sm text-amber-800">{shippingCalc ? (finalShippingFee ? `Rs.${finalShippingFee}` : "Free") : "…"}</strong>
               </label>
             </CheckoutSection>
 
@@ -305,8 +339,13 @@ export default function CheckoutPage() {
             </div>
             <div className="space-y-3 px-5 py-5 text-sm sm:px-6">
               <div className="flex justify-between"><span className="text-neutral-600">Subtotal</span><strong>Rs.{cartSubtotal.toLocaleString("en-PK")}</strong></div>
-              <div className="flex justify-between"><span className="flex items-center gap-1 text-neutral-600">Shipping <Question className="h-4 w-4" /></span><strong>{finalShippingFee ? `Rs.${finalShippingFee.toLocaleString("en-PK")}` : "Free"}</strong></div>
+              <div className="flex justify-between"><span className="flex items-center gap-1 text-neutral-600">Shipping <Question className="h-4 w-4" /></span><strong>{shippingCalc ? (finalShippingFee ? `Rs.${finalShippingFee.toLocaleString("en-PK")}` : "Free") : "…"}</strong></div>
               {appliedDiscount ? <div className="flex justify-between text-green-700"><span>Discount</span><strong>-Rs.{appliedDiscount}</strong></div> : null}
+              {amountToFreeShipping != null && amountToFreeShipping > 0 ? (
+                <p className="rounded-[10px] bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                  Add Rs.{amountToFreeShipping.toLocaleString("en-PK")} more to get FREE shipping.
+                </p>
+              ) : null}
               <div className="flex items-end justify-between border-t border-neutral-200 pt-4"><span className="text-base font-bold">Total</span><span><small className="mr-2 text-xs text-neutral-500">PKR</small><strong className="text-2xl text-amber-800">Rs.{orderTotal.toLocaleString("en-PK")}</strong></span></div>
 
               {hasValidationErrors ? (
@@ -329,11 +368,11 @@ export default function CheckoutPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !shippingCalc}
                 aria-busy={loading}
                 className="mt-1 inline-flex h-14 w-full items-center justify-center gap-2 rounded-[10px] bg-amber-800 px-6 text-base font-semibold text-white transition-colors hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <LockKey className="h-5 w-5" />{loading ? "Placing order..." : "Place order"}
+                <LockKey className="h-5 w-5" />{!shippingCalc ? "Calculating shipping…" : loading ? "Placing order..." : "Place order"}
               </button>
               <p className="text-center text-xs leading-5 text-neutral-500">By placing your order, you agree to our <Link href="/terms-of-service" className="underline">terms</Link> and <Link href="/refund-policy" className="underline">refund policy</Link>.</p>
             </div>

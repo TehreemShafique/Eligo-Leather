@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
@@ -115,7 +117,7 @@ export default function SupabaseReviewsAdminPage() {
     const fetchSupabaseReviews = async () => {
       setLoading(true)
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/apps/supabase_reviews/action", {
+        const res = await fetch(`${API_BASE}/api/v1/apps/supabase_reviews/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "fetch_reviews", payload: { page: 1, per_page: 50 } }),
@@ -167,7 +169,7 @@ export default function SupabaseReviewsAdminPage() {
   // Admin Decision: Update Review Status (Approve vs Reject)
   const handleUpdateStatus = async (reviewId: string | number, newStatus: "approved" | "rejected") => {
     try {
-      await fetch("http://127.0.0.1:8000/api/v1/apps/supabase_reviews/action", {
+      await fetch(`${API_BASE}/api/v1/apps/supabase_reviews/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -196,7 +198,7 @@ export default function SupabaseReviewsAdminPage() {
   // Delete Review
   const handleDeleteReview = async (reviewId: string | number) => {
     try {
-      await fetch("http://127.0.0.1:8000/api/v1/apps/supabase_reviews/action", {
+      await fetch(`${API_BASE}/api/v1/apps/supabase_reviews/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useParams } from "next/navigation"
@@ -60,7 +62,7 @@ export default function EditPageDetailScreen() {
     let isMounted = true
     const fetchDbPolicies = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/policies")
+        const res = await fetch(`${API_BASE}/api/v1/settings/legal-privacy/policies`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted && Array.isArray(data)) {
@@ -162,7 +164,7 @@ export default function EditPageDetailScreen() {
     const loadInitialPageData = async () => {
       // 1. Check PostgreSQL Backend DB
       try {
-        const res = await fetch(`http://127.0.0.1:8000/api/v1/pages/${pageIdStr}`)
+        const res = await fetch(`${API_BASE}/api/v1/pages/${pageIdStr}`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted) {
@@ -259,7 +261,7 @@ export default function EditPageDetailScreen() {
 
     try {
       if (pageIdStr.length < 8) {
-        await fetch(`http://127.0.0.1:8000/api/v1/pages/${pageIdStr}`, {
+        await fetch(`${API_BASE}/api/v1/pages/${pageIdStr}`, {
           method: "DELETE",
         })
       }
@@ -292,7 +294,7 @@ export default function EditPageDetailScreen() {
     }
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/pages/${pageIdStr}`, {
+      const res = await fetch(`${API_BASE}/api/v1/pages/${pageIdStr}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

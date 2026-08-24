@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -233,8 +235,6 @@ const COLOR_HEX_MAP: Record<string, string> = {
   chocolate: "#3f2a1d",
   whiskey: "#8e5a2b",
 }
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function AdminNewProductPage() {
   const router = useRouter()
@@ -1257,7 +1257,7 @@ export default function AdminNewProductPage() {
                               type="button"
                               onClick={async () => {
                                 try {
-                                  await fetch("http://127.0.0.1:8000/api/v1/store/header-scripts", {
+                                  await fetch(`${API_BASE}/api/v1/store/header-scripts`, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ header_scripts: computedScriptCode }),

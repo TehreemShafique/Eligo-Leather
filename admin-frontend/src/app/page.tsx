@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import {
@@ -55,7 +57,7 @@ export default function AdminHomePage() {
       try {
         setLoading(true)
         const token = localStorage.getItem("eligo_admin_token")
-        const res = await fetch("http://localhost:8000/api/v1/orders/?limit=10&skip=0", {
+        const res = await fetch(`${API_BASE}/api/v1/orders/?limit=10&skip=0`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         })
         if (!res.ok) throw new Error("Failed to fetch orders")

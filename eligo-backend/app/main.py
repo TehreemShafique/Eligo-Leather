@@ -1,5 +1,16 @@
+import sys
 import time
 from pathlib import Path
+
+# Windows servers launched with piped/redirected stdout default to a legacy
+# codepage (cp1252); any print containing emoji then crashes the endpoint
+# with UnicodeEncodeError (e.g. the Leopards webhook logger). Force UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware

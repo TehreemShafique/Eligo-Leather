@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
@@ -56,7 +58,7 @@ export default function AdminDiscountsPage() {
     // 1. Fetch Type 1: Welcome Discount Settings from DB
     const fetchWelcomeSettings = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/discounts/welcome")
+        const res = await fetch(`${API_BASE}/api/v1/discounts/welcome`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted) {
@@ -91,7 +93,7 @@ export default function AdminDiscountsPage() {
       }
 
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/discounts/")
+        const res = await fetch(`${API_BASE}/api/v1/discounts/`)
         if (res.ok) {
           const data = await res.json()
           if (Array.isArray(data)) {
@@ -152,7 +154,7 @@ export default function AdminDiscountsPage() {
 
     // Save to DB
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/discounts/welcome", {
+      const res = await fetch(`${API_BASE}/api/v1/discounts/welcome`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

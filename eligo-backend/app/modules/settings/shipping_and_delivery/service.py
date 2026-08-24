@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -65,6 +67,40 @@ async def update_settings(data: ShippingSettingsUpdate, db: AsyncSession) -> Shi
     await db.commit()
     await db.refresh(settings)
     return settings
+
+
+def calculate_shipping(subtotal, settings: ShippingSettings) -> Decimal:
+    """Single source of truth for the storewide shipping charge (PKR).
+
+    Returns ``shipping_charge`` when ``subtotal`` is below
+    ``free_shipping_threshold`` and ``Decimal("0")`` otherwise. Used by the
+    public checkout calculation endpoint AND re-applied authoritatively when
+    an order is created so browser-supplied shipping amounts are never
+    trusted. Historical orders keep the amount snapshotted at creation.
+    """
+    subtotal_amount = Decimal(str(subtotal or 0))
+    threshold = Decimal(str(settings.free_shipping_threshold or 0))
+    charge = Decimal(str(settings.shipping_charge or 0))
+    return Decimal("0") if subtotal_amount >= threshold else charge
+
+
+async def calculate_public_shipping(subtotal, db: AsyncSession) -> dict:
+    """Load settings and build the public checkout calculation payload."""
+    settings = await get_settings(db)
+    subtotal_amount = Decimal(str(subtotal or 0))
+    cost = calculate_shipping(subtotal_amount, settings)
+    threshold = Decimal(str(settings.free_shipping_threshold or 0))
+    is_free = subtotal_amount >= threshold
+    return {
+        "currency": "PKR",
+        "subtotal": float(subtotal_amount),
+        "shipping_charge": float(Decimal(str(settings.shipping_charge or 0))),
+        "free_shipping_threshold": float(threshold),
+        "shipping_cost": float(cost),
+        "is_free_shipping": is_free,
+        # How much more the customer needs to spend to unlock free shipping.
+        "amount_to_free_shipping": None if is_free else float(max(threshold - subtotal_amount, Decimal(0))),
+    }
 
 
 async def seed_defaults(db: AsyncSession) -> None:

@@ -1,11 +1,13 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
 import { CreditCard, Plus, PencilSimple, X, Check, Gift, CurrencyCircleDollar, WarningCircle } from "@phosphor-icons/react"
 import { PageHeader } from "@/components/layout/page-header"
 
-const API_BASE = "http://localhost:8000/api/v1/settings/payment"
+const PAYMENT_API = `${API_BASE}/api/v1/settings/payment`
 
 interface PaymentMethod {
   id: string
@@ -55,8 +57,8 @@ export default function AdminSettingsPaymentsPage() {
     setLoading(true)
     try {
       const [methodsRes, settingsRes] = await Promise.all([
-        fetch(`${API_BASE}/methods`),
-        fetch(`${API_BASE}/settings`),
+        fetch(`${PAYMENT_API}/methods`),
+        fetch(`${PAYMENT_API}/settings`),
       ])
 
       if (!methodsRes.ok) throw new Error("Failed to fetch payment methods")
@@ -89,7 +91,7 @@ export default function AdminSettingsPaymentsPage() {
     }
     setSavingMethod(true)
     try {
-      const res = await fetch(`${API_BASE}/methods`, {
+      const res = await fetch(`${PAYMENT_API}/methods`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -129,7 +131,7 @@ export default function AdminSettingsPaymentsPage() {
     e.preventDefault()
     setSavingSettings(true)
     try {
-      const res = await fetch(`${API_BASE}/settings`, {
+      const res = await fetch(`${PAYMENT_API}/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -153,7 +155,7 @@ export default function AdminSettingsPaymentsPage() {
     e.preventDefault()
     setSavingSettings(true)
     try {
-      const res = await fetch(`${API_BASE}/settings`, {
+      const res = await fetch(`${PAYMENT_API}/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ payment_capture_method: captureMethod }),

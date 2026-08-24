@@ -5,7 +5,7 @@ import Image from "next/image"
 import { Package, DownloadSimple, UploadSimple, X, MagnifyingGlass } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, API_BASE} from "@/lib/api"
 
 interface InventoryRowItem {
   id: number
@@ -45,7 +45,7 @@ export default function AdminInventoryPage() {
         console.error("Could not load order commitments:", commitErr)
       }
 
-      const res = await fetch("http://127.0.0.1:8000/api/v1/catalog/products/")
+      const res = await fetch(`${API_BASE}/api/v1/catalog/products/`)
       if (res.ok) {
         const products = await res.json()
         if (Array.isArray(products) && products.length > 0) {
@@ -111,7 +111,7 @@ export default function AdminInventoryPage() {
     )
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/catalog/products/variants/${variantId}`, {
+      const res = await fetch(`${API_BASE}/api/v1/catalog/products/variants/${variantId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inventory_quantity: newStock }),

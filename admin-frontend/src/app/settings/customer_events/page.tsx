@@ -1,3 +1,5 @@
+import { API_BASE } from "@/lib/api"
+
 ﻿"use client"
 
 import { useState, useEffect } from "react"
@@ -18,7 +20,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
-const API = "http://localhost:8000/api/v1/store"
+const API = `${API_BASE}/api/v1/store`
 
 interface SavedSchema {
   id: number

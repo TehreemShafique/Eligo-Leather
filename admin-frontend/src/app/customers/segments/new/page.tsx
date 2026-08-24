@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -115,7 +117,7 @@ export default function NewSegmentPage() {
     let isMounted = true
     const fetchCustomers = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/customers/")
+        const res = await fetch(`${API_BASE}/api/v1/customers/`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted && Array.isArray(data) && data.length > 0) {
@@ -206,7 +208,7 @@ export default function NewSegmentPage() {
     try {
       await Promise.all(
         selectedIds.map((id) =>
-          fetch(`http://127.0.0.1:8000/api/v1/customers/${id}`, {
+          fetch(`${API_BASE}/api/v1/customers/${id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tags: tagsStr }),
@@ -230,7 +232,7 @@ export default function NewSegmentPage() {
     try {
       await Promise.all(
         selectedIds.map((id) =>
-          fetch(`http://127.0.0.1:8000/api/v1/customers/${id}`, {
+          fetch(`${API_BASE}/api/v1/customers/${id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tags: "" }),
@@ -303,7 +305,7 @@ export default function NewSegmentPage() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/segments/", {
+      const res = await fetch(`${API_BASE}/api/v1/segments/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -346,7 +348,7 @@ export default function NewSegmentPage() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/segments/", {
+      const res = await fetch(`${API_BASE}/api/v1/segments/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

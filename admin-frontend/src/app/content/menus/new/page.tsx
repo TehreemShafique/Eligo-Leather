@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -121,7 +123,7 @@ export default function CreateMenuPage() {
 
     try {
       // 1. Create Menu in PostgreSQL DB
-      const res = await fetch("http://127.0.0.1:8000/api/v1/menus/", {
+      const res = await fetch(`${API_BASE}/api/v1/menus/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(menuPayload),
@@ -134,7 +136,7 @@ export default function CreateMenuPage() {
         // 2. Insert Menu Items in DB
         await Promise.all(
           validItems.map((item, idx) =>
-            fetch(`http://127.0.0.1:8000/api/v1/menus/${menuId}/items`, {
+            fetch(`${API_BASE}/api/v1/menus/${menuId}/items`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({

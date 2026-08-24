@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect, useCallback } from "react"
 import {
   Bell,
@@ -20,7 +22,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
-const API = "http://localhost:8000/api/v1/settings/notifications"
+const API = `${API_BASE}/api/v1/settings/notifications`
 
 interface NotificationTemplate {
   id: number

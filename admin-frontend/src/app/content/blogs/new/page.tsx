@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -132,7 +134,7 @@ export default function CreateBlogPostPage() {
 
     // Save to PostgreSQL Backend DB
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/blog-posts/", {
+      const res = await fetch(`${API_BASE}/api/v1/blog-posts/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -427,7 +429,7 @@ export default function CreateBlogPostPage() {
                           try {
                             const scopedScriptStr = `<!-- BLOG Page Target Script -->\n<script>\nif (window.location.pathname.startsWith('/blog') || window.location.pathname.startsWith('/blogs')) {\n  const script = document.createElement('script');\n  script.type = 'application/ld+json';\n  script.text = JSON.stringify(${JSON.stringify(JSON.parse(computedScriptCode.replace(/<script[^>]*>/, '').replace(/<\/script>/, '')), null, 2)});\n  document.head.appendChild(script);\n}\n</script>`
                             
-                            await fetch("http://127.0.0.1:8000/api/v1/store/header-scripts", {
+                            await fetch(`${API_BASE}/api/v1/store/header-scripts`, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({ header_scripts: scopedScriptStr }),

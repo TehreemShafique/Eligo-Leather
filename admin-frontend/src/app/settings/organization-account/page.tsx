@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Users, Plus, DownloadSimple, UploadSimple, ShieldCheck, X, Check, Lock, UserCheck } from "@phosphor-icons/react"
@@ -7,7 +9,7 @@ import { toast } from "sonner"
 
 import { PageHeader } from "@/components/layout/page-header"
 
-const API = "http://localhost:8000/api/v1/settings"
+const API = `${API_BASE}/api/v1/settings`
 
 interface UserRecord {
   id: number

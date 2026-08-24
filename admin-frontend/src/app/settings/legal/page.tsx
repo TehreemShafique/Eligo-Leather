@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
@@ -55,7 +57,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
     const fetchBackendSettings = async () => {
       // 1. Fetch Privacy Settings
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/privacy-settings")
+        const res = await fetch(`${API_BASE}/api/v1/settings/legal-privacy/privacy-settings`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted) {
@@ -70,7 +72,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
 
       // 2. Fetch Policies
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/policies")
+        const res = await fetch(`${API_BASE}/api/v1/settings/legal-privacy/policies`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted && Array.isArray(data)) {
@@ -106,7 +108,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/privacy-settings", {
+      const res = await fetch(`${API_BASE}/api/v1/settings/legal-privacy/privacy-settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -137,7 +139,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/policies", {
+      const res = await fetch(`${API_BASE}/api/v1/settings/legal-privacy/policies`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

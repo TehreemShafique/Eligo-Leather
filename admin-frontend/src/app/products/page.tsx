@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -83,7 +85,7 @@ export default function AdminProductsPage() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/catalog/products/")
+        const res = await fetch(`${API_BASE}/api/v1/catalog/products/`)
         if (res.ok) {
           const data = await res.json()
           if (Array.isArray(data) && data.length > 0) {
@@ -120,7 +122,7 @@ export default function AdminProductsPage() {
     }
     setDeletingId(product.id)
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/catalog/products/${product.id}`, { method: "DELETE" })
+      const res = await fetch(`${API_BASE}/api/v1/catalog/products/${product.id}`, { method: "DELETE" })
       if (res.ok || res.status === 204) {
         setProducts(prev => prev.filter(p => p.id !== product.id))
         toast.success(`"${product.title}" deleted from database successfully!`)

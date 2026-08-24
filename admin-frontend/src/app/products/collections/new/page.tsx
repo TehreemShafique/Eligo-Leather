@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -45,7 +47,7 @@ export default function AdminNewCollectionPage() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/catalog/collections/", {
+      const res = await fetch(`${API_BASE}/api/v1/catalog/collections/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

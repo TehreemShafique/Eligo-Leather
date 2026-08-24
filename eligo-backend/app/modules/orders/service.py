@@ -11,7 +11,7 @@ from app.modules.orders.model import (
     Order, OrderItem, OrderNote, OrderAuditLog,
     DraftOrder, DraftOrderItem,
     AbandonedCheckout, AbandonedCheckoutItem,
-    PaymentStatus, FulfillmentStatus, ReturnStatus,
+    PaymentStatus, FulfillmentStatus, ReturnStatus, DeliveryStatus,
 )
 from app.modules.orders.schema import (
     OrderCreate, OrderUpdate, OrderNoteCreate,
@@ -818,6 +818,24 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
                     order.fulfillment_status = f"Fulfilled ({status_str})"
                 elif "return" in status_str.lower() or "cancel" in status_str.lower():
                     order.fulfillment_status = f"Returned ({status_str})"
+
+                # Mirror the courier lifecycle onto the structured
+                # delivery_status so the storefront and admin track shipping
+                # separately from payment/fulfillment.
+                lower_status = status_str.lower()
+                delivery_mapping = [
+                    (("out for delivery", "out-for-delivery"), DeliveryStatus.out_for_delivery),
+                    (("return",), DeliveryStatus.returned),
+                    (("undeliver", "refuse", "fail", "cancel"), DeliveryStatus.failed),
+                    (("deliver",), DeliveryStatus.delivered),
+                    (("picked", "pickup", "pick up"), DeliveryStatus.picked_up),
+                    (("book",), DeliveryStatus.booked),
+                    (("dispatch", "transit", "move", "shift", "on the way", "in process"), DeliveryStatus.in_transit),
+                ]
+                for keywords, target in delivery_mapping:
+                    if any(keyword in lower_status for keyword in keywords):
+                        order.delivery_status = target
+                        break
 
                 await _log_audit(
                     db,
