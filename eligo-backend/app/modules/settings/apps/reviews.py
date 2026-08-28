@@ -10,10 +10,11 @@ after which they become visible on the storefront.
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.catalog.model import Product
 from app.modules.settings.apps.model import Review, ReviewStatus
 
 
-def _serialize(review: Review) -> dict:
+def _serialize(review: Review, product_title: str | None = None) -> dict:
     images = review.images or []
     status = (
         review.status.value
@@ -26,6 +27,7 @@ def _serialize(review: Review) -> dict:
     return {
         "id": review.id,
         "product_id": review.product_id,
+        "product_title": product_title,
         "reviewer_name": review.reviewer_name,
         "reviewer_email": review.reviewer_email or "",
         "rating": review.rating,
@@ -77,7 +79,26 @@ async def list_reviews(
     offset = (page - 1) * per_page
     query = query.limit(per_page).offset(offset)
     result = await db.execute(query)
-    return [_serialize(r) for r in result.scalars().all()]
+    reviews = list(result.scalars().all())
+
+    titles_by_id = await _product_titles_by_id(db, {r.product_id for r in reviews})
+    return [
+        _serialize(r, titles_by_id.get(str(r.product_id)))
+        for r in reviews
+    ]
+
+
+async def _product_titles_by_id(
+    db: AsyncSession, product_ids: set[str | None]
+) -> dict[str, str]:
+    """Map product id (string key) -> product title for review badges."""
+    numeric_ids = [int(pid) for pid in product_ids if pid and str(pid).isdigit()]
+    if not numeric_ids:
+        return {}
+    result = await db.execute(
+        select(Product.id, Product.title).where(Product.id.in_(numeric_ids))
+    )
+    return {str(pid): title for pid, title in result.all()}
 
 
 async def review_summary(

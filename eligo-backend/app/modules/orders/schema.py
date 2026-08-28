@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict, EmailStr
+from typing import Annotated
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.modules.orders.model import (
     PaymentStatus, FulfillmentStatus, DeliveryStatus, DeliveryMethod,
@@ -17,9 +18,9 @@ class OrderItemCreate(BaseModel):
     product_name: str
     sku: str | None = None
     variant_title: str | None = None
-    quantity: int = 1
-    unit_price: Decimal
-    total_price: Decimal | None = None
+    quantity: Annotated[int, Field(ge=1, le=99)] = 1
+    unit_price: Annotated[Decimal, Field(ge=0)]
+    total_price: Annotated[Decimal | None, Field(ge=0)] = None
     requires_shipping: bool = True
     is_gift_card: bool = False
 
@@ -80,8 +81,6 @@ class OrderCreate(BaseModel):
     po_number: str | None = None
     shipping_address: str | None = None
     billing_address: str | None = None
-    customer_note: str | None = None
-    internal_note: str | None = None
     tracking_company: str | None = None
     tracking_number: str | None = None
     items: list[OrderItemCreate] = []
@@ -100,8 +99,6 @@ class OrderUpdate(BaseModel):
     po_number: str | None = None
     shipping_address: str | None = None
     billing_address: str | None = None
-    customer_note: str | None = None
-    internal_note: str | None = None
     tracking_company: str | None = None
     tracking_number: str | None = None
     paid_amount: Decimal | None = None
@@ -139,8 +136,6 @@ class OrderOut(BaseModel):
     tracking_number: str | None
     shipping_address: str | None
     billing_address: str | None
-    customer_note: str | None
-    internal_note: str | None
     tags: str | None
     destination: str | None
     po_number: str | None

@@ -5,6 +5,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { CaretDown } from "@phosphor-icons/react"
+import { StarRating } from "@/components/ui/star-rating"
 
 export interface CategoryProduct {
   id: string | number
@@ -117,15 +118,8 @@ function ProductCard({
         </div>
 
         <div className="flex items-center lg:absolute lg:left-[7.239583cqw] lg:top-0">
-          <span className="font-normal text-neutral-400">Review&nbsp;</span>
-          <span className="font-normal text-zinc-950">
-            {item.reviewCount}/{item.rating.toFixed(1)}
-          </span>
+          <StarRating rating={item.rating} reviewCount={item.reviewCount} />
         </div>
-
-        <span className="hidden font-['Times'] text-base font-normal leading-4 tracking-[3px] text-amber-500 sm:inline lg:absolute lg:left-[11.822917cqw] lg:top-[0.052083cqw] lg:block lg:h-[0.729167cqw] lg:w-[5cqw] lg:text-[0.833333cqw] lg:leading-[0.833333cqw] lg:tracking-[0.15625cqw]">
-          {"\u2605\u2605\u2605\u2605\u2605"}
-        </span>
       </div>
 
       <h2 className="mt-2 line-clamp-2 text-lg font-bold leading-7 text-black transition-colors group-hover:text-amber-800 sm:text-xl sm:leading-8 lg:absolute lg:left-0 lg:top-[19.0625cqw] lg:mt-0 lg:w-[16.666667cqw] lg:text-[1.041667cqw] lg:leading-[1.666667cqw]">
@@ -320,10 +314,7 @@ export function CategoryContent({
               </Link>
               <div className="flex flex-1 flex-col justify-center gap-3">
                 <p className="text-xs text-neutral-400">
-                  Review {product.reviewCount}/{product.rating.toFixed(1)}{" "}
-                  <span className="font-['Times'] tracking-[3px] text-amber-500">
-                    {"\u2605\u2605\u2605\u2605\u2605"}
-                  </span>
+                  <StarRating rating={product.rating} reviewCount={product.reviewCount} />
                 </p>
                 <h2 className="text-xl font-bold text-black">
                   {product.title}

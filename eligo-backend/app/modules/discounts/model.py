@@ -66,6 +66,15 @@ class Discount(Base):
     )
     combinations: Mapped[str | None] = mapped_column(Text, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Admin-created promo discounts carry their reward here so the public
+    # checkout can compute the discount amount without trusting the browser.
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    percentage_value: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 2), nullable=True,
+    )
+    value_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True,
+    )
     start_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )

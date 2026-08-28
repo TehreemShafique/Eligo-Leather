@@ -36,6 +36,7 @@ from app.modules.content.schema import (
     BlogCommentOut,
     PageCreate,
     PageUpdate,
+    PageBulkDelete,
     PageOut,
     ContentOverview,
 )
@@ -738,6 +739,12 @@ async def update_page(page_id: int, data: PageUpdate, db: AsyncSession = Depends
     if not obj:
         raise HTTPException(status_code=404, detail="Page not found")
     return obj
+
+
+@pages_router.post("/bulk-delete")
+async def bulk_delete_pages(data: PageBulkDelete, db: AsyncSession = Depends(get_db)):
+    deleted = await service.bulk_delete_pages(db, data.ids, data.handles)
+    return {"status": "success", "deleted": deleted}
 
 
 @pages_router.delete("/{page_id}", status_code=status.HTTP_204_NO_CONTENT)

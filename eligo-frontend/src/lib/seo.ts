@@ -24,6 +24,7 @@ interface SeoMetadataOptions {
   keywords?: string[]
   noIndex?: boolean
   type?: "website" | "article"
+  canonical?: string
 }
 
 export function absoluteUrl(path = "/") {
@@ -38,8 +39,9 @@ export function buildSeoMetadata({
   keywords = [],
   noIndex = false,
   type = "website",
+  canonical,
 }: SeoMetadataOptions): Metadata {
-  const canonical = absoluteUrl(path)
+  const canonicalUrl = canonical ? canonical : absoluteUrl(path)
   const socialImage = absoluteUrl(image)
 
   return {
@@ -49,7 +51,7 @@ export function buildSeoMetadata({
     authors: [{ name: SITE_NAME, url: SITE_URL }],
     creator: SITE_NAME,
     publisher: SITE_NAME,
-    alternates: { canonical },
+    alternates: { canonical: canonicalUrl },
     robots: {
       index: !noIndex,
       follow: true,

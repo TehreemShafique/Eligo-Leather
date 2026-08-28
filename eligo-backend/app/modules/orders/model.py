@@ -111,6 +111,8 @@ class Order(Base):
     shipping_cost: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     tax: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     total_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
+    # Promo-code amount (server-computed at order creation).
+    discount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     paid_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     # "COD" for cash on delivery storefront orders; None for legacy orders.
     payment_method: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -142,9 +144,7 @@ class Order(Base):
     shipping_postal_code: Mapped[str | None] = mapped_column(String, nullable=True)
     shipping_country: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Notes & metadata
-    customer_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Metadata (customer_note / internal_note columns were removed)
     tags: Mapped[str | None] = mapped_column(String, nullable=True)
     destination: Mapped[str | None] = mapped_column(String, nullable=True)
     po_number: Mapped[str | None] = mapped_column(String, nullable=True)

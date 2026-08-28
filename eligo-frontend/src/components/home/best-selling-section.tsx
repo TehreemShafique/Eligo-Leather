@@ -1,5 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
+import { StarRating } from "@/components/ui/star-rating"
 
 interface ProductItem {
   id: string | number
@@ -82,17 +83,11 @@ export function BestSellingSection({
                 </div>
 
                 <div className="ml-auto flex items-center gap-1 min-[1920px]:contents">
-                  <span className="whitespace-nowrap min-[1920px]:absolute min-[1920px]:left-[159px] min-[1920px]:top-0">
-                    <span className="text-neutral-400">Review </span>
-
-                    <span className="text-zinc-950">
-                      {item.reviewCount}/{item.rating.toFixed(1)}
-                    </span>
-                  </span>
-
-                  <span className="whitespace-nowrap font-['Times'] text-base leading-4 tracking-[3px] text-amber-500 min-[1920px]:absolute min-[1920px]:left-[247px] min-[1920px]:top-px min-[1920px]:w-24">
-                    ★★★★★
-                  </span>
+                  <StarRating
+                    rating={item.rating}
+                    reviewCount={item.reviewCount}
+                    className="min-[1920px]:absolute min-[1920px]:left-[159px] min-[1920px]:top-0"
+                  />
                 </div>
               </div>
 

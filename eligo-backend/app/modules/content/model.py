@@ -342,6 +342,8 @@ class BlogPost(Base):
     thumbnail_url: Mapped[str | None] = mapped_column(String, nullable=True)
     seo_title: Mapped[str | None] = mapped_column(String, nullable=True)
     seo_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    seo_keyword: Mapped[str | None] = mapped_column(String, nullable=True)
+    seo_canonical_url: Mapped[str | None] = mapped_column(String, nullable=True)
     template_suffix: Mapped[str | None] = mapped_column(String, nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,

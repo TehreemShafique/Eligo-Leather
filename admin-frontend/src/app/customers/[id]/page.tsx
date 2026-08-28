@@ -216,7 +216,7 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
                 orders.map((order) => (
                   <div key={order.id} className="p-4 flex items-center justify-between hover:bg-gray-50/80 transition-colors">
                     <div>
-                      <Link href={`/orders/${encodeURIComponent(order.order_number)}`} className="font-bold text-amber-800 hover:underline">{order.order_number}</Link>
+                      <Link href={`/orders/${encodeURIComponent(String(order.order_number).replace(/^#/, ""))}`} className="font-bold text-amber-800 hover:underline">{order.order_number}</Link>
                       <span className="text-gray-500 ml-2">&bull; {formatDate(order.created_at)}</span>
                       <p className="text-[11px] text-gray-600 mt-0.5 truncate max-w-[320px]">
                         {order.items?.map((i) => `${i.product_name} x${i.quantity}`).join(", ") || "—"}

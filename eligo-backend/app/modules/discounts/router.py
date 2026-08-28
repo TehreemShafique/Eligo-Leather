@@ -164,15 +164,22 @@ async def verify_coupon(
     payload: dict,
     db: AsyncSession = Depends(get_db),
 ):
-    """Verify coupon code entered at checkout and compute discounted subtotal."""
+    """Verify a discount code entered at checkout and compute the discounted
+    subtotal.
+
+    Two families of codes are supported:
+    - the admin-created store promos (rows in the ``discounts`` table), and
+    - the welcome scratch-and-win code (``WELCOME<n>`` backed by the global
+      welcome settings).
+    """
     code = (payload.get("code") or "").strip().upper()
-    subtotal = float(payload.get("subtotal") or 100)
+    subtotal = float(payload.get("subtotal") or 0)
 
     settings = await service.get_welcome_settings(db)
     pct = int(float(settings.discount_percentage))
     welcome_code = f"WELCOME{pct}"
 
-    if code == welcome_code or code.startswith("WELCOME"):
+    if code.startswith("WELCOME") or code == "WELCOME":
         discount_pct = float(settings.discount_percentage or 5)
         discount_amount = round((subtotal * discount_pct) / 100.0, 2)
         discounted_subtotal = round(subtotal - discount_amount, 2)
@@ -186,10 +193,20 @@ async def verify_coupon(
             "message": f"{discount_pct}% Welcome discount applied! You saved Rs. {discount_amount}.",
         }
 
-    return {
-        "valid": False,
-        "code": code,
-        "discount_amount": 0,
-        "discounted_subtotal": subtotal,
-        "message": f"Invalid or expired coupon code '{code}'.",
+    promo = await service.validate_promo_code(db, code, subtotal)
+    result = {
+        "valid": promo["valid"],
+        "code": promo["code"] or code,
+        "discount_type": promo["discount_type"],
+        "discount_percentage": promo["discount_percentage"],
+        "discount_amount": float(promo["discount_amount"]),
+        "discounted_subtotal": float(promo["discounted_subtotal"]),
+        "message": promo["message"],
     }
+    if result["valid"]:
+        return result
+
+    # Backwards-compatible shape when the code is unknown or unusable.
+    result["discount_amount"] = 0
+    result["discounted_subtotal"] = subtotal
+    return result

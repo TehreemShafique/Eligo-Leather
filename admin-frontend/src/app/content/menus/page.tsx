@@ -4,6 +4,7 @@ import { API_BASE } from "@/lib/api"
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { List, Plus, ArrowSquareOut, PencilSimple, Trash } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
@@ -16,93 +17,30 @@ interface MenuRecord {
 }
 
 export default function AdminMenusPage() {
-  const [menus, setMenus] = useState<MenuRecord[]>([
-    {
-      id: 1,
-      title: "Quick Links",
-      handle: "quick-links",
-      items: ["Home", "About Us", "Blog", "Contact Us"],
-    },
-    {
-      id: 2,
-      title: "Main menu",
-      handle: "main-menu",
-      items: ["Home", "Wallets", "Belts", "Keychains", "Accessories", "Sales", "About us", "Blogs"],
-    },
-    {
-      id: 3,
-      title: "Information",
-      handle: "information",
-      items: ["Privacy Policy", "Refund Policy", "Terms of Service", "Contact Information", "Sales"],
-    },
-    {
-      id: 4,
-      title: "Footer Menu",
-      handle: "footer-menu",
-      items: ["Women Wallets", "Mens Wallets", "Key Chain", "Cases", "Belt"],
-    },
-    {
-      id: 5,
-      title: "Customer account main menu",
-      handle: "customer-account-menu",
-      items: ["Orders", "Profile"],
-    },
-  ])
+  const router = useRouter()
+  const [menus, setMenus] = useState<MenuRecord[]>([])
 
-  // Fetch live menus from DB & LocalStorage
+  // Fetch live menus from the backend PostgreSQL DB
   useEffect(() => {
     let isMounted = true
 
-    // Check local storage for created menus
-    try {
-      const stored = localStorage.getItem("eligo_created_menus")
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0 && isMounted) {
-          setMenus((prev) => {
-            const combined = [...parsed, ...prev]
-            const uniqueMap = new Map()
-            combined.forEach((item) => {
-              if (!uniqueMap.has(item.handle)) {
-                uniqueMap.set(item.handle, item)
-              }
-            })
-            return Array.from(uniqueMap.values())
-          })
-        }
-      }
-    } catch (e) {
-      console.log("localStorage read error", e)
-    }
-
-    // Fetch from Backend PostgreSQL DB
     const fetchMenusFromDB = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/v1/menus/`)
         if (res.ok) {
           const data = await res.json()
-          if (isMounted && Array.isArray(data) && data.length > 0) {
+          if (isMounted && Array.isArray(data)) {
             const mapped: MenuRecord[] = data.map((m: any) => ({
               id: m.id,
               title: m.title,
               handle: m.handle,
               items: (m.items || []).map((it: any) => it.title || it.url),
             }))
-
-            setMenus((prev) => {
-              const combined = [...mapped, ...prev]
-              const uniqueMap = new Map()
-              combined.forEach((item) => {
-                if (!uniqueMap.has(item.handle)) {
-                  uniqueMap.set(item.handle, item)
-                }
-              })
-              return Array.from(uniqueMap.values())
-            })
+            setMenus(mapped)
           }
         }
       } catch (err) {
-        console.log("Menus DB API offline, rendering local list.")
+        setMenus([])
       }
     }
 
@@ -186,7 +124,7 @@ export default function AdminMenusPage() {
                   </td>
                   <td className="eligo-td text-center">
                     <button
-                      onClick={() => toast.info(`Editing menu: ${menu.title}`)}
+                      onClick={() => router.push(`/content/menus/${menu.id}`)}
                       className="px-3 py-1 bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 rounded-lg font-medium text-[11px] inline-flex items-center gap-1 transition-colors"
                     >
                       <PencilSimple className="w-3.5 h-3.5 text-gray-500" />

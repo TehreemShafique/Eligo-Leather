@@ -5,6 +5,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { CaretDown, SquaresFour } from "@phosphor-icons/react"
+import { StarRating } from "@/components/ui/star-rating"
 
 interface Product {
   id: string | number
@@ -210,18 +211,11 @@ export function ProductsSection({
                     </div>
 
                     <div className="flex items-center gap-1 lg:contents">
-                      <div className="lg:absolute lg:left-[8.28125cqw] lg:top-0 lg:whitespace-nowrap">
-                        <span className="font-normal text-neutral-400">
-                          Review{" "}
-                        </span>
-                        <span className="font-normal text-zinc-950">
-                          {item.reviewCount}/{item.rating.toFixed(1)}
-                        </span>
-                      </div>
-
-                      <span className="font-['Times'] text-amber-500 lg:absolute lg:left-[12.864583cqw] lg:top-[0.052083cqw] lg:h-[0.729167cqw] lg:w-[5cqw] lg:text-[0.833333cqw] lg:font-normal lg:leading-[0.833333cqw] lg:tracking-[0.15625cqw]">
-                        ★★★★★
-                      </span>
+                      <StarRating
+                        rating={item.rating}
+                        reviewCount={item.reviewCount}
+                        className="lg:absolute lg:left-[8.28125cqw] lg:top-0 lg:whitespace-nowrap lg:text-[0.625cqw]"
+                      />
                     </div>
                   </div>
 

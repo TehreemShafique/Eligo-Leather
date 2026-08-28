@@ -269,7 +269,12 @@ export const useCartStore = create<CartState>()(
                     : item,
                 ),
         })),
-      clearCart: () => set({ cart: [] }),
+      clearCart: () => {
+        set({ cart: [] })
+        // Remove the persisted cart too, so an aborted order or a later
+        // hydration/rehydrate can never resurrect the ordered items.
+        useCartStore.persist.clearStorage()
+      },
     }),
     {
       name: CART_STORAGE_KEY,

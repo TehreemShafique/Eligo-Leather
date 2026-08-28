@@ -92,8 +92,35 @@ export function TestimonialsSection({
 
   useEffect(() => {
     let mounted = true
-    listApprovedReviews({ productId, perPage: 24 }).then((reviews) => {
-      if (mounted) setTestimonials(shuffle(reviews).slice(0, 3).map(toTestimonial))
+    listApprovedReviews({ productId, perPage: 50 }).then((reviews) => {
+      if (!mounted) return
+
+      if (productId != null && productId !== "") {
+        // Product page: show approved reviews for that product only.
+        setTestimonials(shuffle(reviews).slice(0, 3).map(toTestimonial))
+        return
+      }
+
+      // Home page: reviews written from the home page (no specific product)
+      // come first, newest first. Fill any remaining slots with the most
+      // recent approved review from each distinct product.
+      const homepageReviews = reviews.filter(
+        (r) => r.product_id == null || r.product_id === "",
+      )
+      const productReviews = reviews.filter(
+        (r) => r.product_id != null && r.product_id !== "",
+      )
+
+      const seen = new Set<string>()
+      const recentByProduct = productReviews.filter((r) => {
+        const key = String(r.product_id)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+
+      const picked = [...homepageReviews, ...recentByProduct].slice(0, 3)
+      setTestimonials(picked.map(toTestimonial))
     })
     return () => {
       mounted = false

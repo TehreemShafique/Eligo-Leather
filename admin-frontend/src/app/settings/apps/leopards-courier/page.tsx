@@ -143,7 +143,13 @@ function LeopardsCourierFormContent() {
   const [singleBookingOrderId, setSingleBookingOrderId] = useState<string | null>(orderIdParam)
 
   const [manualShipmentType, setManualShipmentType] = useState("Select Service Type")
-  const [manualBookingDate, setManualBookingDate] = useState("08/12/2026")
+  const [manualBookingDate, setManualBookingDate] = useState(() => {
+    const now = new Date()
+    const dd = String(now.getDate()).padStart(2, "0")
+    const mm = String(now.getMonth() + 1).padStart(2, "0")
+    const yyyy = now.getFullYear()
+    return `${dd}/${mm}/${yyyy}`
+  })
   const [manualPieces, setManualPieces] = useState("1")
   const [manualWeightGrams, setManualWeightGrams] = useState("0")
   const [manualCodAmount, setManualCodAmount] = useState("")
@@ -182,6 +188,9 @@ function LeopardsCourierFormContent() {
             )
             setManualConsigneeAddress(cleanConsigneeAddress(o.shipping_address || ""))
             setManualDestinationCity(o.city || "")
+            // Auto-fill net weight from the order's product weights (grams).
+            // The field stays editable so the admin can adjust it manually.
+            setManualWeightGrams(o.weight_grams != null ? String(o.weight_grams) : "0")
             if (o.items && Array.isArray(o.items) && o.items.length > 0) {
               const itemSummary = o.items
                 .map((i: any) => `${i.product_name} - ${i.variant_title || ""} Qty=${i.quantity}`)

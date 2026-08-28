@@ -1,12 +1,16 @@
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.discounts.model import (
     Discount,
     WelcomeDiscountLog,
     WelcomeDiscountSettings,
+    DiscountStatus,
+    DiscountMethod,
+    DiscountType,
 )
 from app.modules.discounts.schema import (
     DiscountCreate,
@@ -166,3 +170,110 @@ async def evaluate_welcome_discount(
         show_welcome_discount=True,
         discount_percentage=float(settings.discount_percentage),
     )
+
+
+# =====================================================================
+# Admin-created promo codes
+# =====================================================================
+
+def _to_decimal(value, fallback: Decimal = Decimal("0")) -> Decimal:
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return fallback
+
+
+def _build_invalid(code: str, message: str) -> dict:
+    return {
+        "valid": False,
+        "code": code,
+        "discount_type": None,
+        "discount_percentage": None,
+        "discount_amount": Decimal("0"),
+        "discounted_subtotal": Decimal("0"),
+        "message": message,
+    }
+
+
+async def validate_promo_code(
+    db: AsyncSession,
+    code: str,
+    subtotal: Decimal | str | float,
+) -> dict:
+    """Validate an admin-created promo code (from the ``discounts`` table)
+    against the live catalog subtotal.
+
+    Returns a plain dict so both the public ``verify-coupon`` endpoint and
+    the order-creation flow share exactly one source of truth. Only codes
+    created by the admin are validated here; the welcome scratch-and-win
+    code (WELCOME+) stays a separate flow.
+    """
+    normalized = (code or "").strip().upper()
+    subtotal_dec = _to_decimal(subtotal)
+
+    if not normalized:
+        return _build_invalid(normalized, "Please enter a discount code.")
+
+    result = await db.execute(
+        select(Discount).where(func.lower(func.coalesce(Discount.code, "")) == normalized.lower()),
+    )
+    discount = result.scalar_one_or_none()
+
+    if discount is None:
+        return _build_invalid(normalized, f"Discount code '{normalized}' is not valid.")
+
+    if discount.method != DiscountMethod.code:
+        return _build_invalid(normalized, f"Discount code '{normalized}' is not valid.")
+
+    if discount.status != DiscountStatus.active:
+        return _build_invalid(normalized, f"Discount code '{normalized}' has expired.")
+
+    now = datetime.utcnow()
+    if discount.start_date is not None and discount.start_date > now:
+        return _build_invalid(normalized, f"Discount code '{normalized}' is not active yet.")
+    if discount.end_date is not None and discount.end_date < now:
+        return _build_invalid(normalized, f"Discount code '{normalized}' has expired.")
+
+    if discount.type == DiscountType.percentage or discount.percentage_value is not None:
+        pct = _to_decimal(discount.percentage_value)
+        if pct <= 0:
+            return _build_invalid(
+                normalized, f"Discount code '{normalized}' has no discount value configured."
+            )
+        discount_amount = (subtotal_dec * pct / Decimal("100")).quantize(Decimal("0.01"))
+        discounted_subtotal = (subtotal_dec - discount_amount).quantize(Decimal("0.01"))
+        return {
+            "valid": True,
+            "code": normalized,
+            "discount_type": "percentage",
+            "discount_percentage": float(pct),
+            "discount_amount": discount_amount,
+            "discounted_subtotal": discounted_subtotal,
+            "message": (
+                f"{pct}% discount applied with code {normalized}! "
+                f"You saved Rs. {discount_amount:,.2f}."
+            ),
+        }
+
+    if discount.type == DiscountType.fixed_amount or discount.value_amount is not None:
+        amount = _to_decimal(discount.value_amount)
+        if amount <= 0:
+            return _build_invalid(
+                normalized, f"Discount code '{normalized}' has no discount value configured."
+            )
+        discount_amount = min(amount, subtotal_dec).quantize(Decimal("0.01"))
+        discounted_subtotal = (subtotal_dec - discount_amount).quantize(Decimal("0.01"))
+        return {
+            "valid": True,
+            "code": normalized,
+            "discount_type": "fixed_amount",
+            "discount_percentage": None,
+            "discount_amount": discount_amount,
+            "discounted_subtotal": discounted_subtotal,
+            "message": (
+                f"Rs. {discount_amount:,.2f} discount applied with code {normalized}. "
+                f"You saved Rs. {discount_amount:,.2f}."
+            ),
+        }
+
+    return _build_invalid(normalized, f"Discount code '{normalized}' is not valid.")

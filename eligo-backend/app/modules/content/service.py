@@ -1,7 +1,7 @@
 from datetime import datetime
 import json
 
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -953,6 +953,26 @@ async def delete_page(db: AsyncSession, page_id: int) -> bool:
     await db.delete(obj)
     await db.commit()
     return True
+
+
+async def bulk_delete_pages(
+    db: AsyncSession, page_ids: list[int], handles: list[str],
+) -> int:
+    """Delete multiple pages. Returns the number of rows actually deleted."""
+    ids = list({int(i) for i in page_ids if i})
+    names = list({h.strip() for h in handles if h and h.strip()})
+    if not ids and not names:
+        return 0
+
+    conditions = []
+    if ids:
+        conditions.append(Page.id.in_(ids))
+    if names:
+        conditions.append(Page.handle.in_(names))
+
+    result = await db.execute(delete(Page).where(or_(*conditions)))
+    await db.commit()
+    return result.rowcount or 0
 
 
 # ===========================================================================

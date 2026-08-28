@@ -240,6 +240,17 @@ describe("cart actions", () => {
     store.clearCart()
     expect(useCartStore.getState().cart).toEqual([])
   })
+
+  it("wipes the persisted cart when cleared", () => {
+    const store = useCartStore.getState()
+    store.addToCart(wallet())
+    expect(readStorageRaw()).not.toBeNull()
+
+    store.clearCart()
+
+    expect(useCartStore.getState().cart).toEqual([])
+    expect(readStorageRaw()).toBeNull()
+  })
 })
 
 describe("derived values", () => {

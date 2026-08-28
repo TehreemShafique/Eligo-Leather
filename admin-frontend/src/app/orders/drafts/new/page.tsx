@@ -5,7 +5,6 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import {
-  NotePencil,
   Plus,
   Trash,
   MagnifyingGlass,
@@ -64,8 +63,6 @@ export default function AdminCreateDraftOrderPage() {
   const [discount, setDiscount] = useState<number>(0)
   const [shippingCost, setShippingCost] = useState<number>(0)
   const [tax, setTax] = useState<number>(0)
-  const [notes, setNotes] = useState<string>("")
-  const [isEditingNotes, setIsEditingNotes] = useState(false)
   const [tags, setTags] = useState<string>("")
   const [market, setMarket] = useState("Pakistan")
   const [currency, setCurrency] = useState("PKR")
@@ -242,7 +239,6 @@ export default function AdminCreateDraftOrderPage() {
       country: market,
       customer_id: selectedCustomer?.id,
       shipping_address: selectedCustomer?.address || "",
-      note: notes,
       tags: tags,
       destination: selectedCustomer?.address || market,
       items: items.map((i) => ({
@@ -455,37 +451,9 @@ export default function AdminCreateDraftOrderPage() {
           </div>
         </div>
 
-        {/* Right Column (Notes, Customer, Markets, Tags) */}
+        {/* Right Column (Customer, Markets, Tags) */}
         <div className="space-y-6">
-          {/* Card 1: Notes */}
-          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-gray-900">Notes</h2>
-              <button
-                type="button"
-                onClick={() => setIsEditingNotes(!isEditingNotes)}
-                className="p-1 text-gray-400 hover:text-gray-700 cursor-pointer"
-              >
-                <PencilSimple className="w-4 h-4" />
-              </button>
-            </div>
-
-            {isEditingNotes ? (
-              <textarea
-                rows={3}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add notes..."
-                className="w-full p-2 bg-white border border-gray-300 rounded-lg text-xs text-gray-900 focus:outline-hidden"
-              />
-            ) : (
-              <p className="text-xs text-gray-500 font-normal">
-                {notes.trim() ? notes : "No notes"}
-              </p>
-            )}
-          </div>
-
-          {/* Card 2: Customer */}
+          {/* Card 1: Customer */}
           <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-3">
             <h2 className="text-sm font-bold text-gray-900">Customer</h2>
 
@@ -549,7 +517,7 @@ export default function AdminCreateDraftOrderPage() {
             )}
           </div>
 
-          {/* Card 3: Markets */}
+          {/* Card 2: Markets */}
           <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-3 text-xs">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-gray-900">Markets</h2>
@@ -576,7 +544,7 @@ export default function AdminCreateDraftOrderPage() {
             </div>
           </div>
 
-          {/* Card 4: Tags */}
+          {/* Card 3: Tags */}
           <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-gray-900">Tags</h2>

@@ -36,15 +36,17 @@ export function BlogHero({ post = DEFAULT_FEATURED_POST }: BlogHeroProps) {
             aria-label={post.title}
             className="relative block h-[350px] w-full overflow-hidden rounded-[20px] bg-zinc-100 sm:h-[480px] lg:absolute lg:left-[6.25cqw] lg:top-[9.895833cqw] lg:h-[33.854167cqw] lg:w-[62.5cqw] lg:rounded-[1.041667cqw]"
           >
-            <Image
-              src={post.image}
-              alt={post.title}
-              fill
-              priority
-              unoptimized
-              sizes="(min-width: 1024px) 62.5vw, 100vw"
-              className="object-cover"
-            />
+            {post.image ? (
+              <Image
+                src={post.image}
+                alt={post.title}
+                fill
+                priority
+                unoptimized
+                sizes="(min-width: 1024px) 62.5vw, 100vw"
+                className="object-cover"
+              />
+            ) : null}
           </Link>
 
           <div className="space-y-5 lg:contents">

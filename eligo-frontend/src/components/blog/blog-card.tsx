@@ -15,20 +15,22 @@ function formatDate(dateStr: string): string {
 
 export function BlogCard({ post }: { post: BlogPostOut }) {
   const date = post.published_at ? formatDate(post.published_at) : formatDate(post.created_at)
-  const image = post.featured_image_url || post.thumbnail_url || "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=600"
+  const image = post.featured_image_url || post.thumbnail_url
 
   return (
     <article className="group min-w-0 font-['Manrope']">
       <Link href={`/blog/${post.handle}`} className="block">
-        {/* Post Cover Image */}
+        {/* Post Cover Image (empty frame when no image uploaded) */}
         <div className="relative h-72 w-full overflow-hidden rounded-[20px] bg-zinc-100 sm:h-80 lg:h-[20.833333cqw] lg:rounded-[1.041667cqw]">
-          <Image
-            src={image}
-            alt={post.title}
-            fill
-            unoptimized
-            className="object-cover group-hover:scale-105 transition-transform duration-500"
-          />
+          {image ? (
+            <Image
+              src={image}
+              alt={post.title}
+              fill
+              unoptimized
+              className="object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+          ) : null}
         </div>
 
         {/* Date & Metadata */}

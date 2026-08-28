@@ -7,6 +7,8 @@ from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.modules.customers.model import Customer, CustomerAddress
+from app.modules.catalog.model import Product, ProductVariant
 from app.modules.orders.model import (
     Order, OrderItem, OrderNote, OrderAuditLog,
     DraftOrder, DraftOrderItem,
@@ -67,8 +69,6 @@ async def create_order(db: AsyncSession, data: OrderCreate) -> Order:
         po_number=data.po_number,
         shipping_address=data.shipping_address,
         billing_address=data.billing_address,
-        customer_note=data.customer_note,
-        internal_note=data.internal_note,
         tracking_company=data.tracking_company,
         tracking_number=data.tracking_number,
         items=[
@@ -118,7 +118,11 @@ async def get_order(
     else:
         num = int(order_id)
         query = query.where(
-            or_(Order.id == num, Order.order_number == str(num))
+            or_(
+                Order.id == num,
+                Order.order_number == str(num),
+                Order.order_number == f"#{num}",
+            )
         )
     result = await db.execute(query)
     return result.scalar_one_or_none()
@@ -236,10 +240,22 @@ async def restock_order_items(db: AsyncSession, order_id: int) -> Order | None:
         return None
 
     restocked_count = 0
+    variant_restock: dict[int, int] = {}
     for item in order.items:
         if not item.restocked and item.variant_id:
             item.restocked = True
             restocked_count += 1
+            variant_restock[int(item.variant_id)] = (
+                variant_restock.get(int(item.variant_id), 0) + item.quantity
+            )
+
+    if variant_restock:
+        variant_rows = (
+            await db.execute(select(ProductVariant).where(ProductVariant.id.in_(variant_restock.keys())))
+        ).scalars().all()
+        for variant in variant_rows:
+            if variant.inventory_tracked:
+                variant.inventory_quantity = (variant.inventory_quantity or 0) + variant_restock[variant.id]
 
     if restocked_count > 0:
         order.return_status = ReturnStatus.none
@@ -601,7 +617,6 @@ async def convert_draft_to_order(db: AsyncSession, draft_id: int, order_number: 
         total_price=draft.total_price,
         shipping_address=draft.shipping_address,
         billing_address=draft.billing_address,
-        internal_note=draft.note,
         tags=draft.tags,
         items=[
             OrderItem(

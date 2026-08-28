@@ -206,6 +206,7 @@ export interface GuestOrderPayload {
   postal_code: string
   country: string
   shipping_address: string
+  discount_code?: string
   note: string
   destination: string
   items: GuestOrderItemPayload[]
@@ -225,10 +226,8 @@ export function buildGuestOrderPayload(
   form: CheckoutFormValues,
   cart: CartItem[],
   totals: CheckoutTotals,
+  discountCode = "",
 ): GuestOrderPayload {
-  const customerName = `${form.firstName.trim()} ${form.lastName.trim()}`
-    .replace(/\s+/g, " ")
-    .trim()
   const phone = normalizePhoneNumber(form.phone.trim())
   const country = form.country.trim() || "Pakistan"
   const contactEmail = form.email.trim()
@@ -257,7 +256,10 @@ export function buildGuestOrderPayload(
     city: form.city.trim(),
     postal_code: form.postalCode.trim(),
     country,
-    shipping_address: `${customerName} | Phone: ${phone} | ${shippingAddressParts.join(", ")}`,
+    // Location is the street address only. Customer name and phone travel in
+    // their own structured fields and must not be embedded in the address.
+    shipping_address: shippingAddressParts.join(", "),
+    ...(discountCode ? { discount_code: discountCode } : {}),
     note: contactEmail ? `Contact email: ${contactEmail}` : "",
     destination: form.city.trim() || country,
     items: cart.map((item) => ({

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import logging
 import csv
@@ -7,7 +7,8 @@ import re
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse, Response
-from sqlalchemy import select
+from sqlalchemy import select, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,7 @@ from app.modules.orders.model import (
     PaymentStatus, FulfillmentStatus, DeliveryStatus, LeopardShipment,
 )
 from app.modules.customers.model import Customer, CustomerAddress
+from app.modules.catalog.model import Product, ProductVariant, ProductStatus
 from app.modules.settings.apps.model import StoreIntegration
 from app.modules.orders.schema import (
     OrderCreate, OrderUpdate, OrderOut, OrderListOut, OrderNoteCreate, OrderNoteOut,
@@ -735,6 +737,224 @@ async def _auto_book_leopards(db: AsyncSession, order: Order, shipping_settings)
     )
 
 
+MAX_ORDER_LINE_QUANTITY = 99
+DUPLICATE_ORDER_WINDOW_MINUTES = 10
+
+
+async def _resolve_and_price_order_items(
+    db: AsyncSession, raw_items: list | None
+) -> tuple[list[dict], Decimal]:
+    """Resolve every submitted cart line against the live catalog and recompute
+    all prices server-side.
+
+    Returns ``(resolved_items, subtotal)``. Each resolved item only carries
+    values read from the database (product/variant ids, names, SKU, price) plus
+    a validated quantity; the browser-supplied ``unit_price``/``total_price``
+    are ignored. Raises HTTP 400 for empty carts, unknown/inactive products or
+    variants, invalid quantities and out-of-stock lines.
+    """
+    if not isinstance(raw_items, (list, tuple)) or not raw_items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Your cart is empty. Add at least one product before checking out.",
+        )
+    if len(raw_items) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Too many items in the cart.",
+        )
+
+    resolved: list[dict] = []
+    subtotal = Decimal("0")
+
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One of your cart items is not valid.",
+            )
+
+        # ---- Validate quantity (whole number between 1 and the cap) --------
+        try:
+            quantity = int(raw.get("quantity", 1))
+        except (TypeError, ValueError):
+            quantity = 0
+        if (
+            isinstance(quantity, bool)
+            or not 1 <= quantity <= MAX_ORDER_LINE_QUANTITY
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Each product quantity must be a whole number between 1 "
+                    f"and {MAX_ORDER_LINE_QUANTITY}."
+                ),
+            )
+
+        # ---- Resolve variant + product from the database -------------------
+        variant: ProductVariant | None = None
+        product: Product | None = None
+        variant_id = raw.get("variant_id")
+        product_id = raw.get("product_id")
+
+        if variant_id not in (None, ""):
+            vid = variant_id
+            if isinstance(vid, str):
+                vid = vid.strip()
+            try:
+                vid = int(vid)
+            except (TypeError, ValueError):
+                vid = None
+            if vid is not None:
+                variant = (
+                    await db.execute(
+                        select(ProductVariant)
+                        .options(selectinload(ProductVariant.product))
+                        .where(ProductVariant.id == vid)
+                    )
+                ).scalar_one_or_none()
+
+        if variant is not None:
+            product = variant.product
+            if product is not None and product_id not in (None, ""):
+                try:
+                    pid = int(product_id)
+                except (TypeError, ValueError):
+                    pid = None
+                if pid is not None and product.id != pid:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="One of your cart items is not valid.",
+                    )
+        else:
+            pid = product_id
+            if isinstance(pid, str):
+                pid = pid.strip()
+            try:
+                pid = int(pid) if pid not in (None, "") else None
+            except (TypeError, ValueError):
+                pid = None
+            if pid is not None:
+                product = (
+                    await db.execute(
+                        select(Product)
+                        .options(selectinload(Product.variants))
+                        .where(Product.id == pid)
+                    )
+                ).scalar_one_or_none()
+            if product is not None:
+                variant = next(
+                    (v for v in product.variants if v.is_canonical and v.is_active),
+                    None,
+                )
+                if variant is None:
+                    variant = next(
+                        (v for v in product.variants if v.is_active), None
+                    )
+
+        if product is None or variant is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One of the products in your cart is no longer available.",
+            )
+        if product.status != ProductStatus.active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"“{product.title}” is not available for purchase right now.",
+            )
+        if not variant.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"“{variant.title or product.title}” is not available for purchase right now.",
+            )
+
+        # ---- Stock check (unless the store chose to sell through) ----------
+        if (
+            variant.inventory_tracked
+            and not variant.continue_selling_out_of_stock
+            and quantity > (variant.inventory_quantity or 0)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Only {(variant.inventory_quantity or 0)} in stock for "
+                    f"“{variant.title or product.title}”, but you asked for {quantity}."
+                ),
+            )
+
+        unit_price = Decimal(str(variant.price or 0))
+        line_total = unit_price * quantity
+        subtotal += line_total
+        resolved.append(
+            {
+                "product_id": product.id,
+                "variant_id": variant.id,
+                "product_name": product.title,
+                "variant_title": variant.title or "Standard",
+                "sku": variant.sku,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "total_price": line_total,
+                "requires_shipping": True,
+            }
+        )
+
+    if not resolved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Your cart is empty. Add at least one product before checking out.",
+        )
+    return resolved, subtotal
+
+
+async def _is_duplicate_order(
+    db: AsyncSession,
+    phone: str | None,
+    email: str | None,
+    items: list[dict],
+    subtotal: Decimal,
+) -> bool:
+    """Return True when the same customer already placed an order with the
+    exact same line items and subtotal within a short window.
+
+    Catches the classic double-click / retry-after-timeout duplication without
+    requiring a server-side cart token. Matching is per-customer (by phone or
+    email) and content-identical, so legitimate repeat purchases still work.
+    """
+    if not phone and not email:
+        return False
+
+    window_start = datetime.now() - timedelta(minutes=DUPLICATE_ORDER_WINDOW_MINUTES)
+    conditions = [Order.created_at >= window_start]
+    if phone:
+        conditions.append(Customer.phone == phone)
+    if email:
+        conditions.append(Customer.email == email)
+
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .join(Customer, Order.customer_id == Customer.id)
+        .where(or_(*conditions))
+    )
+    recent_orders = result.scalars().all()
+
+    incoming = sorted(
+        (int(i["product_id"] or 0), int(i["variant_id"] or 0), i["quantity"])
+        for i in items
+    )
+    for order in recent_orders:
+        if Decimal(str(order.subtotal)) != subtotal:
+            continue
+        theirs = sorted(
+            (int(i.product_id or 0), int(i.variant_id or 0), i.quantity)
+            for i in order.items
+        )
+        if theirs and theirs == incoming:
+            return True
+    return False
+
+
 @public_webhook_router.post("/create-order")
 async def create_order_public_api(request: Request, db: AsyncSession = Depends(get_db)):
     """Create a new order directly in the PostgreSQL database.
@@ -770,6 +990,22 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
                 else:
                     address_body = p
         email = (data.get("note") or "").replace("Contact email:", "").strip() or None
+
+    # Whatever a client sends, keep name and phone OUT of the stored location.
+    # `shipping_name` / `shipping_phone` carry those; `shipping_address` is
+    # the street address only (house/street, city, postal code, country).
+    if "|" in address_body:
+        address_body = leopard_service.clean_consignee_address(address_body) or address_body
+    address_body = address_body.strip() or None
+    if address_body:
+        # Modern clients already send a fully assembled address string
+        # ("house, city, postal code, country"); use it verbatim instead of
+        # appending the structured fields a second time.
+        clean_location = address_body
+    else:
+        clean_location = ", ".join(
+            p for p in [city, postal_code, country] if p and p.strip()
+        ).strip() or None
 
     full_name = f"{first_name} {last_name}".strip()
 
@@ -819,34 +1055,56 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
             max_num = max(max_num, int(match.group(1)))
     order_number = f"#{max_num + 1}"
 
-    items = data.get("items", [])
-    subtotal = Decimal(str(data.get("subtotal", 0)))
-    if items:
-        # Prefer the line-item totals over the browser-declared subtotal.
-        computed_subtotal = Decimal(0)
-        for item in items:
-            line_total = item.get("total_price")
-            if line_total in (None, ""):
-                unit = Decimal(str(item.get("unit_price") or 0))
-                qty = Decimal(str(item.get("quantity") or 1))
-                line_total = unit * qty
-            try:
-                computed_subtotal += Decimal(str(line_total))
-            except Exception:
-                continue
-        if computed_subtotal > 0:
-            subtotal = computed_subtotal
+    # ---- Server-authoritative order validation & pricing ----
+    # Every cart line is resolved against the live catalog (see
+    # `_resolve_and_price_order_items`): prices, titles and stock come from the
+    # database, so browser-supplied prices, quantities, totals and taxes are
+    # never trusted.
+    resolved_items, subtotal = await _resolve_and_price_order_items(db, data.get("items", []))
 
-    # ---- Authoritative shipping recalculation (never trust the browser) ----
     from app.modules.settings.shipping_and_delivery.service import (
         get_settings as get_shipping_settings,
         calculate_shipping,
     )
     shipping_settings = await get_shipping_settings(db)
-    tax = Decimal(str(data.get("tax", 0)))
+    # There is no tax engine yet: tax is always zero server-side and the
+    # browser-supplied `tax` is explicitly ignored.
+    tax = Decimal("0")
     shipping = calculate_shipping(subtotal, shipping_settings)
-    total = subtotal + tax + shipping
-    is_cod = data.get("payment_status") != "paid"
+
+    # Server-side promo discount. The browser only forwards the code it wants
+    # to use; the amount is recomputed here from the live catalog subtotal, so
+    # clients can never invent their own discount value.
+    discount_code_input = (data.get("discount_code") or "").strip()
+    discount_amount = Decimal("0.00")
+    if discount_code_input:
+        from app.modules.discounts.service import validate_promo_code
+        promo = await validate_promo_code(db, discount_code_input, subtotal)
+        if promo.get("valid"):
+            discount_amount = Decimal(str(promo["discount_amount"]))
+            discount_amount = min(discount_amount, subtotal)
+
+    total = subtotal - discount_amount + tax + shipping
+
+    # Storefront checkout is Cash on Delivery only. There is no payment
+    # gateway that could confirm a pre-payment, so the browser can never
+    # declare an order as "paid" (prevents fake paid orders). Statuses are
+    # forced to their initial values for the same reason.
+    payment_status = PaymentStatus.pending
+    payment_method = "COD"
+    paid_amount = Decimal("0")
+    fulfillment_status = FulfillmentStatus.unfulfilled
+    delivery_status = DeliveryStatus.pending
+
+    # ---- Duplicate-order protection ----
+    # An identical basket from the same customer within a short window is a
+    # double-submit: reject it instead of creating a duplicate order (and
+    # double-committing stock).
+    if await _is_duplicate_order(db, phone, email, resolved_items, subtotal):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This order looks like it was already placed. Please check your order history before trying again.",
+        )
 
     new_order = Order(
         order_number=order_number,
@@ -857,13 +1115,13 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         shipping_cost=shipping,
         tax=tax,
         total_price=total,
-        paid_amount=Decimal(0) if is_cod else total,
-        payment_method="COD" if is_cod else str(data.get("payment_method") or "") or None,
-        payment_status=PaymentStatus.pending if is_cod else PaymentStatus.paid,
-        fulfillment_status=FulfillmentStatus.fulfilled if data.get("fulfillment_status") == "fulfilled" else FulfillmentStatus.unfulfilled,
-        delivery_status=DeliveryStatus.delivered if data.get("delivery_status") == "delivered" else DeliveryStatus.pending,
-        shipping_address=data.get("shipping_address", ""),
-        customer_note=data.get("note", ""),
+        discount=discount_amount,
+        paid_amount=paid_amount,
+        payment_method=payment_method,
+        payment_status=payment_status,
+        fulfillment_status=fulfillment_status,
+        delivery_status=delivery_status,
+        shipping_address=clean_location or None,
         tags=data.get("tags", ""),
         destination=data.get("destination", country or "Pakistan"),
         # Delivery-address snapshot taken now; later edits never rewrite it.
@@ -878,18 +1136,36 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
     db.add(new_order)
     await db.flush()
 
-    for item in items:
-        db_item = OrderItem(
+    for item in resolved_items:
+        db.add(OrderItem(
             order_id=new_order.id,
-            product_id=item.get("product_id"),
-            variant_id=item.get("variant_id"),
-            product_name=item.get("product_name", "Custom Item"),
-            variant_title=item.get("variant_title", ""),
-            quantity=int(item.get("quantity", 1)),
-            unit_price=Decimal(str(item.get("unit_price", 0))),
-            total_price=Decimal(str(item.get("total_price", 0))),
+            product_id=item["product_id"],
+            variant_id=item["variant_id"],
+            product_name=item["product_name"],
+            variant_title=item["variant_title"],
+            sku=item["sku"],
+            quantity=item["quantity"],
+            unit_price=item["unit_price"],
+            total_price=item["total_price"],
+            requires_shipping=item.get("requires_shipping", True),
+        ))
+
+    # ---- Deduct stock for the reserved units (prevents overselling) ----
+    variant_ids = list({item["variant_id"] for item in resolved_items})
+    variant_rows = (
+        await db.execute(select(ProductVariant).where(ProductVariant.id.in_(variant_ids)))
+    ).scalars().all()
+    for variant in variant_rows:
+        if not variant.inventory_tracked:
+            continue
+        ordered_qty = sum(
+            item["quantity"]
+            for item in resolved_items
+            if item["variant_id"] == variant.id
         )
-        db.add(db_item)
+        stock = variant.inventory_quantity or 0
+        if variant.continue_selling_out_of_stock or stock >= ordered_qty:
+            variant.inventory_quantity = stock - ordered_qty
 
     # ---- Customer aggregate metrics stay in sync with real orders ----
     customer.total_orders = (customer.total_orders or 0) + 1
@@ -924,7 +1200,16 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         metadata_json=json.dumps({"confirmation_number": confirmation_code}),
     ))
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        # e.g. an order-number collision from two concurrent checkouts.
+        await db.rollback()
+        logging.getLogger(__name__).warning("Order creation commit failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Your order could not be placed right now. Please try again in a moment.",
+        ) from exc
     await db.refresh(new_order)
 
     # ---- Auto-book with Leopards (best effort; must never break checkout) ----
@@ -980,6 +1265,47 @@ async def get_public_order_detail_api(order_id: str, db: AsyncSession = Depends(
         parts = [customer.first_name or "", customer.last_name or ""]
         customer_name = " ".join(p for p in parts if p).strip() or customer.email
 
+    def _to_grams(weight: Decimal | None, unit: str | None) -> float:
+        if not weight:
+            return 0.0
+        u = (unit or "kg").lower()
+        if u == "g":
+            return float(weight)
+        if u == "kg":
+            return float(weight) * 1000
+        if u == "lb":
+            return float(weight) * 453.592
+        if u == "oz":
+            return float(weight) * 28.3495
+        return 0.0
+
+    # Pull product variant weights so the Leopards courier weight can be
+    # calculated automatically from the selected products & quantities.
+    variant_ids = [item.variant_id for item in order.items if item.variant_id]
+    variants_by_id = {}
+    if variant_ids:
+        vres = await db.execute(select(ProductVariant).where(ProductVariant.id.in_(variant_ids)))
+        variants_by_id = {v.id: v for v in vres.scalars().all()}
+
+    total_weight_grams = 0.0
+    items_payload = []
+    for item in order.items:
+        variant = variants_by_id.get(item.variant_id)
+        item_weight_grams = 0.0
+        if variant is not None:
+            item_weight_grams = _to_grams(variant.weight, variant.weight_unit)
+        total_weight_grams += item_weight_grams * item.quantity
+        items_payload.append(
+            {
+                "product_name": item.product_name,
+                "variant_title": item.variant_title or "",
+                "quantity": item.quantity,
+                "unit_price": float(item.unit_price),
+                "total_price": float(item.total_price),
+                "weight_grams": round(item_weight_grams, 2),
+            }
+        )
+
     return {
         "status": "success",
         "order": {
@@ -995,16 +1321,8 @@ async def get_public_order_detail_api(order_id: str, db: AsyncSession = Depends(
             "fulfillment_status": order.fulfillment_status.value,
             "delivery_status": order.delivery_status.value,
             "tracking_number": order.tracking_number,
-            "items": [
-                {
-                    "product_name": item.product_name,
-                    "variant_title": item.variant_title or "",
-                    "quantity": item.quantity,
-                    "unit_price": float(item.unit_price),
-                    "total_price": float(item.total_price),
-                }
-                for item in order.items
-            ],
+            "items": items_payload,
+            "weight_grams": round(total_weight_grams, 2),
             "subtotal": float(order.subtotal or 0),
             "shipping_cost": float(order.shipping_cost or 0),
             "tax": float(order.tax or 0),

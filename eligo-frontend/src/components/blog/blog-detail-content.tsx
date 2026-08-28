@@ -29,7 +29,7 @@ export function BlogDetailContent({
 }) {
   const title = post.title
   const date = post.published_at ? formatDate(post.published_at) : formatDate(post.created_at)
-  const image = post.featured_image_url || post.thumbnail_url || "https://images.unsplash.com/photo-1591561954557-26941169b49e?auto=format&fit=crop&q=80&w=1200"
+  const image = post.featured_image_url || post.thumbnail_url
   const body = post.body || ""
 
   // Admin-authored FAQs for this post reuse the shared FAQ section design.
@@ -53,9 +53,11 @@ export function BlogDetailContent({
           />
         </div>
 
-        {/* Banner Cover Image */}
+        {/* Banner Cover Image (empty frame when no image uploaded) */}
         <div className="relative aspect-[24/13] w-full overflow-hidden rounded-[20px] bg-zinc-100">
-          <Image src={image} alt={title} fill priority unoptimized className="object-cover" />
+          {image ? (
+            <Image src={image} alt={title} fill priority unoptimized className="object-cover" />
+          ) : null}
         </div>
 
         {/* Date & Title */}

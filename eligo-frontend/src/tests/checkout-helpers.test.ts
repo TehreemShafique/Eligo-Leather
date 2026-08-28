@@ -101,8 +101,21 @@ describe("buildGuestOrderPayload contract guard", () => {
 
     expect(payload).not.toHaveProperty("order_id")
     expect(payload).not.toHaveProperty("billing_address")
-    // The shipping address is the only address field sent to the backend.
-    expect(payload.shipping_address).toContain("Ali Raza")
+    // The shipping address is the street address only: customer name and
+    // phone travel in their own structured fields and must not appear here.
+    expect(payload.shipping_address).toBe(
+      "House 1, Street 2, Islamabad, 44000, Pakistan",
+    )
+    expect(payload.shipping_address).not.toContain("Ali")
+    expect(payload.shipping_address).not.toContain("0300")
     expect(serialized).not.toContain("billing")
+  })
+
+  it("emits discount_code only when a discount was applied", () => {
+    const withDiscount = buildGuestOrderPayload(validForm, cart, totals, "SAVE10")
+    expect(withDiscount).toMatchObject({ discount_code: "SAVE10" })
+
+    const withoutDiscount = buildGuestOrderPayload(validForm, cart, totals, "")
+    expect(withoutDiscount).not.toHaveProperty("discount_code")
   })
 })

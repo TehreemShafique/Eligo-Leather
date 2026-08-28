@@ -1,0 +1,334 @@
+"""Tests for the public (storefront) order-creation contract.
+
+``POST /api/v1/orders/create-order`` must:
+  - resolve every line against the live catalog (never trust the browser for
+    prices, quantities, totals, taxes or statuses);
+  - reject empty carts, unknown/inactive products & variants, invalid
+    quantities and out-of-stock lines;
+  - deduct variant stock at order time (and restore it on restock);
+  - prevent duplicate orders within a short window;
+  - force Cash on Delivery (a browser can never self-declare "paid").
+"""
+
+from decimal import Decimal
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from app.modules.catalog.model import Product, ProductVariant, ProductStatus
+from app.modules.orders.model import (
+    Order,
+    PaymentStatus,
+    FulfillmentStatus,
+    DeliveryStatus,
+)
+
+PRICE = Decimal("2750.00")
+
+
+@pytest.fixture(autouse=True)
+def _no_leopards_auto_booking(monkeypatch):
+    """Prevent the create-order happy path from calling the real Leopards
+    Courier API during tests."""
+
+    async def _noop(db, order, shipping_settings):
+        return None
+
+    monkeypatch.setattr(
+        "app.modules.orders.router._auto_book_leopards", _noop
+    )
+
+
+async def _seed_product(
+    db_session,
+    *,
+    price: Decimal = PRICE,
+    stock: int = 10,
+    active: bool = True,
+    tracked: bool = True,
+    continue_selling: bool = False,
+    variant_title: str = "Tan",
+) -> tuple[Product, ProductVariant]:
+    product = Product(title="Leather Wallet", status=ProductStatus.active)
+    db_session.add(product)
+    await db_session.flush()
+    variant = ProductVariant(
+        product_id=product.id,
+        title=variant_title,
+        sku="LW-TAN",
+        price=price,
+        inventory_quantity=stock,
+        inventory_tracked=tracked,
+        continue_selling_out_of_stock=continue_selling,
+        is_active=active,
+        is_canonical=True,
+    )
+    db_session.add(variant)
+    await db_session.commit()
+    return product, variant
+
+
+def _payload(product, variant, quantity=1, **overrides) -> dict:
+    """Browser-style payload with tampered prices/totals/tax embedded on
+    purpose — every amount here must be ignored by the server."""
+    payload = {
+        "channel": "Online Store",
+        "currency": "PKR",
+        "first_name": "Ali",
+        "last_name": "Raza",
+        "email": "ali@example.com",
+        "phone": "03001234567",
+        "city": "Lahore",
+        "postal_code": "",
+        "country": "Pakistan",
+        "shipping_address": "Ali Raza | Phone: 03001234567 | 1 Street, Lahore, Pakistan",
+        "note": "Contact email: ali@example.com",
+        "destination": "Lahore",
+        # Fake browser amounts:
+        "subtotal": 9999,
+        "shipping_cost": 1,
+        "tax": 500,
+        "total_price": 999999,
+        "payment_status": "pending",
+        "fulfillment_status": "unfulfilled",
+        "delivery_status": "pending",
+        "items": [
+            {
+                "product_id": product.id,
+                "variant_id": variant.id,
+                "product_name": "Tampered Name",
+                "variant_title": "Tampered",
+                "quantity": quantity,
+                "unit_price": 1.0,
+                "total_price": 5.0,
+            }
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
+async def _load_order(db_session, order_id: int) -> Order:
+    db_session.expire_all()
+    result = await db_session.execute(
+        select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
+    )
+    return result.scalar_one()
+
+
+async def test_create_order_uses_server_prices_and_ignores_browser_amounts(
+    client, db_session
+):
+    product, variant = await _seed_product(db_session)
+    response = await client.post(
+        "/api/v1/orders/create-order", json=_payload(product, variant)
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert str(body["order_number"]).startswith("#")
+    # 2750 < 4000 free-shipping threshold -> 250 shipping; tax forced to 0.
+    assert body["subtotal"] == 2750.0
+    assert body["shipping_cost"] == 250.0
+    assert body["total_price"] == 3000.0
+
+    order = await _load_order(db_session, body["order_id"])
+    assert Decimal(str(order.subtotal)) == PRICE
+    assert Decimal(str(order.tax)) == Decimal("0")
+    assert Decimal(str(order.shipping_cost)) == Decimal("250")
+    assert Decimal(str(order.total_price)) == Decimal("3000")
+    assert order.payment_method == "COD"
+    assert order.payment_status == PaymentStatus.pending
+    assert order.fulfillment_status == FulfillmentStatus.unfulfilled
+    assert order.delivery_status == DeliveryStatus.pending
+
+    item = order.items[0]
+    assert item.unit_price == PRICE
+    assert item.quantity == 1
+    assert item.total_price == PRICE
+    assert item.product_name == "Leather Wallet"
+    assert item.variant_title == "Tan"
+    assert item.sku == "LW-TAN"
+
+
+async def test_create_order_rejects_empty_cart(client, db_session):
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json={"phone": "03001234567", "email": "ali@example.com", "items": []},
+    )
+    assert response.status_code == 400
+
+
+async def test_create_order_rejects_unknown_product_variant(client, db_session):
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json={
+            "phone": "03001234567",
+            "email": "ali@example.com",
+            "items": [
+                {"product_id": 999999, "variant_id": 999999, "quantity": 1}
+            ],
+        },
+    )
+    assert response.status_code == 400
+
+
+async def test_create_order_rejects_inactive_variant(client, db_session):
+    product, variant = await _seed_product(db_session, active=False)
+    response = await client.post(
+        "/api/v1/orders/create-order", json=_payload(product, variant)
+    )
+    assert response.status_code == 400
+
+
+async def test_create_order_rejects_invalid_quantity(client, db_session):
+    product, variant = await _seed_product(db_session)
+    for bad_qty in (0, -1, 100):
+        response = await client.post(
+            "/api/v1/orders/create-order",
+            json=_payload(product, variant, quantity=bad_qty),
+        )
+        assert response.status_code == 400, f"quantity {bad_qty} should fail"
+
+
+async def test_create_order_rejects_out_of_stock(client, db_session):
+    product, variant = await _seed_product(db_session, stock=2)
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(product, variant, quantity=3),
+    )
+    assert response.status_code == 400
+    assert "Only 2 in stock" in response.json()["detail"]
+
+
+async def test_create_order_continue_selling_out_of_stock(client, db_session):
+    product, variant = await _seed_product(db_session, stock=2, continue_selling=True)
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(product, variant, quantity=3),
+    )
+    assert response.status_code == 200
+    variant_pk = variant.id
+    db_session.expire_all()
+    fresh = await db_session.get(ProductVariant, variant_pk)
+    assert fresh.inventory_quantity == -1
+
+
+async def test_create_order_deducts_stock(client, db_session):
+    product, variant = await _seed_product(db_session, stock=10)
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(product, variant, quantity=3),
+    )
+    assert response.status_code == 200
+    variant_pk = variant.id
+    db_session.expire_all()
+    fresh = await db_session.get(ProductVariant, variant_pk)
+    assert fresh.inventory_quantity == 7
+
+
+async def test_create_order_forces_cod_ignores_paid_declaration(client, db_session):
+    product, variant = await _seed_product(db_session)
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            payment_status="paid",
+            fulfillment_status="fulfilled",
+            delivery_status="delivered",
+        ),
+    )
+    assert response.status_code == 200
+    order = await _load_order(db_session, response.json()["order_id"])
+    assert order.payment_status == PaymentStatus.pending
+    assert order.payment_method == "COD"
+    assert Decimal(str(order.paid_amount)) == Decimal("0")
+    assert order.fulfillment_status == FulfillmentStatus.unfulfilled
+    assert order.delivery_status == DeliveryStatus.pending
+
+
+async def test_duplicate_order_rejected_within_window(client, db_session):
+    product, variant = await _seed_product(db_session)
+    payload = _payload(product, variant)
+    first = await client.post("/api/v1/orders/create-order", json=payload)
+    assert first.status_code == 200
+    duplicate = await client.post("/api/v1/orders/create-order", json=payload)
+    assert duplicate.status_code == 409
+
+
+async def test_different_cart_is_not_duplicate(client, db_session):
+    product, variant = await _seed_product(db_session)
+    first = await client.post(
+        "/api/v1/orders/create-order", json=_payload(product, variant, quantity=1)
+    )
+    assert first.status_code == 200
+    different = await client.post(
+        "/api/v1/orders/create-order", json=_payload(product, variant, quantity=2)
+    )
+    assert different.status_code == 200
+
+
+async def test_create_order_stores_address_only_in_shipping_address(client, db_session):
+    product, variant = await _seed_product(db_session)
+    # Legacy/malicious clients pack "Name | Phone | address" into shipping_address.
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(product, variant, shipping_address="Ali Raza | Phone: 03001234567 | 1 Street, Lahore, Pakistan"),
+    )
+    assert response.status_code == 200
+
+    order = await _load_order(db_session, response.json()["order_id"])
+    # Name and phone live in their own structured fields, never in the location.
+    assert order.shipping_address == "1 Street, Lahore, Pakistan"
+    assert str(order.shipping_address) not in ("Ali Raza", "")
+    assert order.shipping_name == "Ali Raza"
+    assert order.shipping_phone == "03001234567"
+    assert "Ali" not in str(order.shipping_address)
+    assert "03001234567" not in str(order.shipping_address)
+
+
+async def test_create_order_applies_valid_promo_discount_server_side(
+    client, db_session, admin_headers
+):
+    product, variant = await _seed_product(db_session)
+    await client.post(
+        "/api/v1/discounts/",
+        headers=admin_headers,
+        json={
+            "title": "Duo 10%",
+            "code": "DUO10",
+            "status": "Active",
+            "method": "Code",
+            "type": "Percentage",
+            "percentage_value": 10,
+            "value": "10% OFF",
+        },
+    )
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(product, variant, discount_code="DUO10"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    # 2750 - 275 discount + 250 shipping = 2725.
+    assert body["subtotal"] == 2750.0
+    assert body["shipping_cost"] == 250.0
+    assert body["total_price"] == 2725.0
+
+    order = await _load_order(db_session, body["order_id"])
+    assert Decimal(str(order.discount)) == Decimal("275.00")
+
+
+async def test_create_order_ignores_unusable_promo_code(client, db_session):
+    product, variant = await _seed_product(db_session)
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(product, variant, discount_code="DOESNOTEXIST"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_price"] == 2750.0 + 250.0
+    order = await _load_order(db_session, body["order_id"])
+    assert Decimal(str(order.discount)) == Decimal("0.00")

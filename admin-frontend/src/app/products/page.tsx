@@ -274,7 +274,7 @@ export default function AdminProductsPage() {
                   </button>
 
                   <Link
-                    href="/apps/supabase/reviews"
+                    href="/settings/apps/supabase"
                     onClick={() => setMoreActionsOpen(false)}
                     className="w-full text-left px-3 py-2 font-semibold hover:bg-gray-50 rounded-lg flex items-center gap-2 text-gray-700"
                   >

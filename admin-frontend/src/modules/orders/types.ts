@@ -63,8 +63,6 @@ export interface Order {
   po_number?: string
   shipping_address?: string
   billing_address?: string
-  customer_note?: string
-  internal_note?: string
   tracking_company?: string
   tracking_number?: string
   risk_level?: string

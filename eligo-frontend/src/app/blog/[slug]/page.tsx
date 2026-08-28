@@ -46,8 +46,9 @@ export async function generateMetadata({ params }: BlogPageProps): Promise<Metad
     title: post.seo_title ?? post.title,
     description: post.seo_description ?? (post.excerpt ? truncate(post.excerpt, 155) : `Read ${post.title} from Eligo Leather.`),
     path: `/blog/${post.handle}`,
+    canonical: post.seo_canonical_url || undefined,
     image: post.featured_image_url || post.thumbnail_url || undefined,
-    keywords: [post.title, "leather care", "leather craftsmanship"],
+    keywords: post.seo_keyword ? post.seo_keyword.split(",").map((k) => k.trim()).filter(Boolean) : [post.title, "leather care", "leather craftsmanship"],
     type: "article",
   })
 }

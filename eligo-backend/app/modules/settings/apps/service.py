@@ -7,6 +7,7 @@ from app.modules.settings.apps.model import AppStatus, StoreIntegration
 from app.modules.settings.apps.reviews import (
     create_review,
     list_reviews,
+    review_summary,
     update_review_status as set_review_status,
     delete_review as remove_review,
 )
@@ -289,17 +290,22 @@ async def uninstall(app_code: str, db: AsyncSession) -> bool:
 
 
 async def run_action(app_code: str, action: str, payload: dict, db: AsyncSession) -> dict:
-    row = await get_installed(app_code, db)
     definition = get_definition(app_code)
 
-    if not definition or not row:
-        raise ValueError(f"App not installed or unknown: {app_code}")
+    if not definition:
+        raise ValueError(f"Unknown or unsupported app: {app_code}")
     if action not in definition["actions"]:
         raise ValueError(f"App '{app_code}' does not support action '{action}'")
 
-    # Reviews are stored in the store's own database (no third-party provider).
+    # Reviews are stored in the store's own database (no third-party provider
+    # and no credentials), so they work even if the app has not been
+    # "installed" — customers can always submit and admins can always moderate.
     if app_code == "supabase_reviews":
         return await _run_reviews_action(action, payload, db)
+
+    row = await get_installed(app_code, db)
+    if not row:
+        raise ValueError(f"App not installed or unknown: {app_code}")
 
     result = await adapters.run(app_code, action, payload)
     return {"success": result.get("success", True), "action": action, "data": result}
@@ -325,6 +331,14 @@ async def _run_reviews_action(
     if action == "post_review":
         result = await create_review(db, payload)
         return {"success": True, "action": action, "data": result}
+    if action == "review_summary":
+        summary = await review_summary(
+            db,
+            product_id=payload.get("external_id") or payload.get("product_id"),
+        )
+        if isinstance(summary, dict):
+            return {"success": True, "action": action, "data": summary}
+        return {"success": True, "action": action, "data": {"summaries": summary}}
     if action == "update_review_status":
         review_id = payload.get("review_id")
         status = payload.get("status")

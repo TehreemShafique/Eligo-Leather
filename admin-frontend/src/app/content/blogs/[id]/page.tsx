@@ -6,7 +6,7 @@ const STORE_URL = process.env.NEXT_PUBLIC_STORE_URL || ""
 
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import {
   CaretLeft,
   Sparkle,
@@ -15,14 +15,33 @@ import {
   Plus,
   MagnifyingGlass,
   CaretDown,
+  Trash,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { LexicalEditor } from "@/components/ui/lexical-editor"
 import { CharCounter } from "@/components/ui/char-counter"
 import { useUnsavedChanges } from "@/components/unsaved-changes"
 
-export default function CreateBlogPostPage() {
+function parseBlogFaqs(raw: string | null | undefined): { question: string; answer: string }[] {
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((entry) => ({
+        question: String((entry as Record<string, unknown>)?.question ?? "").trim(),
+        answer: String((entry as Record<string, unknown>)?.answer ?? "").trim(),
+      }))
+      .filter((f) => f.question || f.answer)
+  } catch {
+    return []
+  }
+}
+
+export default function EditBlogPostPage() {
   const router = useRouter()
+  const params = useParams()
+  const postId = Number(params?.id)
 
   // Form State
   const [title, setTitle] = useState("")
@@ -30,7 +49,7 @@ export default function CreateBlogPostPage() {
   const [content, setContent] = useState("")
   const [excerpt, setExcerpt] = useState("")
 
-  // FAQs State — array of {question, answer}
+  // FAQs State
   const [faqs, setFaqs] = useState<{ question: string; answer: string }[]>([])
 
   // SEO Fields
@@ -56,6 +75,7 @@ export default function CreateBlogPostPage() {
   const [blogSearchQuery, setBlogSearchQuery] = useState("")
   const [showNewBlogInput, setShowNewBlogInput] = useState(false)
   const [newBlogCategoryName, setNewBlogCategoryName] = useState("")
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -84,8 +104,7 @@ export default function CreateBlogPostPage() {
     setUnsavedChanges(hasUnsavedChanges)
   }, [setUnsavedChanges, hasUnsavedChanges])
 
-  // Auto-derive the canonical URL from the slug (only when the user has not
-  // manually overridden it).
+  // Auto-derive the canonical URL from the slug (only when not manually overridden).
   useEffect(() => {
     if (canonicalTouchedRef.current) return
     const slug = slugInput
@@ -94,6 +113,52 @@ export default function CreateBlogPostPage() {
     const base = (STORE_URL || "").replace(/\/$/, "")
     setSeoCanonicalUrl(`${base}/blog/${slug || "blog-post"}`)
   }, [slugInput, title])
+
+  // Load the existing blog post from the DB
+  useEffect(() => {
+    let isMounted = true
+
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/blog-posts/${postId}`)
+        if (!res.ok) {
+          throw new Error("post not found")
+        }
+        const p = await res.json()
+        if (!isMounted) return
+
+        setTitle(p.title || "")
+        setSlugInput(p.handle || p.title || "")
+        setContent(p.body || "")
+        setExcerpt(p.excerpt || "")
+        setFaqs(parseBlogFaqs(p.faqs))
+        setSeoTitle(p.seo_title || "")
+        setSeoDescription(p.seo_description || "")
+        setSeoKeyword(p.seo_keyword || "")
+        setSeoCanonicalUrl(p.seo_canonical_url || "")
+        if (p.seo_canonical_url) canonicalTouchedRef.current = true
+        setVisibility(p.visibility === "Visible" ? "Visible" : "Hidden")
+        setAuthor(p.author || "Bilal Hussain Abbasi")
+        setSelectedBlogCategory(p.blog || "News")
+        setTags(p.tags || "")
+        setThemeTemplate(p.template_suffix || "Default blog post")
+        const img = p.featured_image_url || p.thumbnail_url || ""
+        if (img) setImageUrls([img])
+        setCustomScriptOverride("")
+        setIsScriptEdited(false)
+      } catch (err) {
+        toast.error("Could not load this blog post. It may not exist in the database.")
+        router.replace("/content/blogs")
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    load()
+    return () => {
+      isMounted = false
+    }
+  }, [postId, router])
 
   // Handle Multi-Image Upload
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,7 +170,7 @@ export default function CreateBlogPostPage() {
     }
   }
 
-  // Handle Add New Blog Category (Pic 3)
+  // Handle Add New Blog Category
   const handleCreateNewBlogCategory = () => {
     if (!newBlogCategoryName.trim()) {
       toast.error("Please enter a blog category name.")
@@ -122,7 +187,7 @@ export default function CreateBlogPostPage() {
     toast.success(`Created new blog category "${catName}"!`)
   }
 
-  // Save Blog Post & Sync to DB
+  // Update Blog Post in DB (replaces the old one)
   const handleSaveBlogPost = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) {
@@ -156,20 +221,19 @@ export default function CreateBlogPostPage() {
       published_at: new Date().toISOString(),
     }
 
-    // Save to PostgreSQL Backend DB
     try {
-      const res = await fetch(`${API_BASE}/api/v1/blog-posts/`, {
-        method: "POST",
+      const res = await fetch(`${API_BASE}/api/v1/blog-posts/${postId}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
 
       if (res.ok) {
-        toast.success(`Blog post "${title}" saved to database!`)
+        toast.success(`Blog post "${title}" updated!`)
         router.push("/content/blogs")
       } else {
         const body = await res.json().catch(() => null)
-        toast.error(`Could not save blog post: ${body?.detail || "Server error"}`)
+        toast.error(`Could not update blog post: ${body?.detail || "Server error"}`)
       }
     } catch (err) {
       toast.error("Could not reach the server. Please try again.")
@@ -178,34 +242,37 @@ export default function CreateBlogPostPage() {
     }
   }
 
+  if (loading) {
+    return <div className="max-w-5xl mx-auto py-16 text-center text-sm text-gray-500">Loading blog post…</div>
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-5 font-sans text-gray-900 pb-20">
-      {/* Header Bar matching Pic 2 */}
+      {/* Header Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-gray-600 font-medium">
           <Link href="/content/blogs" className="p-1 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors">
             <CaretLeft className="w-5 h-5" />
           </Link>
           <span className="text-gray-400">›</span>
-          <h1 className="text-lg font-bold text-gray-900">Add blog post</h1>
+          <h1 className="text-lg font-bold text-gray-900">Edit blog post</h1>
         </div>
 
         <button
           type="button"
           onClick={handleSaveBlogPost}
           disabled={saving}
-          className="px-5 py-2 bg-[#1a1a1a] hover:bg-black text-white font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer"
+          className="px-5 py-2 bg-[#1a1a1a] hover:bg-black text-white font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer disabled:opacity-60"
         >
           {saving ? "Saving..." : "Save"}
         </button>
       </div>
 
       <form onSubmit={handleSaveBlogPost} className="grid grid-cols-1 lg:grid-cols-12 gap-5 text-xs">
-        {/* Left Column (Main Form Fields matching Pic 2) */}
+        {/* Left Column (Main Form Fields) */}
         <div className="lg:col-span-8 space-y-5">
-          {/* Card 1: Title */}
+          {/* Card 1: Slug + Title */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-2">
-            {/* Slug */}
             <div className="space-y-1.5">
               <label className="font-bold text-gray-900 text-xs block">Slug / URL Handle</label>
               <div className="flex items-center gap-0">
@@ -236,7 +303,7 @@ export default function CreateBlogPostPage() {
             </div>
           </div>
 
-          {/* Card 2: Content MS Word Style Rich Text Editor */}
+          {/* Card 2: Content Rich Text Editor */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-3">
             <label className="font-bold text-gray-900 text-xs block">Content</label>
             <LexicalEditor
@@ -402,174 +469,9 @@ export default function CreateBlogPostPage() {
               <p className="text-gray-500 font-medium">Add a title and description to see how this blog post might appear in a search engine listing</p>
             )}
           </div>
-
-          {/* Real-World Blog Multi-Schema JSON-LD Code Generator & Interactive Code Editor */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-4">
-            <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wide border-b border-gray-100 pb-2">
-              Blog Post SEO Schema Generator (Schema.org / BlogPosting)
-            </h2>
-
-            {(() => {
-              const slug = slugInput
-                ? slugInput.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
-                : (title || "blog-post").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
-              const domain = STORE_URL || "https://yourdomain.com"
-              const defaultBlogSchema = {
-                "@context": "https://schema.org",
-                "@graph": [
-                  {
-                    "@type": "BlogPosting",
-                    "@id": `${domain}/blog/${slug}/#blogposting`,
-                    "headline": title || "Blog Post Title",
-                    "description": seoDescription || title || "Read our latest editorial guide from Eligo Leather.",
-                    "image": imageUrls.length > 0 ? imageUrls : [],
-                    "datePublished": new Date().toISOString(),
-                    "dateModified": new Date().toISOString(),
-                    "author": {
-                      "@type": "Person",
-                      "name": author || "Bilal Hussain Abbasi",
-                      "url": `${domain}/authors/bilal-abbasi`
-                    },
-                    "publisher": {
-                      "@type": "Organization",
-                      "name": "Eligo Leather Official Store",
-                      "url": domain,
-                      "logo": {
-                        "@type": "ImageObject",
-                        "url": `${domain}/logo.png`
-                      }
-                    },
-                    "mainEntityOfPage": {
-                      "@type": "WebPage",
-                      "@id": `${domain}/blog/${slug}`
-                    }
-                  },
-                  {
-                    "@type": "BreadcrumbList",
-                    "itemListElement": [
-                      { "@type": "ListItem", "position": 1, "name": "Home", "item": domain },
-                      { "@type": "ListItem", "position": 2, "name": "Blogs", "item": `${domain}/blogs` },
-                      { "@type": "ListItem", "position": 3, "name": title || "Blog Post Title", "item": `${domain}/blog/${slug}` }
-                    ]
-                  },
-                  {
-                    "@type": "Organization",
-                    "name": "Eligo Leather Official Store",
-                    "url": domain,
-                    "logo": `${domain}/logo.png`,
-                    "sameAs": [
-                      "https://facebook.com/eligoleather",
-                      "https://instagram.com/eligoleather"
-                    ]
-                  },
-                  {
-                    "@type": "FAQPage",
-                    "mainEntity": faqs.filter(f => f.question.trim()).map(f => ({
-                      "@type": "Question",
-                      "name": f.question.trim(),
-                      "acceptedAnswer": {
-                        "@type": "Answer",
-                        "text": f.answer.trim() || "No answer provided."
-                      }
-                    }))
-                  }
-                ]
-              }
-
-              const computedScriptCode = customScriptOverride || `<script type="application/ld+json">\n${JSON.stringify(defaultBlogSchema, null, 2)}\n</script>`
-
-              return (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <div>
-                      <span className="text-[11px] font-bold text-gray-900 uppercase tracking-wider block">
-                        Interactive Blog JSON-LD Code Editor (@graph: BlogPosting, Breadcrumb, Organization, FAQs)
-                      </span>
-                      <span className="text-[10px] text-amber-800 font-semibold block">
-                        {isScriptEdited ? "✏️ Custom Edit Active - You can modify any code lines inside the editor below!" : "⚡ Auto-generated from blog fields. Click inside the code box below to edit manually!"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {isScriptEdited && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomScriptOverride("")
-                            setIsScriptEdited(false)
-                            toast.info("Reset blog code editor back to auto-generated form values.")
-                          }}
-                          className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
-                        >
-                          Reset Code
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(computedScriptCode)
-                          toast.success("Copied edited Blog JSON-LD script to clipboard!")
-                        }}
-                        className="px-2.5 py-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
-                      >
-                        Copy Code
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const rawJson = computedScriptCode
-                            .replace(/<script[^>]*>/gi, "")
-                            .replace(/<\/script>/gi, "")
-                            .trim()
-                          try {
-                            JSON.parse(rawJson)
-                          } catch (parseErr) {
-                            toast.error("Blog schema JSON is invalid — please fix the code before publishing.")
-                            return
-                          }
-                          try {
-                            await fetch(`${API_BASE}/api/v1/store/schemas`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                name: `Blog Schema - ${title.trim() || slug || "blog-post"}`,
-                                schema_type: "blog",
-                                target_pages: `/blog/${slug || "blog-post"}`,
-                                schema_json: rawJson,
-                                is_active: true,
-                              }),
-                            })
-                            toast.success("Blog schema published to this post's page for SEO!")
-                          } catch (e) {
-                            toast.error("Could not publish blog schema to the database.")
-                          }
-                        }}
-                        className="px-2.5 py-1 bg-amber-800 hover:bg-amber-900 text-white font-bold text-[11px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                      >
-                        <span>Publish to Customer Events (DB)</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Interactive Editable Code Textarea */}
-                  <textarea
-                    rows={12}
-                    value={computedScriptCode}
-                    onChange={(e) => {
-                      setCustomScriptOverride(e.target.value)
-                      setIsScriptEdited(true)
-                    }}
-                    className="w-full p-4 bg-[#1e1e1e] text-emerald-400 font-mono text-[11px] rounded-xl border border-gray-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500/50 leading-relaxed shadow-inner"
-                  />
-                </div>
-              )
-            })()}
-          </div>
         </div>
 
-        {/* Right Column Settings matching Pic 2, Pic 3, Pic 4 */}
+        {/* Right Column Settings */}
         <div className="lg:col-span-4 space-y-5">
           {/* Card 1: Visibility */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-3">
@@ -599,7 +501,7 @@ export default function CreateBlogPostPage() {
             </div>
           </div>
 
-          {/* Card 2: Multi-Image Gallery (2, 3 or more pictures) */}
+          {/* Card 2: Multi-Image Gallery */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-gray-900 text-xs">Featured Gallery Images ({imageUrls.length})</h2>
@@ -633,9 +535,6 @@ export default function CreateBlogPostPage() {
                     >
                       ✕
                     </button>
-                    <span className="absolute bottom-1 left-1.5 text-[9px] font-mono font-bold text-white bg-black/60 px-1.5 py-0.5 rounded">
-                      Img #{idx + 1}
-                    </span>
                   </div>
                 ))}
               </div>
@@ -655,11 +554,10 @@ export default function CreateBlogPostPage() {
             )}
           </div>
 
-          {/* Card 3: Organization matching Pic 3 */}
+          {/* Card 3: Organization */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-4">
             <h2 className="font-bold text-gray-900 text-xs">Organization</h2>
 
-            {/* Author */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-gray-700 block">Author</label>
               <input
@@ -670,7 +568,6 @@ export default function CreateBlogPostPage() {
               />
             </div>
 
-            {/* Blog Dropdown matching Pic 3 */}
             <div className="space-y-1.5 relative">
               <label className="text-[11px] font-bold text-gray-700 block">Blog</label>
               <button
@@ -682,10 +579,8 @@ export default function CreateBlogPostPage() {
                 <CaretDown className="w-3.5 h-3.5 text-gray-500" />
               </button>
 
-              {/* Pic 3 Popover Dropdown */}
               {blogDropdownOpen && (
                 <div className="absolute left-0 right-0 mt-1 bg-white rounded-2xl border border-gray-200 shadow-2xl z-50 p-2 space-y-2 animate-scale-in">
-                  {/* Search Bar */}
                   <div className="relative">
                     <MagnifyingGlass className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
                     <input
@@ -697,7 +592,6 @@ export default function CreateBlogPostPage() {
                     />
                   </div>
 
-                  {/* Section 1: Blogs */}
                   <div className="space-y-1">
                     <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block px-2">Blogs</span>
                     {availableBlogs
@@ -720,7 +614,6 @@ export default function CreateBlogPostPage() {
                       ))}
                   </div>
 
-                  {/* Section 2: Actions matching Pic 3 */}
                   <div className="border-t border-gray-100 pt-1 space-y-1">
                     <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block px-2">Actions</span>
                     {showNewBlogInput ? (
@@ -755,7 +648,6 @@ export default function CreateBlogPostPage() {
               )}
             </div>
 
-            {/* Tags */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-gray-700 block">Tags</label>
               <input
@@ -768,7 +660,7 @@ export default function CreateBlogPostPage() {
             </div>
           </div>
 
-          {/* Card 4: Theme Template matching Pic 4 */}
+          {/* Card 4: Theme Template */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-2">
             <h2 className="font-bold text-gray-900 text-xs">Theme template</h2>
             <select
@@ -779,6 +671,35 @@ export default function CreateBlogPostPage() {
               <option value="Default blog post">Default blog post</option>
               <option value="blog-post">blog-post</option>
             </select>
+          </div>
+
+          {/* Delete Blog Post */}
+          <div className="bg-white rounded-2xl border border-red-200 shadow-2xs p-5 space-y-3">
+            <h2 className="font-bold text-red-700 text-xs">Danger zone</h2>
+            <p className="text-[11px] text-gray-500 font-medium">Permanently delete this blog post and all its data from the database.</p>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!confirm(`Delete blog post "${title}"? This cannot be undone.`)) return
+                try {
+                  const res = await fetch(`${API_BASE}/api/v1/blog-posts/${postId}`, {
+                    method: "DELETE",
+                  })
+                  if (res.ok) {
+                    toast.success(`Blog post "${title}" deleted.`)
+                    router.push("/content/blogs")
+                  } else {
+                    toast.error("Could not delete the blog post.")
+                  }
+                } catch (err) {
+                  toast.error("Could not reach the server.")
+                }
+              }}
+              className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Trash className="w-3.5 h-3.5" />
+              <span>Delete blog post</span>
+            </button>
           </div>
         </div>
       </form>

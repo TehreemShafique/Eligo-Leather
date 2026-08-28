@@ -57,7 +57,11 @@ async def get_current_user(credentials=Depends(oauth2_scheme), db: AsyncSession=
         if session is None or session.revoked_at is not None:
             raise credential_exception
         now = datetime.now(timezone.utc)
-        if session.last_seen_at is None or (now - session.last_seen_at) > SESSION_TOUCH_INTERVAL:
+        last_seen = session.last_seen_at
+        if last_seen is not None and last_seen.tzinfo is None:
+            # SQLite returns naive datetimes even for timezone-aware columns.
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
             session.last_seen_at = now
             await db.commit()
 

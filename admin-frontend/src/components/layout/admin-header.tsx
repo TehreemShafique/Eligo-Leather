@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useUnsavedChanges } from "@/components/unsaved-changes"
 import {
   MagnifyingGlass,
   Command,
@@ -14,6 +15,11 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { clearAuthToken, getStoredUser, API_BASE } from "@/lib/api"
+
+function orderDetailId(orderNumber?: string | null, id?: number | string | null) {
+  const base = String(orderNumber || id || "")
+  return base.replace(/^#/, "")
+}
 
 interface SearchResult {
   kind: "product" | "order" | "customer"
@@ -29,6 +35,7 @@ export function AdminHeader() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const searchWrapRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
+  const { confirmLeave } = useUnsavedChanges()
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
   const [searchValue, setSearchValue] = useState("")
   const [menuOpen, setMenuOpen] = useState(false)
@@ -151,7 +158,7 @@ export function AdminHeader() {
           id: o.id,
           title: `#${num}`,
           subtitle: cust || "Guest",
-          href: `/orders/${encodeURIComponent(o.order_number || o.id)}`,
+          href: `/orders/${encodeURIComponent(orderDetailId(o.order_number, o.id))}`,
           meta: o.total_price != null ? `Rs. ${o.total_price}` : undefined,
         })
       }
@@ -196,7 +203,7 @@ export function AdminHeader() {
     setSearchValue("")
     setMenuOpen(false)
     inputRef.current?.blur()
-    router.push(r.href)
+    confirmLeave(() => router.push(r.href))
   }
 
   const handleLogout = () => {

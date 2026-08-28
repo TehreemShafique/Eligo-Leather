@@ -9,6 +9,7 @@ import {
   Question,
   ShieldCheck,
   ShoppingBag,
+  Trash,
   Truck,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
@@ -58,9 +59,13 @@ interface ShippingCalculation {
 export default function CheckoutPage() {
   const cart = useCartStore(selectCart)
   const cartSubtotal = useCartStore(selectCartSubtotal)
+  const updateQuantity = useCartStore((state) => state.updateQuantity)
+  const removeFromCart = useCartStore((state) => state.removeFromCart)
   const clearCart = useCartStore((state) => state.clearCart)
   const [formData, setFormData] = useState<CheckoutFormValues>(defaultCheckoutFormValues)
   const [appliedDiscount, setAppliedDiscount] = useState(0)
+  const [appliedDiscountCode, setAppliedDiscountCode] = useState("")
+  const [discountLoading, setDiscountLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [orderComplete, setOrderComplete] = useState(false)
   const [completedOrderId, setCompletedOrderId] = useState("")
@@ -76,7 +81,11 @@ export default function CheckoutPage() {
   useEffect(() => {
     let cancelled = false
     api
-      .post<unknown, ShippingCalculation>("/shipping/calculate", { subtotal: cartSubtotal }, { auth: false })
+      .post<ShippingCalculation, { subtotal: number }>(
+        "/shipping/calculate",
+        { subtotal: cartSubtotal },
+        { auth: false },
+      )
       .then((data) => {
         if (!cancelled) setShippingCalc(data)
       })
@@ -87,8 +96,10 @@ export default function CheckoutPage() {
   }, [cartSubtotal])
 
   const baseShippingFee = shippingCalc?.shipping_cost ?? 0
-  const finalShippingFee = Math.max(0, baseShippingFee - appliedDiscount)
-  const orderTotal = cartSubtotal + finalShippingFee
+  const finalShippingFee = Math.max(0, baseShippingFee)
+  // Discounts reduce the merchandise subtotal, never the shipping fee.
+  const discountedSubtotal = Math.max(0, cartSubtotal - appliedDiscount)
+  const orderTotal = discountedSubtotal + finalShippingFee
   const amountToFreeShipping =
     shippingCalc && !shippingCalc.is_free_shipping && shippingCalc.amount_to_free_shipping != null
       ? Math.ceil(shippingCalc.amount_to_free_shipping)
@@ -99,16 +110,48 @@ export default function CheckoutPage() {
     value: CheckoutFormValues[K],
   ) => setFormData((current) => ({ ...current, [field]: value }))
 
-  const handleApplyDiscount = () => {
-    const code = formData.discountCode.trim().toUpperCase()
-    if (code === "ELIGO10") {
-      setAppliedDiscount(200)
-      toast.success("ELIGO10 applied — Rs.200 off shipping.")
-    } else if (code) {
-      setAppliedDiscount(0)
-      toast.error("That discount code is not valid.")
-    }
+  interface VerifyCouponResponse {
+  valid: boolean
+  code: string
+  discount_type: string | null
+  discount_percentage: number | null
+  discount_amount: number
+  discounted_subtotal: number
+  message: string
+}
+
+const handleApplyDiscount = async () => {
+  const code = formData.discountCode.trim().toUpperCase()
+  if (!code) {
+    toast.error("Please enter a discount code.")
+    return
   }
+  if (discountLoading) return
+
+  setDiscountLoading(true)
+  try {
+    const result = await api.post<VerifyCouponResponse, { code: string; subtotal: number }>(
+      "/discounts/public/verify-coupon",
+      { code, subtotal: cartSubtotal },
+      { auth: false },
+    )
+    if (result.valid) {
+      setAppliedDiscount(result.discount_amount)
+      setAppliedDiscountCode(result.code || code)
+      toast.success(result.message || `${code} applied.`)
+    } else {
+      setAppliedDiscount(0)
+      setAppliedDiscountCode("")
+      toast.error(result.message || "That discount code is not valid.")
+    }
+  } catch {
+    setAppliedDiscount(0)
+    setAppliedDiscountCode("")
+    toast.error("Could not verify the discount code right now. Please try again.")
+  } finally {
+    setDiscountLoading(false)
+  }
+}
 
   const fieldAriaProps = (key: CheckoutFieldKey) => ({
     "aria-invalid": fieldErrors[key] ? ("true" as const) : undefined,
@@ -126,7 +169,7 @@ export default function CheckoutPage() {
     }
 
     const totals = {
-      subtotal: cartSubtotal,
+      subtotal: discountedSubtotal,
       shippingCost: finalShippingFee,
       total: orderTotal,
     }
@@ -148,7 +191,7 @@ export default function CheckoutPage() {
     setLoading(true)
     pendingRef.current = true
 
-    const payload = buildGuestOrderPayload(formData, cart, totals)
+    const payload = buildGuestOrderPayload(formData, cart, totals, appliedDiscountCode)
 
     try {
       const response = await api.post<unknown, GuestOrderPayload>(
@@ -316,9 +359,9 @@ export default function CheckoutPage() {
               <h2 className="text-xl font-bold">Order summary</h2>
               <p className="mt-1 text-xs text-neutral-500">{cart.length} product{cart.length === 1 ? "" : "s"} in your order</p>
             </div>
-            <div className="max-h-[360px] space-y-4 overflow-y-auto px-5 py-5 sm:px-6">
+            <div className="max-h-[420px] space-y-4 overflow-y-auto px-5 py-5 sm:px-6">
               {cart.map((item) => (
-                <div key={`${item.id}-${item.color || "default"}`} className="flex items-center gap-4">
+                <div key={`${item.id}-${item.color || "default"}`} className="flex items-center gap-3">
                   <span className="relative h-20 w-20 shrink-0 overflow-hidden rounded-[10px] border border-neutral-200 bg-slate-50">
                     <Image src={item.image} alt={item.title} fill sizes="80px" className="object-cover" />
                     <span className="absolute right-1 top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-black px-1 text-[10px] font-bold text-white">{item.quantity}</span>
@@ -326,8 +369,39 @@ export default function CheckoutPage() {
                   <span className="min-w-0 flex-1">
                     <strong className="line-clamp-2 block text-sm leading-5">{item.title}</strong>
                     {item.color ? <span className="mt-1 block text-xs text-neutral-500">Color: {item.color}</span> : null}
+                    <span className="mt-1.5 inline-flex items-center border border-neutral-300 rounded-[5px] overflow-hidden bg-white">
+                      <button
+                        type="button"
+                        aria-label="Decrease quantity"
+                        onClick={() => updateQuantity(item, item.quantity - 1)}
+                        className="w-6 h-6 flex items-center justify-center text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                      >
+                        &minus;
+                      </button>
+                      <span className="w-6 text-center text-xs font-semibold text-zinc-950">{item.quantity}</span>
+                      <button
+                        type="button"
+                        aria-label="Increase quantity"
+                        onClick={() => updateQuantity(item, item.quantity + 1)}
+                        className="w-6 h-6 flex items-center justify-center text-sm font-semibold text-black hover:bg-gray-100"
+                      >
+                        &#43;
+                      </button>
+                    </span>
                   </span>
-                  <strong className="shrink-0 text-sm">Rs.{(item.price * item.quantity).toLocaleString("en-PK")}</strong>
+                  <span className="shrink-0 text-right">
+                    <strong className="block text-sm">Rs.{(item.price * item.quantity).toLocaleString("en-PK")}</strong>
+                    <button
+                      type="button"
+                      aria-label="Remove item"
+                      title="Remove item"
+                      onClick={() => removeFromCart(item)}
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-neutral-400 transition-colors hover:text-red-600"
+                    >
+                      <Trash className="h-3.5 w-3.5" />
+                      Remove
+                    </button>
+                  </span>
                 </div>
               ))}
             </div>

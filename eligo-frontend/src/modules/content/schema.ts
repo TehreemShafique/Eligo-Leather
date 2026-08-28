@@ -17,6 +17,8 @@ export const BlogPostOutSchema = z.object({
   thumbnail_url: z.string().nullable(),
   seo_title: z.string().nullable(),
   seo_description: z.string().nullable(),
+  seo_keyword: z.string().nullable(),
+  seo_canonical_url: z.string().nullable(),
   template_suffix: z.string().nullable(),
   published_at: z.string().nullable(),
   created_at: z.string(),

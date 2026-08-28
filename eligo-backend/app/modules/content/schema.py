@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 import json
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.content.model import (
     MetaobjectStatus,
@@ -361,6 +361,8 @@ class BlogPostCreate(BaseModel):
     thumbnail_url: str | None = None
     seo_title: str | None = None
     seo_description: str | None = None
+    seo_keyword: str | None = None
+    seo_canonical_url: str | None = None
     template_suffix: str | None = None
     published_at: datetime | None = None
 
@@ -379,6 +381,8 @@ class BlogPostUpdate(BaseModel):
     thumbnail_url: str | None = None
     seo_title: str | None = None
     seo_description: str | None = None
+    seo_keyword: str | None = None
+    seo_canonical_url: str | None = None
     template_suffix: str | None = None
     published_at: datetime | None = None
 
@@ -398,6 +402,8 @@ class BlogPostOut(BaseModel):
     thumbnail_url: str | None
     seo_title: str | None
     seo_description: str | None
+    seo_keyword: str | None
+    seo_canonical_url: str | None
     template_suffix: str | None
     published_at: datetime | None
     created_at: datetime
@@ -507,6 +513,11 @@ class PageUpdate(BaseModel):
     metafields: str | None = None
     seo_title: str | None = None
     seo_description: str | None = None
+
+
+class PageBulkDelete(BaseModel):
+    ids: list[int] = Field(default_factory=list)
+    handles: list[str] = Field(default_factory=list)
 
 
 class PageOut(BaseModel):

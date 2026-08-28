@@ -27,7 +27,7 @@ function toFeaturedPost(post: BlogPostOut): FeaturedPost {
       day: "numeric",
     }).format(new Date(post.published_at || post.created_at)),
     excerpt: post.excerpt || truncate(plainBody, 240),
-    image: post.featured_image_url || post.thumbnail_url || "/images/blog_hero.webp",
+    image: post.featured_image_url || post.thumbnail_url || "",
   }
 }
 

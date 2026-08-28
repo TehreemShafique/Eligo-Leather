@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { Star } from "@phosphor-icons/react"
 import { getProductSlug } from "@/modules/catalog/types"
 import type { ProductListOut } from "@/modules/catalog/schema"
 import { fetchAllReviewSummaries } from "@/modules/reviews/api"
+import { StarRating } from "@/components/ui/star-rating"
 
 interface RelatedProductsProps {
   products?: ProductListOut[]
@@ -56,7 +56,6 @@ export function RelatedProducts({ products = [], currentProductId }: RelatedProd
             const summary = summaries[String(item.id)]
             const count = summary?.review_count ?? 0
             const rating = count > 0 ? summary?.average_rating ?? 0 : 0
-            const filledStars = Math.round(rating)
 
             return (
               <div
@@ -91,14 +90,7 @@ export function RelatedProducts({ products = [], currentProductId }: RelatedProd
 
                   {/* Rating */}
                   <div className="flex items-center justify-between text-xs mb-2">
-                    <div className="flex items-center text-amber-500 gap-1">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} weight="fill" className={`w-3.5 h-3.5 ${i < filledStars ? "" : "opacity-25"}`} />
-                      ))}
-                    </div>
-                    <div className="text-gray-500 font-['Manrope']">
-                      Review <span className="text-black font-medium">{count}/{rating.toFixed(1)}</span>
-                    </div>
+                    <StarRating rating={rating} reviewCount={count} />
                   </div>
 
                   {/* Pricing */}

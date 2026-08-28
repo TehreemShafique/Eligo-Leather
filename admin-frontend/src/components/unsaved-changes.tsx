@@ -11,10 +11,12 @@ import {
 
 type UnsavedChangesContextValue = {
   setUnsavedChanges: (dirty: boolean) => void
+  confirmLeave: (callback: () => void) => void
 }
 
 const UnsavedChangesContext = createContext<UnsavedChangesContextValue>({
   setUnsavedChanges: () => {},
+  confirmLeave: (_cb: () => void) => {},
 })
 
 export function useUnsavedChanges() {
@@ -33,9 +35,21 @@ export function UnsavedChangesProvider({
   const dirtyRef = useRef(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const pendingNavRef = useRef<{ type: "link"; href: string } | { type: "back" } | null>(null)
+  const programmaticNavRef = useRef<(() => void) | null>(null)
 
   const setUnsavedChanges = useCallback((dirty: boolean) => {
     dirtyRef.current = dirty
+  }, [])
+
+  // Allow programmatic navigation (e.g. router.push) to run through the guard.
+  const confirmLeave = useCallback((callback: () => void) => {
+    if (!dirtyRef.current) {
+      callback()
+      return
+    }
+    programmaticNavRef.current = callback
+    pendingNavRef.current = null
+    setConfirmOpen(true)
   }, [])
 
   // Block browser refresh / close / full-page navigation when dirty.
@@ -96,8 +110,12 @@ export function UnsavedChangesProvider({
     dirtyRef.current = false
     const nav = pendingNavRef.current
     pendingNavRef.current = null
+    const programmaticNav = programmaticNavRef.current
+    programmaticNavRef.current = null
     setConfirmOpen(false)
-    if (nav?.type === "link") {
+    if (programmaticNav) {
+      programmaticNav()
+    } else if (nav?.type === "link") {
       window.location.assign(nav.href)
     } else if (nav?.type === "back") {
       window.history.back()
@@ -106,11 +124,12 @@ export function UnsavedChangesProvider({
 
   const handleKeepEditing = () => {
     pendingNavRef.current = null
+    programmaticNavRef.current = null
     setConfirmOpen(false)
   }
 
   return (
-    <UnsavedChangesContext.Provider value={{ setUnsavedChanges }}>
+    <UnsavedChangesContext.Provider value={{ setUnsavedChanges, confirmLeave }}>
       {children}
 
       {confirmOpen && (

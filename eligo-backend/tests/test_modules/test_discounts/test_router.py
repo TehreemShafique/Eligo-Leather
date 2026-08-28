@@ -147,3 +147,94 @@ async def test_login_shows_welcome_discount_when_active(client, db_session):
     body = login.json()
     assert body["show_welcome_discount"] is True
     assert body["welcome_discount_percentage"] == 10.0
+
+
+# ---------------------------------------------------------------------------
+# Public checkout: verify-coupon
+# ---------------------------------------------------------------------------
+
+async def _create_promo(client, admin_headers, **overrides):
+    payload = {
+        "title": "Promo",
+        "code": "SAVE10",
+        "status": "Active",
+        "method": "Code",
+        "type": "Percentage",
+        "percentage_value": 10,
+        "value": "10% OFF",
+    }
+    payload.update(overrides)
+    response = await client.post("/api/v1/discounts/", headers=admin_headers, json=payload)
+    assert response.status_code == 201
+    return response.json()
+
+
+@pytest.mark.asyncio
+async def test_public_verify_coupon_applies_admin_promo_discount(client, admin_headers):
+    await _create_promo(client, admin_headers)
+
+    response = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": "SAVE10", "subtotal": 2500},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is True
+    assert body["discount_type"] == "percentage"
+    assert body["discount_percentage"] == 10.0
+    assert body["discount_amount"] == 250.0
+    assert body["discounted_subtotal"] == 2250.0
+    # Codes are matched case-insensitively.
+    response_lower = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": "save10", "subtotal": 1000},
+    )
+    assert response_lower.json()["valid"] is True
+    assert response_lower.json()["discounted_subtotal"] == 900.0
+
+
+@pytest.mark.asyncio
+async def test_public_verify_coupon_rejects_unknown_code(client):
+    response = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": "NOPE123", "subtotal": 2500},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is False
+    assert body["discount_amount"] == 0
+    assert body["discounted_subtotal"] == 2500.0
+
+
+@pytest.mark.asyncio
+async def test_public_verify_coupon_rejects_expired_and_disabled_promos(client, admin_headers):
+    await _create_promo(client, admin_headers, code="OLDYEAR", end_date="2020-01-01T00:00:00Z")
+    await _create_promo(client, admin_headers, code="PAUSED", status="Disabled")
+
+    expired = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": "OLDYEAR", "subtotal": 2500},
+    )
+    assert expired.json()["valid"] is False
+
+    paused = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": "PAUSED", "subtotal": 2500},
+    )
+    assert paused.json()["valid"] is False
+
+
+@pytest.mark.asyncio
+async def test_public_verify_coupon_supports_welcome_code(client, db_session):
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": "WELCOME10", "subtotal": 2500},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid"] is True
+    assert body["discount_type"] == "welcome_discount"
+    assert body["discount_amount"] == 250.0

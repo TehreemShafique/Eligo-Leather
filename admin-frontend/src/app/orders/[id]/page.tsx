@@ -87,8 +87,6 @@ interface OrderData {
   tracking_number: string | null
   shipping_address: string | null
   billing_address: string | null
-  customer_note: string | null
-  internal_note: string | null
   tags: string | null
   is_archived: boolean
   created_at: string
@@ -156,7 +154,6 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const [editShippingAddress, setEditShippingAddress] = useState("")
   const [commentText, setCommentText] = useState("")
   const [newTag, setNewTag] = useState("")
-  const [internalNote, setInternalNote] = useState("")
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
   const [editNoteText, setEditNoteText] = useState("")
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
@@ -168,7 +165,6 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
       setOrder(data)
       setOrderId(data.id)
       setEditShippingAddress(data.shipping_address || "")
-      setInternalNote(data.internal_note || "")
     } catch {
       toast.error("Could not load order details")
     } finally {
@@ -330,17 +326,6 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
     const start = el?.selectionStart ?? commentText.length
     const next = commentText.slice(0, start) + emoji + commentText.slice(start)
     setCommentText(next)
-  }
-
-  const handleSaveNote = async () => {
-    if (!order) return
-    try {
-      await apiFetch(`/api/v1/orders/${orderId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ internal_note: internalNote }),
-      })
-      toast.success("Note saved!"); fetchOrder()
-    } catch { toast.error("Failed to save note") }
   }
 
   const handleSaveAddress = async () => {
@@ -613,13 +598,6 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
               {order.customer_email && <div className="flex items-center gap-2.5"><EnvelopeSimple className="w-4 h-4 text-gray-400" /><span className="text-xs text-gray-700">{order.customer_email}</span></div>}
             </div>
             {order.shipping_address && <div className="pt-2 border-t border-gray-100"><div className="flex items-start gap-2.5"><MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" /><span className="text-xs text-gray-700 leading-relaxed">{order.shipping_address}</span></div></div>}
-          </div>
-
-          {/* Note Card */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-3">
-            <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2">Note</h3>
-            <textarea rows={3} value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="Add a private note about this order..." className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/20 focus:border-amber-800 resize-none" />
-            <button onClick={handleSaveNote} className="px-3 py-1.5 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Save Note</button>
           </div>
 
           {/* Tags Card */}
