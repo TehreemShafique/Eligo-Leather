@@ -41,7 +41,7 @@ export function BestSellingSection({
             <article key={item.id} className="group relative w-full min-[1920px]:w-80">
               {/* Product image */}
               <Link
-                href={`/products/${item.slug || item.id}`}
+                href={`/${item.slug || item.id}`}
                 className="group/image relative block aspect-square w-full overflow-hidden rounded-[20px] bg-white min-[1920px]:size-80"
               >
                 <Image
@@ -103,7 +103,7 @@ export function BestSellingSection({
 
               {/* View button */}
               <Link
-                href={`/products/${item.slug || item.id}`}
+                href={`/${item.slug || item.id}`}
                 className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-[5px] border border-amber-800 px-7 py-2.5 text-sm font-semibold leading-5 text-amber-800 transition-colors hover:bg-amber-800 hover:text-white min-[1920px]:mt-[6px] min-[1920px]:w-80"
               >
                 View

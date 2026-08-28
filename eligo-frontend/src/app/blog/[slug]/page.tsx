@@ -5,6 +5,7 @@ import { sanitizeCmsHtml } from "@/lib/sanitize-html"
 import { truncate } from "@/lib/utils"
 import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
 import { BlogDetailContent, type BlogFaq } from "@/components/blog/blog-detail-content"
+import { fetchStoreSchemas } from "@/modules/store/api"
 
 type BlogPageProps = {
   params: Promise<{ slug: string }>
@@ -110,12 +111,35 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
     ]
   }
 
+  // A schema published from the admin blog editor for THIS post replaces
+  // the built-in BlogPosting JSON-LD to avoid duplicate markup.
+  let publishedSchemaJson: string | null = null
+  try {
+    const schemas = await fetchStoreSchemas()
+    const target = `/blog/${post.handle}`
+    const match = schemas.find(
+      (s) => s.is_active && s.schema_type === "blog" && s.target_pages === target,
+    )
+    if (match && match.schema_json.trim()) {
+      publishedSchemaJson = match.schema_json
+    }
+  } catch {
+    publishedSchemaJson = null
+  }
+
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(blogJsonLd).replace(/</g, "\\u003c") }}
-      />
+      {publishedSchemaJson ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: publishedSchemaJson.replace(/</g, "\\u003c") }}
+        />
+      ) : (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(blogJsonLd).replace(/</g, "\\u003c") }}
+        />
+      )}
       <BlogDetailContent
         post={{ ...post, body: sanitizeCmsHtml(post.body ?? "") }}
         faqs={parseBlogFaqs(post.faqs)}

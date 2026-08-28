@@ -1,18 +1,36 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Star } from "@phosphor-icons/react"
 import { getProductSlug } from "@/modules/catalog/types"
 import type { ProductListOut } from "@/modules/catalog/schema"
+import { fetchAllReviewSummaries } from "@/modules/reviews/api"
 
 interface RelatedProductsProps {
   products?: ProductListOut[]
   currentProductId?: number
 }
 
+type SummaryMap = Record<string, { average_rating?: number; review_count?: number }>
+
 export function RelatedProducts({ products = [], currentProductId }: RelatedProductsProps) {
   const displayItems = products.filter((p) => p.id !== currentProductId).slice(0, 5)
+  const ids = displayItems.map((p) => String(p.id))
+
+  const [summaries, setSummaries] = useState<SummaryMap>({})
+  useEffect(() => {
+    let mounted = true
+    if (ids.length === 0) return
+    fetchAllReviewSummaries().then((map) => {
+      if (mounted) setSummaries(map)
+    })
+    return () => {
+      mounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids.join(",")])
 
   if (displayItems.length === 0) {
     return null
@@ -35,6 +53,10 @@ export function RelatedProducts({ products = [], currentProductId }: RelatedProd
             const price = item.price ? parseFloat(item.price) : 0
             const compareAt = item.compare_at_price ? parseFloat(item.compare_at_price) : null
             const imageUrl = item.image_url || ""
+            const summary = summaries[String(item.id)]
+            const count = summary?.review_count ?? 0
+            const rating = count > 0 ? summary?.average_rating ?? 0 : 0
+            const filledStars = Math.round(rating)
 
             return (
               <div
@@ -44,7 +66,7 @@ export function RelatedProducts({ products = [], currentProductId }: RelatedProd
                 <div>
                   {/* Image Container */}
                   <Link
-                    href={`/products/${slug}`}
+                    href={`/${slug}`}
                     className="group/img relative block h-64 w-full bg-zinc-100 rounded-[20px] overflow-hidden mb-4 cursor-pointer"
                   >
                     {imageUrl ? (
@@ -71,11 +93,11 @@ export function RelatedProducts({ products = [], currentProductId }: RelatedProd
                   <div className="flex items-center justify-between text-xs mb-2">
                     <div className="flex items-center text-amber-500 gap-1">
                       {[...Array(5)].map((_, i) => (
-                        <Star key={i} weight="fill" className="w-3.5 h-3.5" />
+                        <Star key={i} weight="fill" className={`w-3.5 h-3.5 ${i < filledStars ? "" : "opacity-25"}`} />
                       ))}
                     </div>
                     <div className="text-gray-500 font-['Manrope']">
-                      Review <span className="text-black font-medium">35/5.0</span>
+                      Review <span className="text-black font-medium">{count}/{rating.toFixed(1)}</span>
                     </div>
                   </div>
 
@@ -101,7 +123,7 @@ export function RelatedProducts({ products = [], currentProductId }: RelatedProd
 
                 {/* View Button */}
                 <Link
-                  href={`/products/${slug}`}
+                  href={`/${slug}`}
                   className="w-full py-2.5 px-4 rounded-[5px] border border-amber-800 text-amber-800 text-sm font-semibold text-center hover:bg-amber-800 hover:text-white transition-colors font-['Manrope'] inline-block"
                 >
                   View

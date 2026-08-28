@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
+import { CharCounter } from "@/components/ui/char-counter"
 import { AddMetafieldDefinitionModal } from "@/components/modals/add-metafield-definition-modal"
 
 export default function CreatePageScreen() {
@@ -246,9 +247,13 @@ export default function CreatePageScreen() {
             {showSeoFields ? (
               <div className="space-y-3 pt-1">
                 <div>
-                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Page Title</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Page Title</label>
+                    <CharCounter value={seoTitle} limit={60} />
+                  </div>
                   <input
                     type="text"
+                    maxLength={60}
                     value={seoTitle}
                     onChange={(e) => setSeoTitle(e.target.value)}
                     placeholder={title || "SEO Page Title"}
@@ -256,11 +261,15 @@ export default function CreatePageScreen() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Meta Description</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Meta Description</label>
+                    <CharCounter value={seoDescription} limit={160} />
+                  </div>
                   <textarea
                     value={seoDescription}
                     onChange={(e) => setSeoDescription(e.target.value)}
                     rows={2}
+                    maxLength={160}
                     placeholder="Meta description for search engines..."
                     className="w-full p-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden"
                   />

@@ -9,6 +9,7 @@ from app.modules.catalog.model import (
     Location, InventoryItem,
     PurchaseOrder, PurchaseOrderItem,
     Transfer, GiftCard,
+    GiftCardProduct, GiftCardProductImage,
     CollectionType,
 )
 from app.modules.catalog.schema import (
@@ -22,6 +23,7 @@ from app.modules.catalog.schema import (
     PurchaseOrderItemCreate, PurchaseOrderItemUpdate,
     TransferCreate, TransferUpdate,
     GiftCardCreate, GiftCardUpdate,
+    GiftCardProductCreate, GiftCardProductUpdate, GiftCardProductListOut,
     CatalogOverview,
 )
 
@@ -708,6 +710,108 @@ async def update_gift_card(db: AsyncSession, gc_id: int, data: GiftCardUpdate) -
 
 async def delete_gift_card(db: AsyncSession, gc_id: int) -> bool:
     obj = await get_gift_card(db, gc_id)
+    if not obj:
+        return False
+    await db.delete(obj)
+    await db.commit()
+    return True
+
+
+# ===========================================================================
+# Gift Card Product – CRUD
+# ===========================================================================
+
+async def create_gift_card_product(db: AsyncSession, data: GiftCardProductCreate) -> GiftCardProduct:
+    from app.modules.catalog.model import GiftCardProductImage as GCProductImage
+    obj = GiftCardProduct(
+        code=data.code,
+        title=data.title,
+        description=data.description,
+        status=data.status,
+        base_price=data.base_price,
+        compare_at_price=data.compare_at_price,
+        seo_title=data.seo_title,
+        seo_description=data.seo_description,
+        meta_description=data.meta_description,
+        url_handle=data.url_handle,
+        product_ids=data.product_ids,
+        images=[GCProductImage(**img.model_dump()) for img in data.images],
+    )
+    db.add(obj)
+    await db.flush()
+    await db.commit()
+    await db.refresh(obj, attribute_names=["images"])
+    return obj
+
+
+async def get_gift_card_product(db: AsyncSession, gcp_id: int) -> GiftCardProduct | None:
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(GiftCardProduct)
+        .options(selectinload(GiftCardProduct.images))
+        .where(GiftCardProduct.id == gcp_id),
+    )
+    return result.scalar_one_or_none()
+
+
+def to_gift_card_product_list_out(obj: GiftCardProduct) -> GiftCardProductListOut:
+    images = sorted(obj.images, key=lambda img: img.position) if obj.images else []
+    return GiftCardProductListOut(
+        id=obj.id,
+        code=obj.code,
+        title=obj.title,
+        status=obj.status,
+        base_price=obj.base_price,
+        compare_at_price=obj.compare_at_price,
+        seo_title=obj.seo_title,
+        url_handle=obj.url_handle,
+        product_ids=obj.product_ids,
+        image_url=images[0].url if images else None,
+        created_at=obj.created_at,
+        updated_at=obj.updated_at,
+    )
+
+
+async def list_gift_card_products(
+    db: AsyncSession,
+    search: str | None = None,
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
+) -> list[GiftCardProductListOut]:
+    from sqlalchemy.orm import selectinload
+    query = (
+        select(GiftCardProduct)
+        .options(selectinload(GiftCardProduct.images))
+    )
+    if search:
+        query = query.where(
+            or_(
+                GiftCardProduct.title.ilike(f"%{search}%"),
+                GiftCardProduct.url_handle.ilike(f"%{search}%"),
+            ),
+        )
+    if status:
+        query = query.where(GiftCardProduct.status == status)
+    query = query.order_by(GiftCardProduct.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    objs = list(result.scalars().all())
+    return [to_gift_card_product_list_out(o) for o in objs]
+
+
+async def update_gift_card_product(db: AsyncSession, gcp_id: int, data: GiftCardProductUpdate) -> GiftCardProduct | None:
+    obj = await get_gift_card_product(db, gcp_id)
+    if not obj:
+        return None
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(obj, field, value)
+    await db.commit()
+    await db.refresh(obj, attribute_names=["images"])
+    return obj
+
+
+async def delete_gift_card_product(db: AsyncSession, gcp_id: int) -> bool:
+    obj = await get_gift_card_product(db, gcp_id)
     if not obj:
         return False
     await db.delete(obj)

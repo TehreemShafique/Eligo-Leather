@@ -99,8 +99,12 @@ async def create_order(db: AsyncSession, data: OrderCreate) -> Order:
     return order
 
 
-async def get_order(db: AsyncSession, order_id: int) -> Order | None:
-    result = await db.execute(
+async def get_order(
+    db: AsyncSession, order_id: int | str
+) -> Order | None:
+    """Resolve an order by its numeric db id or by its human-friendly
+    ``order_number`` string (e.g. "12348")."""
+    query = (
         select(Order)
         .options(
             selectinload(Order.items),
@@ -108,8 +112,15 @@ async def get_order(db: AsyncSession, order_id: int) -> Order | None:
             selectinload(Order.notes),
             selectinload(Order.customer),
         )
-        .where(Order.id == order_id)
     )
+    if isinstance(order_id, str) and not order_id.isdigit():
+        query = query.where(Order.order_number == order_id)
+    else:
+        num = int(order_id)
+        query = query.where(
+            or_(Order.id == num, Order.order_number == str(num))
+        )
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 

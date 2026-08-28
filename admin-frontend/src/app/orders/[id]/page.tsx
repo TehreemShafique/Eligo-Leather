@@ -144,6 +144,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
 
   const [loading, setLoading] = useState(true)
   const [order, setOrder] = useState<OrderData | null>(null)
+  const [orderId, setOrderId] = useState<number | null>(null)
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [notes, setNotes] = useState<OrderNote[]>([])
 
@@ -163,8 +164,9 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const fetchOrder = useCallback(async () => {
     if (!id) return
     try {
-      const data = await apiFetch<OrderData>(`/api/v1/orders/${id}`)
+      const data = await apiFetch<OrderData>(`/api/v1/orders/${encodeURIComponent(id)}`)
       setOrder(data)
+      setOrderId(data.id)
       setEditShippingAddress(data.shipping_address || "")
       setInternalNote(data.internal_note || "")
     } catch {
@@ -175,20 +177,20 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   }, [id])
 
   const fetchAuditLog = useCallback(async () => {
-    if (!id) return
+    if (orderId == null) return
     try {
-      const data = await apiFetch<AuditLog[]>(`/api/v1/orders/${id}/audit-log`)
+      const data = await apiFetch<AuditLog[]>(`/api/v1/orders/${orderId}/audit-log`)
       setAuditLogs(data)
     } catch { /* silent */ }
-  }, [id])
+  }, [orderId])
 
   const fetchNotes = useCallback(async () => {
-    if (!id) return
+    if (orderId == null) return
     try {
-      const data = await apiFetch<OrderNote[]>(`/api/v1/orders/${id}/notes`)
+      const data = await apiFetch<OrderNote[]>(`/api/v1/orders/${orderId}/notes`)
       setNotes(data)
     } catch { /* silent */ }
-  }, [id])
+  }, [orderId])
 
   useEffect(() => {
     fetchOrder(); fetchAuditLog(); fetchNotes()
@@ -202,7 +204,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const handleMarkPaid = async () => {
     if (!order) return
     try {
-      await apiFetch(`/api/v1/orders/mark-paid/${id}`, { method: "POST" })
+      await apiFetch(`/api/v1/orders/mark-paid/${orderId}`, { method: "POST" })
       toast.success("Payment status marked as Paid!")
       fetchOrder(); fetchAuditLog()
     } catch { toast.error("Failed to update payment status") }
@@ -211,7 +213,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const handleMarkDelivered = async () => {
     if (!order) return
     try {
-      await apiFetch(`/api/v1/orders/mark-delivered/${id}`, { method: "POST" })
+      await apiFetch(`/api/v1/orders/mark-delivered/${orderId}`, { method: "POST" })
       toast.success("Order marked as delivered!")
       fetchOrder(); fetchAuditLog()
     } catch { toast.error("Failed to update delivery status") }
@@ -241,7 +243,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
     }
     setRestocking(true)
     try {
-      await apiFetch(`/api/v1/orders/${id}/restock`, { method: "POST" })
+      await apiFetch(`/api/v1/orders/${orderId}/restock`, { method: "POST" })
       toast.success(`${restockable.length} item(s) returned to inventory!`)
       fetchOrder(); fetchAuditLog()
     } catch {
@@ -254,7 +256,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const handleUpdateTags = async (newTags: string) => {
     if (!order) return
     try {
-      await apiFetch(`/api/v1/orders/${id}`, {
+      await apiFetch(`/api/v1/orders/${orderId}`, {
         method: "PATCH",
         body: JSON.stringify({ tags: newTags }),
       })
@@ -280,7 +282,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
     e.preventDefault()
     if (!commentText.trim()) return
     try {
-      await apiFetch(`/api/v1/orders/${id}/notes`, {
+      await apiFetch(`/api/v1/orders/${orderId}/notes`, {
         method: "POST",
         body: JSON.stringify({ body: commentText, is_customer_visible: false }),
       })
@@ -333,7 +335,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const handleSaveNote = async () => {
     if (!order) return
     try {
-      await apiFetch(`/api/v1/orders/${id}`, {
+      await apiFetch(`/api/v1/orders/${orderId}`, {
         method: "PATCH",
         body: JSON.stringify({ internal_note: internalNote }),
       })
@@ -344,7 +346,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const handleSaveAddress = async () => {
     if (!order) return
     try {
-      await apiFetch(`/api/v1/orders/${id}`, {
+      await apiFetch(`/api/v1/orders/${orderId}`, {
         method: "PATCH",
         body: JSON.stringify({ shipping_address: editShippingAddress }),
       })
@@ -432,7 +434,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
               className="px-3.5 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {restocking ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : <ArrowCounterClockwise className="w-3.5 h-3.5" />}
-              <span>{restocking ? "Restocking..." : `Restock ${restockableItems.length} item${restockableItems.length > 1 ? "s" : ""}`}</span>
+              <span>{restocking ? "Restocking..." : `Restock item${restockableItems.length > 1 ? "s" : ""}`}</span>
             </button>
           )}
           <div className="relative">

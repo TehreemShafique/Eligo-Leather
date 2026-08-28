@@ -77,7 +77,7 @@ function ProductCard({
   return (
     <article className="group relative flex flex-col lg:h-[24.791667cqw] lg:w-[16.666667cqw] lg:block">
       <Link
-        href={`/products/${item.slug || item.id}`}
+        href={`/${item.slug || item.id}`}
         className="group/image relative block aspect-square w-full overflow-hidden rounded-[20px] bg-zinc-100 lg:absolute lg:left-0 lg:top-0 lg:h-[16.666667cqw] lg:w-[16.666667cqw] lg:rounded-[1.041667cqw]"
       >
         <Image
@@ -133,7 +133,7 @@ function ProductCard({
       </h2>
 
       <Link
-        href={`/products/${item.slug || item.id}`}
+        href={`/${item.slug || item.id}`}
         className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-[5px] border border-amber-800 px-7 text-sm font-semibold leading-5 text-amber-800 transition-colors hover:bg-amber-800 hover:text-white lg:absolute lg:left-0 lg:top-[22.708333cqw] lg:mt-0 lg:h-[2.083333cqw] lg:w-[16.666667cqw] lg:rounded-[0.260417cqw] lg:px-[1.458333cqw] lg:text-[0.729167cqw] lg:leading-[1.041667cqw]"
       >
         View
@@ -306,7 +306,7 @@ export function CategoryContent({
               className="group flex flex-col gap-6 rounded-[20px] border border-gray-100 bg-white p-4 shadow-sm sm:flex-row"
             >
               <Link
-                href={`/products/${product.slug || product.id}`}
+                href={`/${product.slug || product.id}`}
                 className="relative block aspect-square w-full shrink-0 overflow-hidden rounded-[15px] bg-zinc-100 sm:h-48 sm:w-48"
               >
                 <Image
@@ -337,7 +337,7 @@ export function CategoryContent({
                   </span>
                 </p>
                 <Link
-                  href={`/products/${product.slug || product.id}`}
+                  href={`/${product.slug || product.id}`}
                   className="inline-flex h-10 w-40 items-center justify-center rounded-[5px] border border-amber-800 text-sm font-semibold text-amber-800 hover:bg-amber-800 hover:text-white"
                 >
                   View

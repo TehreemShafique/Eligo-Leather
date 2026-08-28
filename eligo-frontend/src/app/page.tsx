@@ -8,6 +8,7 @@ import { ProductsSection } from "@/components/home/products-section"
 import { TestimonialsSection } from "@/components/home/testimonials-section"
 import { FaqSection } from "@/components/home/faq-section"
 import { NewsletterSection } from "@/components/home/newsletter-section"
+import { fetchAllReviewSummaries } from "@/modules/reviews/api"
 
 export const revalidate = 60
 
@@ -110,6 +111,9 @@ function pickBestSellingItems(items: HomeProductItem[]): HomeProductItem[] {
 export default async function HomePage() {
   let productsList: HomeProductItem[] = []
 
+  // Real average star ratings + counts from approved reviews (backend).
+  const reviewSummaries = await fetchAllReviewSummaries()
+
   try {
     const rawProducts = await listProducts({ status: "Active", limit: 200 })
 
@@ -125,6 +129,7 @@ export default async function HomePage() {
             : undefined) ||
           sortedImgs[1]?.url ||
           primaryImg
+        const summary = reviewSummaries[String(p.id)]
         return {
           id: p.id,
           slug: p.url_handle?.trim() ? p.url_handle : String(p.id),
@@ -134,8 +139,8 @@ export default async function HomePage() {
             ? parseFloat(p.compare_at_price)
             : Math.round((p.price ? parseFloat(p.price) : 0) * 1.2),
           salePrice: p.price ? parseFloat(p.price) : 0,
-          rating: 5.0,
-          reviewCount: 35,
+          rating: summary?.average_rating ?? 0,
+          reviewCount: summary?.review_count ?? 0,
           image: primaryImg,
           secondaryImage: hoverImg,
           isSale: Boolean(p.compare_at_price),

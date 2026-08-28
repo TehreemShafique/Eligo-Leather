@@ -93,6 +93,16 @@ async def delete_my_schema(
         raise HTTPException(status_code=404, detail="Schema not found")
 
 
+@router.get("/public/schemas", response_model=list[PublicStoreSchemaOut])
+async def get_all_public_schemas(
+    db: AsyncSession = Depends(get_db),
+):
+    """Public read used by the storefront SchemaInjector. Returns all active
+    schemas for the single-owner store so the renderer can match them against
+    each page's path without needing to know the owner's user id."""
+    return await service.list_public_schemas(db)
+
+
 @router.get("/{user_id}/schemas", response_model=list[PublicStoreSchemaOut])
 async def get_public_schemas(
     user_id: int,

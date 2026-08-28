@@ -2,6 +2,8 @@
 
 import { API_BASE } from "@/lib/api"
 
+const STORE_URL = process.env.NEXT_PUBLIC_STORE_URL || ""
+
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -9,18 +11,8 @@ import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
   ArrowRight,
-  TextB,
-  TextItalic,
-  TextUnderline,
-  ListBullets,
-  ListNumbers,
-  Link as LinkIcon,
   UploadSimple,
   Plus,
-  TextAlignLeft,
-  TextAlignCenter,
-  TextAlignRight,
-  Code,
   Trash,
   Tag,
   Ruler,
@@ -31,149 +23,9 @@ import {
   X,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
-
-// MS-Word Style WYSIWYG Editor with Top Formatting Toolbar
-function WysiwygRichEditor({
-  initialHtml,
-  onChange,
-  minHeight = "120px",
-}: {
-  initialHtml: string
-  onChange: (html: string) => void
-  minHeight?: string
-}) {
-  const editorRef = useRef<HTMLDivElement>(null)
-  const [headingBlock, setHeadingBlock] = useState("p")
-  const [isCodeView, setIsCodeView] = useState(false)
-  const [rawHtml, setRawHtml] = useState(initialHtml)
-
-  useEffect(() => {
-    if (editorRef.current && !editorRef.current.innerHTML) {
-      editorRef.current.innerHTML = initialHtml
-    }
-  }, [initialHtml])
-
-  const exec = (command: string, value: string | undefined = undefined) => {
-    document.execCommand(command, false, value)
-    if (editorRef.current) {
-      const updated = editorRef.current.innerHTML
-      setRawHtml(updated)
-      onChange(updated)
-    }
-  }
-
-  const handleHeadingChange = (tag: string) => {
-    setHeadingBlock(tag)
-    exec("formatBlock", `<${tag}>`)
-  }
-
-  const handleInput = () => {
-    if (editorRef.current) {
-      const updated = editorRef.current.innerHTML
-      setRawHtml(updated)
-      onChange(updated)
-    }
-  }
-
-  const handleCodeInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value
-    setRawHtml(val)
-    onChange(val)
-    if (editorRef.current) {
-      editorRef.current.innerHTML = val
-    }
-  }
-
-  return (
-    <div className="border border-gray-300 rounded-xl overflow-hidden bg-white shadow-2xs">
-      <div className="p-2 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center gap-1.5 text-xs text-gray-700 font-sans shadow-2xs select-none">
-        <select
-          value={headingBlock}
-          onChange={(e) => handleHeadingChange(e.target.value)}
-          className="h-7 px-2 bg-white border border-gray-300 rounded-lg text-[11px] font-semibold text-gray-800 focus:outline-hidden"
-        >
-          <option value="p">Paragraph</option>
-          <option value="h1">Heading 1 (24px)</option>
-          <option value="h2">Heading 2 (20px)</option>
-          <option value="h3">Heading 3 (16px)</option>
-        </select>
-
-        <div className="w-px h-5 bg-gray-300 mx-0.5" />
-
-        <button type="button" onClick={() => exec("bold")} className="p-1.5 hover:bg-gray-200 rounded font-bold cursor-pointer transition-colors" title="Bold (Ctrl+B)">
-          <TextB className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button type="button" onClick={() => exec("italic")} className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors" title="Italic (Ctrl+I)">
-          <TextItalic className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button type="button" onClick={() => exec("underline")} className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors" title="Underline (Ctrl+U)">
-          <TextUnderline className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <div className="w-px h-5 bg-gray-300 mx-0.5" />
-
-        <button type="button" onClick={() => exec("justifyLeft")} className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors" title="Align Left">
-          <TextAlignLeft className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button type="button" onClick={() => exec("justifyCenter")} className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors" title="Align Center">
-          <TextAlignCenter className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button type="button" onClick={() => exec("justifyRight")} className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors" title="Align Right">
-          <TextAlignRight className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <div className="w-px h-5 bg-gray-300 mx-0.5" />
-
-        <button type="button" onClick={() => exec("insertUnorderedList")} className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors" title="Bulleted List">
-          <ListBullets className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button type="button" onClick={() => exec("insertOrderedList")} className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors" title="Numbered List">
-          <ListNumbers className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button type="button" onClick={() => { const url = prompt("Enter link URL:", "https://eligoleather.com"); if (url) exec("createLink", url) }} className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors" title="Insert Link">
-          <LinkIcon className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <div className="w-px h-5 bg-gray-300 mx-0.5" />
-
-        <button
-          type="button"
-          onClick={() => setIsCodeView(!isCodeView)}
-          className={`p-1.5 rounded ml-auto cursor-pointer transition-colors ${
-            isCodeView ? "bg-amber-200 text-amber-950 font-bold" : "hover:bg-gray-200"
-          }`}
-          title="Toggle HTML Code View"
-        >
-          <Code className="w-4 h-4 text-gray-900" />
-        </button>
-      </div>
-
-      {!isCodeView ? (
-        <div
-          ref={editorRef}
-          contentEditable
-          suppressContentEditableWarning={true}
-          onInput={handleInput}
-          style={{ minHeight }}
-          className="p-4 text-xs text-gray-900 focus:outline-hidden leading-relaxed font-sans [&_h1]:text-2xl [&_h1]:font-extrabold [&_h1]:text-gray-900 [&_h1]:mb-2 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-amber-900 [&_h2]:mb-2 [&_h3]:text-base [&_h3]:font-bold [&_h3]:text-gray-800 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_a]:text-amber-800 [&_a]:underline font-normal"
-        />
-      ) : (
-        <textarea
-          rows={6}
-          value={rawHtml}
-          onChange={handleCodeInput}
-          className="w-full p-4 text-xs font-mono bg-gray-900 text-amber-400 focus:outline-hidden leading-relaxed"
-        />
-      )}
-    </div>
-  )
-}
+import { LexicalEditor } from "@/components/ui/lexical-editor"
+import { CharCounter } from "@/components/ui/char-counter"
+import { useUnsavedChanges } from "@/components/unsaved-changes"
 
 interface CustomMetafieldDefinition {
   id: string
@@ -194,7 +46,6 @@ interface VariantItem {
   colorName: string
   hex: string
   sku: string
-  price: string
   stockQty: string
   isCanonical: boolean
   handleSuffix: string
@@ -278,6 +129,7 @@ export default function AdminNewProductPage() {
 
   // Form State: Product Details
   const [title, setTitle] = useState("")
+  const [slugInput, setSlugInput] = useState("")
   const [description, setDescription] = useState("")
   const [material, setMaterial] = useState("")
   const [dimensions, setDimensions] = useState("")
@@ -312,6 +164,30 @@ export default function AdminNewProductPage() {
   // Total calculated stock across all color variants
   const totalStockQuantity = colorVariants.reduce((sum, v) => sum + (parseInt(v.stockQty) || 0), 0)
 
+  const { setUnsavedChanges } = useUnsavedChanges()
+
+  const hasUnsavedChanges =
+    title.trim() !== "" ||
+    slugInput.trim() !== "" ||
+    description.trim() !== "" ||
+    material.trim() !== "" ||
+    dimensions.trim() !== "" ||
+    shippingReturnPolicy.trim() !== "" ||
+    price.trim() !== "" ||
+    compareAtPrice.trim() !== "" ||
+    sku.trim() !== "" ||
+    productType.trim() !== "" ||
+    selectedCategories.length > 0 ||
+    pageTitle.trim() !== "" ||
+    metaDescription.trim() !== "" ||
+    mediaItems.length > 0 ||
+    colorVariants.length > 0 ||
+    customMetafields.length > 0
+
+  useEffect(() => {
+    setUnsavedChanges(hasUnsavedChanges)
+  }, [setUnsavedChanges, hasUnsavedChanges])
+
   // Handlers
   // Rebuilds each variant's pic list (index 0 = main, index 1 = hover) from all media bound to its color.
   const syncVariantImages = (mediaList: MediaItem[], variants: VariantItem[]) =>
@@ -340,7 +216,7 @@ export default function AdminNewProductPage() {
     setMediaItems(prev => prev.map(m => m.id === mediaId ? { ...m, altText } : m))
   }
 
-  const handleUpdateVariantField = (id: string, field: "price" | "stockQty" | "sku", val: string) => {
+  const handleUpdateVariantField = (id: string, field: "stockQty" | "sku", val: string) => {
     setColorVariants(prev => prev.map(v => v.id === id ? { ...v, [field]: val } : v))
   }
 
@@ -374,8 +250,9 @@ export default function AdminNewProductPage() {
       id: generatedId,
       colorName: newColorName,
       hex: newColorHex,
-      sku: `004-DYN-${newColorName.slice(0, 3).toUpperCase()}`,
-      price: price || "2799",
+      sku: sku
+        ? `${sku.trim().replace(/-+$/, "")}-${newColorName.slice(0, 3).toUpperCase()}`
+        : newColorName.slice(0, 3).toUpperCase(),
       stockQty: "50",
       isCanonical: false,
       handleSuffix: `?variant=${generatedId}`,
@@ -479,8 +356,22 @@ export default function AdminNewProductPage() {
     toast.info("Removed custom metafield definition.")
   }
 
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
-  const selectedVariantObj = colorVariants.find(v => v.colorName === selectedPreviewColor) || colorVariants[0]
+  const slug = slugInput
+    ? slugInput.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+    : title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+  const selectedVariantObj =
+    colorVariants.find(v => v.colorName === selectedPreviewColor) ||
+    colorVariants[0] ||
+    {
+      id: "",
+      colorName: selectedPreviewColor || "",
+      hex: "#000000",
+      sku: "",
+      stockQty: "0",
+      isCanonical: false,
+      handleSuffix: "",
+      imageUrls: [],
+    }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -509,7 +400,7 @@ export default function AdminNewProductPage() {
         is_canonical: v.isCanonical,
         image_url: v.imageUrls[0] || null,
         sku: v.sku,
-        price: parseFloat(v.price || price || "0"),
+        price: parseFloat(price || "0"),
         compare_at_price: compareAtPrice ? parseFloat(compareAtPrice) : null,
         inventory_quantity: parseInt(v.stockQty || "0"),
       })),
@@ -629,7 +520,7 @@ export default function AdminNewProductPage() {
               <Desktop className="w-4 h-4" />
               <span>Interactive Customer Storefront Live Preview</span>
             </div>
-            <span className="text-xs text-gray-400 font-mono">https://eligoleather.com/products/{slug}</span>
+            <span className="text-xs text-gray-400 font-mono">{STORE_URL ? `${STORE_URL.replace(/\/$/, "")}` : "https://yourdomain.com"}/{slug}</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
@@ -637,9 +528,6 @@ export default function AdminNewProductPage() {
             <div className="md:col-span-6 space-y-4">
               <div className="relative w-full h-96 rounded-2xl overflow-hidden bg-gray-100 border border-gray-200 shadow-md">
                 <Image src={selectedVariantObj.imageUrls[0] || "https://images.unsplash.com/photo-1627123424574-724758594e93?w=600"} alt={title} fill unoptimized className="object-cover" />
-                <span className="absolute top-3 left-3 bg-black/70 text-white text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-xs">
-                  Active Swatch: {selectedPreviewColor}
-                </span>
               </div>
 
               <div className="flex gap-3">
@@ -664,7 +552,7 @@ export default function AdminNewProductPage() {
                 <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 block">{vendor} &bull; {productType}</span>
                 <h1 className="text-2xl font-bold text-gray-900 mt-1">{title}</h1>
                 <div className="flex items-center gap-3 mt-2">
-                  <span className="text-xl font-bold text-amber-900">Rs. {selectedVariantObj.price || price || "2,799"}</span>
+                  <span className="text-xl font-bold text-amber-900">Rs. {price || "—"}</span>
                   {compareAtPrice && <span className="text-sm text-gray-400 line-through">Rs. {compareAtPrice}</span>}
                   <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full border border-emerald-200">
                     In Stock ({selectedVariantObj.stockQty} units for {selectedPreviewColor})
@@ -697,40 +585,45 @@ export default function AdminNewProductPage() {
                 <div dangerouslySetInnerHTML={{ __html: description }} className="prose prose-xs max-w-none text-gray-700" />
               </div>
 
-              {/* Rendered Metafields & Specifications Tabs */}
-              <div className="pt-3 border-t border-gray-100 space-y-4">
-                <span className="font-bold text-gray-900 block uppercase tracking-wider text-[11px]">Product Specifications &amp; Policy Metafields</span>
-
-                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
-                  <span className="font-bold text-amber-900 flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5" />
-                    <span>Materials</span>
-                  </span>
-                  <div dangerouslySetInnerHTML={{ __html: material }} className="text-gray-700 text-xs" />
-                </div>
-
-                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
-                  <span className="font-bold text-amber-900 flex items-center gap-1.5">
-                    <Ruler className="w-3.5 h-3.5" />
-                    <span>Dimensions</span>
-                  </span>
-                  <div dangerouslySetInnerHTML={{ __html: dimensions }} className="text-gray-700 text-xs" />
-                </div>
-
-                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
-                  <span className="font-bold text-amber-900 flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5" />
-                    <span>Shipping Policy</span>
-                  </span>
-                  <div dangerouslySetInnerHTML={{ __html: shippingReturnPolicy }} className="text-gray-700 text-xs" />
-                </div>
-
-                {customMetafields.map(m => (
-                  <div key={m.id} className="p-4 bg-amber-50/50 rounded-2xl border border-amber-200 space-y-1">
-                    <span className="font-bold text-gray-900">{m.label}</span>
-                    <div dangerouslySetInnerHTML={{ __html: m.value }} className="text-gray-700 text-xs" />
+              {/* Storefront-matching 4-column Specification Grid */}
+              <div className="pt-6 border-t border-gray-100">
+                <div className="bg-white rounded-[20px] border border-amber-800 shadow-xs overflow-hidden min-h-[180px]">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-amber-800 min-h-[180px]">
+                    {[
+                      {
+                        title: "Product Description",
+                        content: description?.trim() || "No description available for this product.",
+                      },
+                      {
+                        title: "Product Material",
+                        content: material?.trim() || "Material details will be added soon.",
+                      },
+                      {
+                        title: "Product Dimension",
+                        content: dimensions?.trim() || "Dimension details will be added soon.",
+                      },
+                      {
+                        title: "Shipping & Return Policy",
+                        content:
+                          shippingReturnPolicy?.trim() ||
+                          "Shipping and return details will be added soon.",
+                      },
+                    ].map((col, idx) => (
+                      <div key={idx} className="flex flex-col h-full">
+                        <div className="bg-amber-800 px-5 py-3 border-b border-amber-800 shrink-0">
+                          <h3 className="text-white text-sm font-semibold tracking-wide">{col.title}</h3>
+                        </div>
+                        <div className="p-5 flex-1 bg-white text-xs leading-relaxed text-gray-900">
+                          {col.content
+                            ? col.content.includes("<") && col.content.includes(">")
+                              ? <div dangerouslySetInnerHTML={{ __html: col.content }} className="space-y-2" />
+                              : <div className="whitespace-pre-line">{col.content}</div>
+                            : null}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
             </div>
           </div>
@@ -745,6 +638,21 @@ export default function AdminNewProductPage() {
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-6">
               <div className="border-b border-gray-100 pb-3">
                 <h2 className="text-sm font-bold text-gray-900">Product Details</h2>
+              </div>
+
+              {/* Slug */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Slug / URL Handle</label>
+                <div className="flex items-center gap-0">
+                  {STORE_URL && <span className="h-11 px-3 bg-gray-100 border border-gray-300 border-r-0 rounded-l-xl text-[11px] text-gray-500 font-mono flex items-center shrink-0">{STORE_URL.replace(/\/$/, "")}/</span>}
+                  <input
+                    type="text"
+                    value={slugInput}
+                    onChange={(e) => setSlugInput(e.target.value)}
+                    placeholder={title ? title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : "product-slug"}
+                    className={`${STORE_URL ? "rounded-r-xl" : "rounded-xl"} flex-1 h-11 px-4 bg-gray-50 border border-gray-300 font-mono text-sm text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-amber-800/40`}
+                  />
+                </div>
               </div>
 
               {/* Title Input */}
@@ -765,8 +673,8 @@ export default function AdminNewProductPage() {
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">
                   Product Description
                 </label>
-                <WysiwygRichEditor
-                  initialHtml={description}
+                <LexicalEditor
+                  value={description}
                   onChange={setDescription}
                   minHeight="140px"
                 />
@@ -778,8 +686,8 @@ export default function AdminNewProductPage() {
                   <Tag className="w-4 h-4 text-amber-800" />
                   <span>Material &amp; Crafting Specifications</span>
                 </div>
-                <WysiwygRichEditor
-                  initialHtml={material}
+                <LexicalEditor
+                  value={material}
                   onChange={setMaterial}
                   minHeight="100px"
                 />
@@ -791,8 +699,8 @@ export default function AdminNewProductPage() {
                   <Ruler className="w-4 h-4 text-amber-800" />
                   <span>Product Dimensions</span>
                 </div>
-                <WysiwygRichEditor
-                  initialHtml={dimensions}
+                <LexicalEditor
+                  value={dimensions}
                   onChange={setDimensions}
                   minHeight="90px"
                 />
@@ -804,8 +712,8 @@ export default function AdminNewProductPage() {
                   <Truck className="w-4 h-4 text-amber-800" />
                   <span>Shipping &amp; Return Policy</span>
                 </div>
-                <WysiwygRichEditor
-                  initialHtml={shippingReturnPolicy}
+                <LexicalEditor
+                  value={shippingReturnPolicy}
                   onChange={setShippingReturnPolicy}
                   minHeight="100px"
                 />
@@ -885,7 +793,7 @@ export default function AdminNewProductPage() {
               ) : (
                 <div className="border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center space-y-3 bg-gray-50/80">
                   <UploadSimple className="w-8 h-8 text-amber-800 mx-auto" />
-                  <p className="text-xs text-gray-600 font-semibold">No product photos uploaded yet.</p>
+                  <p className="text-xs text-gray-600 font-semibold">png, jpg, jpeg, webp</p>
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -898,7 +806,7 @@ export default function AdminNewProductPage() {
               )}
             </div>
 
-            {/* CARD 3: PRODUCT VARIANT LOGIC & COLOR SWATCH MATRIX (With Per-Variant Stock & Price Inputs) */}
+            {/* CARD 3: PRODUCT VARIANT LOGIC & COLOR SWATCH MATRIX (With Per-Variant Stock & SKU Inputs) */}
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
                 <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wide">
@@ -952,7 +860,6 @@ export default function AdminNewProductPage() {
                       <th className="eligo-th">Variant Photo</th>
                       <th className="eligo-th">Color Swatch</th>
                       <th className="eligo-th">SKU</th>
-                      <th className="eligo-th">Price (Rs)</th>
                       <th className="eligo-th">Color Stock Qty</th>
                       <th className="eligo-th text-center">Canonical Status</th>
                       <th className="eligo-th text-right">Actions</th>
@@ -1001,15 +908,6 @@ export default function AdminNewProductPage() {
                             value={v.sku}
                             onChange={(e) => handleUpdateVariantField(v.id, "sku", e.target.value)}
                             className="w-28 h-8 px-2 bg-white border border-gray-300 rounded-lg font-mono text-xs text-gray-900"
-                          />
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <input
-                            type="text"
-                            value={v.price}
-                            onChange={(e) => handleUpdateVariantField(v.id, "price", e.target.value)}
-                            className="w-20 h-8 px-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-900"
                           />
                         </td>
 
@@ -1112,16 +1010,19 @@ export default function AdminNewProductPage() {
                   Search Engine Listing Preview
                 </h3>
                 <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-1">
-                  <span className="text-[11px] text-emerald-800 font-mono block">https://eligoleather.com/products/{slug}</span>
+                  <span className="text-[11px] text-emerald-800 font-mono block">{STORE_URL ? `${STORE_URL.replace(/\/$/, "")}` : "https://yourdomain.com"}/{slug}</span>
                   <span className="text-sm font-bold text-blue-700 hover:underline block">{pageTitle}</span>
                   <span className="text-xs text-gray-600 block line-clamp-2">{metaDescription.replace(/<[^>]+>/g, '')}</span>
                 </div>
                 <div className="space-y-3 text-xs">
                   <div>
-                    <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">META TITLE</label>
+                    <div className="flex items-center justify-between">
+                      <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">META TITLE</label>
+                      <CharCounter value={pageTitle} limit={60} />
+                    </div>
                     <input
                       type="text"
-                      maxLength={70}
+                      maxLength={60}
                       value={pageTitle}
                       onChange={(e) => setPageTitle(e.target.value)}
                       className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 text-gray-900 font-semibold"
@@ -1129,30 +1030,34 @@ export default function AdminNewProductPage() {
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">META DESCRIPTION</label>
-                    <WysiwygRichEditor initialHtml={metaDescription} onChange={setMetaDescription} minHeight="80px" />
+                    <div className="flex items-center justify-between">
+                      <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">META DESCRIPTION</label>
+                      <CharCounter value={metaDescription} limit={160} />
+                    </div>
+                    <LexicalEditor value={metaDescription} onChange={setMetaDescription} minHeight="80px" />
                   </div>
                 </div>
 
                 {/* Real-World Full JSON-LD Schema.org Script Generator & Interactive Code Editor */}
                 <div className="pt-3 border-t border-gray-100 space-y-2">
                   {(() => {
+                    const domain = STORE_URL || "https://yourdomain.com"
                     const defaultSchemaObj = {
                       "@context": "https://schema.org",
                       "@graph": [
                         {
                           "@type": "Product",
                           "name": title || "Product Title",
-                          "image": mediaItems.length > 0 ? mediaItems.map(m => m.url) : ["https://eligoleather.com/placeholder.jpg"],
+                          "image": mediaItems.length > 0 ? mediaItems.map(m => m.url) : [`${domain}/placeholder.jpg`],
                           "description": metaDescription.replace(/<[^>]+>/g, '') || title || "Handcrafted leather product",
                           "sku": sku || `ELIGO-${Date.now()}`,
                           "mpn": `MPN-${sku || Date.now()}`,
                           "brand": { "@type": "Brand", "name": vendor || "Eligo Leather" },
                           "offers": {
                             "@type": "Offer",
-                            "url": `https://eligoleather.com/products/${slug || "product"}`,
+                            "url": `${domain}/${slug || "product"}`,
                             "priceCurrency": "PKR",
-                            "price": price || "1699",
+                            "price": price || "",
                             "priceValidUntil": "2028-12-31",
                             "itemCondition": "https://schema.org/NewCondition",
                             "availability": "https://schema.org/InStock",
@@ -1167,8 +1072,8 @@ export default function AdminNewProductPage() {
                         {
                           "@type": "Organization",
                           "name": "Eligo Leather Official Store",
-                          "url": "https://eligoleather.com",
-                          "logo": "https://eligoleather.com/logo.png",
+                          "url": domain,
+                          "logo": `${domain}/logo.png`,
                           "sameAs": [
                             "https://facebook.com/eligoleather",
                             "https://instagram.com/eligoleather"
@@ -1177,16 +1082,16 @@ export default function AdminNewProductPage() {
                         {
                           "@type": "BreadcrumbList",
                           "itemListElement": [
-                            { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://eligoleather.com" },
+                            { "@type": "ListItem", "position": 1, "name": "Home", "item": domain },
                             {
                               "@type": "ListItem",
                               "position": 2,
                               "name": selectedCategories[0] || "Products",
                               "item": selectedCategories[0]
-                                ? `https://eligoleather.com/categories/${selectedCategories[0].toLowerCase().replace(/\s+/g, '-')}`
-                                : "https://eligoleather.com/products"
+                                ? `${domain}/categories/${selectedCategories[0].toLowerCase().replace(/\s+/g, '-')}`
+                                : `${domain}/products`
                             },
-                            { "@type": "ListItem", "position": 3, "name": title || "Product Title", "item": `https://eligoleather.com/products/${slug || "product"}` }
+                            { "@type": "ListItem", "position": 3, "name": title || "Product Title", "item": `${domain}/${slug || "product"}` }
                           ]
                         },
                         {
@@ -1256,15 +1161,31 @@ export default function AdminNewProductPage() {
                             <button
                               type="button"
                               onClick={async () => {
+                                const rawJson = computedScriptCode
+                                  .replace(/<script[^>]*>/gi, "")
+                                  .replace(/<\/script>/gi, "")
+                                  .trim()
                                 try {
-                                  await fetch(`${API_BASE}/api/v1/store/header-scripts`, {
+                                  JSON.parse(rawJson)
+                                } catch (parseErr) {
+                                  toast.error("Schema JSON is invalid — please fix the code before publishing.")
+                                  return
+                                }
+                                try {
+                                  await fetch(`${API_BASE}/api/v1/store/schemas`, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ header_scripts: computedScriptCode }),
+                                    body: JSON.stringify({
+                                      name: `Product Schema - ${title.trim() || slug || "product"}`,
+                                      schema_type: "product",
+                                      target_pages: `/${slug || "product"}`,
+                                      schema_json: rawJson,
+                                      is_active: true,
+                                    }),
                                   })
-                                  toast.success("Saved & Published custom script to Customer Events (Database)!")
-                                } catch (e) {
-                                  toast.success("Script copied and ready for Customer Events!")
+                                  toast.success("Schema published to this product's detail page for SEO!")
+                                } catch (err) {
+                                  toast.error("Could not publish schema to the database.")
                                 }
                               }}
                               className="px-2.5 py-1 bg-amber-800 hover:bg-amber-900 text-white font-bold text-[11px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
@@ -1315,8 +1236,8 @@ export default function AdminNewProductPage() {
                           <Trash className="w-4 h-4" />
                         </button>
                       </div>
-                      <WysiwygRichEditor
-                        initialHtml={field.value}
+                      <LexicalEditor
+                        value={field.value}
                         onChange={val => handleUpdateCustomMetafield(field.id, "value", val)}
                         minHeight="80px"
                       />

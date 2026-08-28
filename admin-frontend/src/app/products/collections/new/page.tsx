@@ -2,6 +2,8 @@
 
 import { API_BASE } from "@/lib/api"
 
+const STORE_URL = process.env.NEXT_PUBLIC_STORE_URL || ""
+
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -9,6 +11,7 @@ import {
   ArrowLeft,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { CharCounter } from "@/components/ui/char-counter"
 
 const COLLECTION_TYPES = [
   { value: "wallets", label: "Wallets" },
@@ -20,6 +23,7 @@ const COLLECTION_TYPES = [
 export default function AdminNewCollectionPage() {
   const router = useRouter()
   const [title, setTitle] = useState("")
+  const [slugInput, setSlugInput] = useState("")
   const [description, setDescription] = useState("")
   const [collectionType, setCollectionType] = useState<string>("wallets")
   const [pageTitle, setPageTitle] = useState("")
@@ -33,7 +37,9 @@ export default function AdminNewCollectionPage() {
     e.preventDefault()
     setSaving(true)
 
-    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+    const slug = slugInput
+      ? slugInput.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+      : title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
 
     const payload = {
       title,
@@ -70,7 +76,9 @@ export default function AdminNewCollectionPage() {
     }
   }
 
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+  const slug = slugInput
+    ? slugInput.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+    : title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
 
   return (
     <div className="space-y-6 font-sans max-w-5xl mx-auto pb-12">
@@ -112,6 +120,22 @@ export default function AdminNewCollectionPage() {
         <div className="lg:col-span-8 space-y-6">
           {/* Category Details */}
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
+            {/* Slug */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Slug / URL Handle</label>
+              <div className="flex items-center gap-0">
+                {STORE_URL && <span className="h-11 px-3 bg-gray-100 border border-gray-300 border-r-0 rounded-l-xl text-[11px] text-gray-500 font-mono flex items-center shrink-0">{STORE_URL.replace(/\/$/, "")}/</span>}
+                <input
+                  type="text"
+                  value={slugInput}
+                  onChange={(e) => setSlugInput(e.target.value)}
+                  placeholder={title ? title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : "category-slug"}
+                  className={`${STORE_URL ? "rounded-r-xl" : "rounded-xl"} flex-1 h-11 px-4 bg-gray-50 border border-gray-300 font-mono text-sm text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-amber-800/40`}
+                />
+              </div>
+              <p className="text-[10px] text-gray-400">Leave blank to auto-generate from title. Preview: <span className="font-mono text-gray-600">{STORE_URL ? `${STORE_URL.replace(/\/$/, "")}` : "https://yourdomain.com"}/{slug || "..."}</span></p>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Category Title</label>
               <input
@@ -141,16 +165,20 @@ export default function AdminNewCollectionPage() {
               Category SEO &amp; Metafields
             </h2>
             <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-1 text-xs">
-              <span className="text-[11px] text-emerald-800 font-mono block">https://eligoleather.com/collections/{slug}</span>
+              <span className="text-[11px] text-emerald-800 font-mono block">{STORE_URL ? `${STORE_URL.replace(/\/$/, "")}` : "https://yourdomain.com"}/{slug}</span>
               <span className="text-sm font-bold text-blue-700 block">{pageTitle || "Page title"}</span>
               <span className="text-xs text-gray-600 block">{metaDescription || "Meta description"}</span>
             </div>
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">SEO Title Tag</label>
+                <div className="flex items-center justify-between">
+                  <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">SEO Title Tag</label>
+                  <CharCounter value={pageTitle} limit={60} />
+                </div>
                 <input
                   type="text"
+                  maxLength={60}
                   value={pageTitle}
                   onChange={(e) => setPageTitle(e.target.value)}
                   placeholder="e.g. Leather Clutch Wallets | Eligo Leather"
@@ -159,9 +187,13 @@ export default function AdminNewCollectionPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">Meta Description</label>
+                <div className="flex items-center justify-between">
+                  <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">Meta Description</label>
+                  <CharCounter value={metaDescription} limit={160} />
+                </div>
                 <textarea
                   rows={3}
+                  maxLength={160}
                   value={metaDescription}
                   onChange={(e) => setMetaDescription(e.target.value)}
                   className="w-full p-3 rounded-xl bg-gray-50 border border-gray-300 text-xs text-gray-900 font-medium"
@@ -172,22 +204,23 @@ export default function AdminNewCollectionPage() {
             {/* JSON-LD Code Editor */}
             <div className="pt-3 border-t border-gray-100 space-y-2 text-xs">
               {(() => {
+                const domain = STORE_URL || "https://yourdomain.com"
                 const defaultSchema = {
                   "@context": "https://schema.org",
                   "@graph": [
                     {
                       "@type": "CollectionPage",
-                      "@id": `https://eligoleather.com/categories/${slug || "category"}/#collectionpage`,
+                      "@id": `${domain}/categories/${slug || "category"}/#collectionpage`,
                       "name": title || "Category Title",
-                      "url": `https://eligoleather.com/categories/${slug || "category"}`,
+                      "url": `${domain}/categories/${slug || "category"}`,
                       "description": metaDescription || description || "Explore top-grain handcrafted leather items.",
                     },
                     {
                       "@type": "BreadcrumbList",
                       "itemListElement": [
-                        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://eligoleather.com" },
-                        { "@type": "ListItem", "position": 2, "name": "Categories", "item": "https://eligoleather.com/categories" },
-                        { "@type": "ListItem", "position": 3, "name": title || "Category Title", "item": `https://eligoleather.com/categories/${slug || "category"}` },
+                        { "@type": "ListItem", "position": 1, "name": "Home", "item": domain },
+                        { "@type": "ListItem", "position": 2, "name": "Categories", "item": `${domain}/categories` },
+                        { "@type": "ListItem", "position": 3, "name": title || "Category Title", "item": `${domain}/categories/${slug || "category"}` },
                       ],
                     },
                   ],
@@ -231,6 +264,41 @@ export default function AdminNewCollectionPage() {
                           className="px-2.5 py-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
                         >
                           Copy Code
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const rawJson = computedScriptCode
+                              .replace(/<script[^>]*>/gi, "")
+                              .replace(/<\/script>/gi, "")
+                              .trim()
+                            try {
+                              JSON.parse(rawJson)
+                            } catch (parseErr) {
+                              toast.error("Schema JSON is invalid — please fix the code before publishing.")
+                              return
+                            }
+                            try {
+                              await fetch(`${API_BASE}/api/v1/store/schemas`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  name: `Category Schema - ${title.trim() || slug || "category"}`,
+                                  schema_type: "collection",
+                                  target_pages: `/categories/${slug || "category"}`,
+                                  schema_json: rawJson,
+                                  is_active: true,
+                                }),
+                              })
+                              toast.success("Schema published to this category's page for SEO!")
+                            } catch (err) {
+                              toast.error("Could not publish schema to the database.")
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-amber-800 hover:bg-amber-900 text-white font-bold text-[11px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>Publish to Customer Events (DB)</span>
                         </button>
                       </div>
                     </div>

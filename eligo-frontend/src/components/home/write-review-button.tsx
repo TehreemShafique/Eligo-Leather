@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
-import { Star, X } from "@phosphor-icons/react"
+import { useState, type FormEvent, useRef, type ChangeEvent } from "react"
+import { Star, X, ImageSquare, Spinner } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import { submitReview } from "@/modules/reviews/api"
+import { submitReview, uploadReviewPhotos } from "@/modules/reviews/api"
 import { getApiErrorMessage } from "@/lib/api-client"
+import { resolveApiMediaUrl } from "@/lib/utils"
 
 const INITIAL_REVIEW = {
   name: "",
@@ -12,6 +13,8 @@ const INITIAL_REVIEW = {
   content: "",
   rating: 5,
 }
+
+const MAX_PHOTOS = 6
 
 export function WriteReviewButton({
   productId,
@@ -21,10 +24,44 @@ export function WriteReviewButton({
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [newReview, setNewReview] = useState(INITIAL_REVIEW)
   const [submitting, setSubmitting] = useState(false)
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  const [photos, setPhotos] = useState<string[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleUploadPhotos = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files || files.length === 0) return
+
+    if (photos.length + files.length > MAX_PHOTOS) {
+      toast.error(`You can upload up to ${MAX_PHOTOS} photos.`)
+      event.target.value = ""
+      return
+    }
+
+    setUploadingPhotos(true)
+    try {
+      const urls = await uploadReviewPhotos(files)
+      if (urls.length === 0) {
+        toast.error("No valid images were uploaded.")
+      } else {
+        setPhotos((prev) => [...prev, ...urls].slice(0, MAX_PHOTOS))
+        toast.success(`${urls.length} photo${urls.length === 1 ? "" : "s"} uploaded.`)
+      }
+    } catch (error) {
+      toast.error(getApiErrorMessage(error))
+    } finally {
+      setUploadingPhotos(false)
+      if (fileInputRef.current) event.target.value = ""
+    }
+  }
+
+  const handleRemovePhoto = (url: string) => {
+    setPhotos((prev) => prev.filter((p) => p !== url))
+  }
 
   const handleSubmitReview = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (submitting) return
+    if (submitting || uploadingPhotos) return
 
     setSubmitting(true)
     try {
@@ -36,12 +73,14 @@ export function WriteReviewButton({
         rating: newReview.rating,
         title: newReview.title,
         content: newReview.content,
+        images: photos,
       })
       toast.success(
         "Thank you for your review! It will be posted after verification.",
       )
       setReviewModalOpen(false)
       setNewReview(INITIAL_REVIEW)
+      setPhotos([])
     } catch (error) {
       toast.error(getApiErrorMessage(error))
     } finally {
@@ -166,6 +205,67 @@ export function WriteReviewButton({
                   placeholder="Write your review here..."
                   className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-amber-800 focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <span className="mb-1 block text-sm font-semibold text-gray-700">
+                  Add Photos (optional)
+                </span>
+                <p className="mb-2 text-xs text-gray-500">
+                  Show the product right out of the box. Up to {MAX_PHOTOS}{" "}
+                  photos.
+                </p>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleUploadPhotos}
+                  className="hidden"
+                />
+
+                <div className="flex flex-wrap gap-3">
+                  {photos.map((photo) => (
+                    <div
+                      key={photo}
+                      className="relative h-20 w-20 overflow-hidden rounded-lg border border-gray-200"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={resolveApiMediaUrl(photo)}
+                        alt="Uploaded review photo"
+                        className="h-full w-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        aria-label="Remove photo"
+                        onClick={() => handleRemovePhoto(photo)}
+                        className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-bl-lg bg-black/60 text-white transition-colors hover:bg-black/80"
+                      >
+                        <X className="h-3 w-3" weight="bold" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {photos.length < MAX_PHOTOS && (
+                    <button
+                      type="button"
+                      disabled={uploadingPhotos}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 transition-colors hover:border-amber-800 hover:text-amber-800 disabled:opacity-60"
+                    >
+                      {uploadingPhotos ? (
+                        <Spinner className="h-6 w-6 animate-spin" />
+                      ) : (
+                        <ImageSquare className="h-6 w-6" />
+                      )}
+                      <span className="text-[10px] font-medium">
+                        {uploadingPhotos ? "Uploading..." : "Add photo"}
+                      </span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-2">

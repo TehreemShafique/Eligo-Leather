@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { PageBreadcrumb } from "@/components/ui/page-breadcrumb"
 import { ProductGallery } from "./product-gallery"
 import { ProductBuyBox } from "./product-buy-box"
 import { ProductSpecGrid } from "./product-spec-grid"
 import { RelatedProducts } from "./related-products"
 import { TestimonialsSection } from "@/components/home/testimonials-section"
+import { fetchReviewSummary } from "@/modules/reviews/api"
 import { getProductSlug, getCategoryLabel } from "@/modules/catalog/types"
 import type { ProductOut, ProductListOut } from "@/modules/catalog/schema"
 
@@ -65,6 +66,27 @@ export function ProductDetailView({ product, relatedProducts = [] }: ProductDeta
   const [activeColor, setActiveColor] = useState(colors[0]?.name || "")
   const [galleryImages, setGalleryImages] = useState<string[]>(imageUrls.length > 0 ? imageUrls : [])
 
+  // Real average rating + count computed from approved reviews in the backend.
+  const [reviewRating, setReviewRating] = useState<number | null>(null)
+  const [reviewCount, setReviewCount] = useState<number>(0)
+  useEffect(() => {
+    let active = true
+    fetchReviewSummary(product.id).then((summary) => {
+      if (!active || !summary || summary.review_count <= 0) return
+      setReviewRating(summary.average_rating)
+      setReviewCount(summary.review_count)
+    })
+    return () => {
+      active = false
+    }
+  }, [product.id])
+
+  const ratingStars = reviewRating != null ? reviewRating : 0
+  const reviewText =
+    reviewCount > 0
+      ? `${ratingStars.toFixed(1)} (${reviewCount.toLocaleString()} Review${reviewCount === 1 ? "" : "s"})`
+      : "No reviews yet"
+
   const handleColorChange = (colorName: string) => {
     setActiveColor(colorName)
   }
@@ -99,6 +121,8 @@ export function ProductDetailView({ product, relatedProducts = [] }: ProductDeta
               title={title}
               price={price}
               originalPrice={originalPrice}
+              rating={reviewRating ?? 0}
+              reviewText={reviewText}
               description={product.description || undefined}
               colors={colors.length > 0 ? colors : undefined}
               image={mainImage}

@@ -1,5 +1,7 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from typing import Any
+import json
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.modules.content.model import (
     MetaobjectStatus,
@@ -11,29 +13,131 @@ from app.modules.content.model import (
 
 
 # ===========================================================================
+# Metaobject Definition Field
+# ===========================================================================
+
+class MetaobjectDefinitionFieldCreate(BaseModel):
+    label: str
+    field_type: str
+    cardinality: str = "one"  # "one" or "list"
+    required: bool = False
+    is_display_name: bool = False
+    is_filterable: bool = False
+    position: int = 0
+    config: dict[str, Any] | None = None  # JSON for type-specific config
+
+
+class MetaobjectDefinitionFieldUpdate(BaseModel):
+    label: str | None = None
+    field_type: str | None = None
+    cardinality: str | None = None
+    required: bool | None = None
+    is_display_name: bool | None = None
+    is_filterable: bool | None = None
+    position: int | None = None
+    config: dict[str, Any] | None = None
+
+
+class MetaobjectDefinitionFieldOut(BaseModel):
+    id: int
+    definition_id: int
+    label: str
+    field_type: str
+    cardinality: str
+    required: bool
+    is_display_name: bool
+    is_filterable: bool
+    position: int
+    config: dict[str, Any] | None = None
+    created_at: datetime
+    updated_at: datetime | None
+
+    @field_validator("config", mode="before")
+    @classmethod
+    def parse_config(cls, v: Any) -> dict[str, Any] | None:
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return v
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ===========================================================================
 # Metaobject Definition
 # ===========================================================================
 
 class MetaobjectDefinitionCreate(BaseModel):
     name: str
     type_key: str
+    handle: str | None = None
+    description: str | None = None
+    status: MetaobjectStatus = MetaobjectStatus.active
+    publish_as_web_pages: bool = False
     available_on_storefront: bool = False
-    display_name: str | None = None
+    fields: list[MetaobjectDefinitionFieldCreate] = []
 
 
 class MetaobjectDefinitionUpdate(BaseModel):
     name: str | None = None
     type_key: str | None = None
+    handle: str | None = None
+    description: str | None = None
+    status: MetaobjectStatus | None = None
+    publish_as_web_pages: bool | None = None
     available_on_storefront: bool | None = None
-    display_name: str | None = None
+    fields: list[MetaobjectDefinitionFieldCreate] | None = None
 
 
 class MetaobjectDefinitionOut(BaseModel):
     id: int
     name: str
     type_key: str
+    handle: str | None
+    description: str | None
+    status: MetaobjectStatus
+    publish_as_web_pages: bool
     available_on_storefront: bool
-    display_name: str | None
+    created_at: datetime
+    updated_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MetaobjectDefinitionWithFields(MetaobjectDefinitionOut):
+    fields: list[MetaobjectDefinitionFieldOut] = []
+
+
+# ===========================================================================
+# Metaobject Entry Value
+# ===========================================================================
+
+class MetaobjectEntryValueCreate(BaseModel):
+    field_id: int
+    value: str | None = None
+    reference_id: int | None = None
+    reference_type: str | None = None
+
+
+class MetaobjectEntryValueUpdate(BaseModel):
+    value: str | None = None
+    reference_id: int | None = None
+    reference_type: str | None = None
+
+
+class MetaobjectEntryValueOut(BaseModel):
+    id: int
+    entry_id: int
+    field_id: int
+    value: str | None
+    reference_id: int | None
+    reference_type: str | None
     created_at: datetime
     updated_at: datetime | None
 
@@ -48,21 +152,21 @@ class MetaobjectEntryCreate(BaseModel):
     definition_id: int
     display_name: str
     handle: str | None = None
-    fields: str | None = None
     status: MetaobjectStatus = MetaobjectStatus.active
     tags: str | None = None
     added_by: str | None = None
+    field_values: list[MetaobjectEntryValueCreate] = []
 
 
 class MetaobjectEntryUpdate(BaseModel):
     definition_id: int | None = None
     display_name: str | None = None
     handle: str | None = None
-    fields: str | None = None
     status: MetaobjectStatus | None = None
     tags: str | None = None
     added_by: str | None = None
     references_count: int | None = None
+    field_values: list[MetaobjectEntryValueCreate] | None = None
 
 
 class MetaobjectEntryOut(BaseModel):
@@ -70,7 +174,6 @@ class MetaobjectEntryOut(BaseModel):
     definition_id: int
     display_name: str
     handle: str | None
-    fields: str | None
     status: MetaobjectStatus
     tags: str | None
     added_by: str | None
@@ -81,8 +184,12 @@ class MetaobjectEntryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class MetaobjectDefinitionWithEntries(MetaobjectDefinitionOut):
-    entries: list[MetaobjectEntryOut] = []
+class MetaobjectEntryWithValues(MetaobjectEntryOut):
+    field_values: list[MetaobjectEntryValueOut] = []
+
+
+class MetaobjectDefinitionWithEntries(MetaobjectDefinitionWithFields):
+    entries: list[MetaobjectEntryWithValues] = []
 
 
 # ===========================================================================

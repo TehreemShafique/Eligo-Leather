@@ -405,7 +405,7 @@ function HeaderInteractive() {
                   {searchResults.map((product) => (
                     <Link
                       key={product.id}
-                      href={`/products/${product.url_handle?.trim() || product.id}`}
+                      href={`/${product.url_handle?.trim() || product.id}`}
                       onClick={() => setSearchOpen(false)}
                       className="group flex items-center gap-3 rounded-lg border border-transparent p-2 transition-colors hover:border-amber-800/20 hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-800"
                     >

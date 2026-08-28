@@ -19,17 +19,22 @@ from app.modules.settings.notifications.model import (
     NotificationChannel,
     NotificationEventType,
     NotificationLog,
+    NotificationSetting,
     SenderConfig,
     WebhookEndpoint,
 )
 from app.modules.settings.notifications.schema import (
+    CustomerSearchResult,
     DispatchResponse,
     DispatchRuleCreate,
     DispatchRuleUpdate,
     EmailTemplateCreate,
     EmailTemplateUpdate,
+    ManualEmailRequest,
+    ManualEmailResponse,
     SenderConfigUpdate,
     TestEmailResponse,
+    TestEmailWithTemplateRequest,
     WebhookEndpointCreate,
     WebhookEndpointUpdate,
     WebhookTestResponse,
@@ -232,7 +237,8 @@ async def _send_email(
     to: str,
     subject: str,
     html_body: str,
-) -> None:
+) -> dict:
+    """Send email via Resend or SMTP fallback. Returns provider info dict."""
     import os
     resend_key = os.getenv("RESEND_API_KEY")
     if resend_key:
@@ -246,10 +252,11 @@ async def _send_email(
                 "subject": subject,
                 "html": html_body,
             }
-            resend.Emails.send(params)
-            return
-        except Exception:
-            pass
+            result = resend.Emails.send(params)
+            message_id = result.get("id") if isinstance(result, dict) else None
+            return {"provider": "resend", "provider_message_id": message_id}
+        except Exception as _rexc:
+            print(f"[RESEND FALLBACK] Resend send failed, falling back to SMTP: {_rexc}")
 
     import aiosmtplib
 
@@ -272,6 +279,7 @@ async def _send_email(
         use_tls=config.use_ssl,
         timeout=30,
     )
+    return {"provider": "smtp", "provider_message_id": None}
 
 
 async def send_test_email(db: AsyncSession, to: str | None = None) -> TestEmailResponse:
@@ -518,6 +526,11 @@ async def _log(
     subject: str | None,
     status: DispatchStatus,
     error: str | None = None,
+    template_code: str | None = None,
+    provider: str | None = None,
+    provider_message_id: str | None = None,
+    customer_id: int | None = None,
+    order_id: int | None = None,
 ) -> None:
     db.add(
         NotificationLog(
@@ -527,6 +540,11 @@ async def _log(
             subject=subject,
             status=status,
             error=(error or "")[:2000] or None,
+            template_code=template_code,
+            provider=provider,
+            provider_message_id=provider_message_id,
+            customer_id=customer_id,
+            order_id=order_id,
         )
     )
 
@@ -550,11 +568,48 @@ def _resolve_recipient(rule: DispatchRule, payload: dict, config: SenderConfig) 
     return rule.recipient
 
 
+async def is_notification_enabled(db: AsyncSession, notification_type: str) -> bool:
+    """Check if a notification type is enabled. Defaults to True."""
+    result = await db.execute(
+        select(NotificationSetting).where(NotificationSetting.notification_type == notification_type)
+    )
+    setting = result.scalar_one_or_none()
+    if setting is None:
+        return True
+    return setting.enabled
+
+
+async def get_notification_settings(db: AsyncSession) -> list[NotificationSetting]:
+    result = await db.execute(
+        select(NotificationSetting).order_by(NotificationSetting.notification_type)
+    )
+    return list(result.scalars().all())
+
+
+async def update_notification_setting(
+    db: AsyncSession, notification_type: str, enabled: bool
+) -> NotificationSetting:
+    result = await db.execute(
+        select(NotificationSetting).where(NotificationSetting.notification_type == notification_type)
+    )
+    setting = result.scalar_one_or_none()
+    if setting is None:
+        setting = NotificationSetting(notification_type=notification_type, enabled=enabled)
+        db.add(setting)
+    else:
+        setting.enabled = enabled
+    await db.commit()
+    await db.refresh(setting)
+    return setting
+
+
 async def _dispatch_email(
     db: AsyncSession,
     event_type: str,
     rule: DispatchRule,
     payload: dict,
+    customer_id: int | None = None,
+    order_id: int | None = None,
 ) -> None:
     config = await get_sender_config(db)
     recipient = _resolve_recipient(rule, payload, config)
@@ -574,8 +629,16 @@ async def _dispatch_email(
     html_body = render_template(template.html_body, context)
 
     try:
-        await _send_email(config, recipient, subject, html_body)
-        await _log(db, event_type, NotificationChannel.email, recipient, subject, DispatchStatus.success)
+        send_result = await _send_email(config, recipient, subject, html_body)
+        await _log(
+            db, event_type, NotificationChannel.email, recipient, subject,
+            DispatchStatus.success,
+            template_code=template.code,
+            provider=send_result.get("provider"),
+            provider_message_id=send_result.get("provider_message_id"),
+            customer_id=customer_id,
+            order_id=order_id,
+        )
     except Exception as exc:  # noqa: BLE001 - a failed dispatch must not break the request
         await _log(
             db,
@@ -585,6 +648,9 @@ async def _dispatch_email(
             subject,
             DispatchStatus.failed,
             str(exc),
+            template_code=template.code,
+            customer_id=customer_id,
+            order_id=order_id,
         )
 
 
@@ -629,6 +695,12 @@ async def dispatch_event(
     if event not in {e.value for e in NotificationEventType}:
         return DispatchResponse(event_type=event, dispatched=0, failed=0)
 
+    if not await is_notification_enabled(db, event):
+        return DispatchResponse(event_type=event, dispatched=0, failed=0)
+
+    customer_id = payload.get("customer_id")
+    order_id = payload.get("order_id")
+
     result = await db.execute(
         select(DispatchRule).where(
             DispatchRule.event_type == event,
@@ -641,7 +713,7 @@ async def dispatch_event(
     failed = 0
     for rule in rules:
         if rule.channel == NotificationChannel.email:
-            await _dispatch_email(db, event, rule, payload)
+            await _dispatch_email(db, event, rule, payload, customer_id, order_id)
         elif rule.channel == NotificationChannel.webhook:
             await _dispatch_webhook(db, event, rule, payload)
 
@@ -733,6 +805,174 @@ async def background_dispatch_order_confirmation(order_id: int) -> None:
 
 
 # =====================================================================
+# MANUAL EMAIL
+# =====================================================================
+
+
+async def send_manual_email(
+    db: AsyncSession, data: ManualEmailRequest
+) -> ManualEmailResponse:
+    """Send a manual email to a customer (admin-initiated)."""
+    from app.modules.customers.model import Customer
+
+    customer = None
+    recipient = data.recipient_email
+
+    if data.customer_id:
+        customer = await db.get(Customer, data.customer_id)
+        if not customer:
+            return ManualEmailResponse(success=False, message="Customer not found")
+        if not customer.email:
+            return ManualEmailResponse(
+                success=False, message=f"Customer '{customer.first_name} {customer.last_name}' has no email address"
+            )
+        recipient = customer.email
+
+    if not recipient:
+        return ManualEmailResponse(success=False, message="No recipient email provided")
+
+    config = await get_sender_config(db)
+    if not config.is_enabled:
+        return ManualEmailResponse(success=False, message="Email sending is disabled")
+
+    template = await get_template_by_code(data.template_code, db)
+    if not template or not template.is_active:
+        return ManualEmailResponse(success=False, message=f"Template '{data.template_code}' not found or inactive")
+
+    customer_name = "Valued Customer"
+    if customer:
+        parts = [customer.first_name or "", customer.last_name or ""]
+        customer_name = " ".join(p for p in parts if p).strip() or "Valued Customer"
+
+    context = {
+        "store_name": config.from_name,
+        "support_email": config.admin_email,
+        "customer_name": customer_name,
+        "customer_email": recipient,
+        **data.context,
+    }
+
+    subject = render_template(data.subject or template.subject, context)
+    html_body = render_template(template.html_body, context)
+
+    try:
+        send_result = await _send_email(config, recipient, subject, html_body)
+        await _log(
+            db, "manual_email", NotificationChannel.email, recipient, subject,
+            DispatchStatus.success,
+            template_code=template.code,
+            provider=send_result.get("provider"),
+            provider_message_id=send_result.get("provider_message_id"),
+            customer_id=data.customer_id,
+        )
+        await db.commit()
+        return ManualEmailResponse(success=True, message=f"Email sent to {recipient}", recipient=recipient)
+    except Exception as exc:  # noqa: BLE001
+        await _log(
+            db, "manual_email", NotificationChannel.email, recipient, subject,
+            DispatchStatus.failed, str(exc),
+            template_code=template.code,
+            customer_id=data.customer_id,
+        )
+        await db.commit()
+        return ManualEmailResponse(success=False, message=f"Failed to send: {exc}", recipient=recipient)
+
+
+# =====================================================================
+# TEST EMAIL WITH TEMPLATE
+# =====================================================================
+
+
+async def send_test_with_template(
+    db: AsyncSession, data: TestEmailWithTemplateRequest
+) -> TestEmailResponse:
+    """Send a test email using a specific template with sample/mock data."""
+    config = await get_sender_config(db)
+    if not config.is_enabled:
+        return TestEmailResponse(success=False, message="Email sending is disabled", recipient=data.to)
+
+    template = await get_template_by_code(data.template_code, db)
+    if not template or not template.is_active:
+        return TestEmailResponse(
+            success=False,
+            message=f"Template '{data.template_code}' not found or inactive",
+            recipient=data.to,
+        )
+
+    context = {
+        "store_name": config.from_name,
+        "support_email": config.admin_email,
+        "customer_name": "Test Customer",
+        "customer_email": data.to,
+        "order_number": "EL-TEST-0001",
+        "total_price": "4,598",
+        "currency": "PKR",
+        "tracking_number": "TCS-847291039",
+        "tracking_company": "Leopards Courier",
+        "discount_code": "ELIGO15",
+        "discount_value": "15% OFF",
+        "store_url": "http://localhost:3000",
+        "recovery_url": "http://localhost:3000/cart",
+        "alert_title": "Test Alert",
+        "message": "This is a test notification email.",
+        "event_type": "test_event",
+        "admin_name": "Store Admin",
+        "items": [
+            {"product_name": "Classic Leather Wallet", "quantity": 1, "total_price": "2,499"},
+            {"product_name": "Leather Belt", "quantity": 1, "total_price": "2,099"},
+        ],
+        **data.context,
+    }
+
+    subject = render_template(template.subject, context)
+    html_body = render_template(template.html_body, context)
+
+    try:
+        send_result = await _send_email(config, data.to, subject, html_body)
+        return TestEmailResponse(
+            success=True,
+            message=f"Test email sent to {data.to} via {send_result.get('provider', 'resend')}",
+            recipient=data.to,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return TestEmailResponse(success=False, message=str(exc), recipient=data.to)
+
+
+# =====================================================================
+# CUSTOMER SEARCH FOR MANUAL EMAIL
+# =====================================================================
+
+
+async def search_customers_for_email(
+    db: AsyncSession, query: str, limit: int = 20
+) -> list[CustomerSearchResult]:
+    """Search customers by name or email for the manual email form."""
+    from app.modules.customers.model import Customer
+
+    stmt = select(Customer)
+    if query:
+        like_pattern = f"%{query}%"
+        stmt = stmt.where(
+            (Customer.first_name.ilike(like_pattern))
+            | (Customer.last_name.ilike(like_pattern))
+            | (Customer.email.ilike(like_pattern))
+        )
+    stmt = stmt.order_by(Customer.id.desc()).limit(limit)
+    result = await db.execute(stmt)
+    customers = list(result.scalars().all())
+
+    return [
+        CustomerSearchResult(
+            id=c.id,
+            name=" ".join(filter(None, [c.first_name, c.last_name])) or "Unknown",
+            email=c.email,
+            phone=c.phone,
+        )
+        for c in customers
+    ]
+
+
+# =====================================================================
 # SEED
 # =====================================================================
 
@@ -766,3 +1006,11 @@ async def seed_defaults(db: AsyncSession) -> None:
                 )
             )
         await db.commit()
+
+    # Seed notification settings (one row per event type, defaults to enabled)
+    result = await db.execute(select(NotificationSetting.notification_type))
+    existing_types = {row[0] for row in result.all()}
+    for event in NotificationEventType:
+        if event.value not in existing_types:
+            db.add(NotificationSetting(notification_type=event.value, enabled=True))
+    await db.commit()

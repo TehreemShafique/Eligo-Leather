@@ -6,6 +6,7 @@ import {
 } from "@/components/category/category-content"
 import { CategorySeoSection } from "@/components/category/category-seo-section"
 import { FaqSection, createCategoryFaqs } from "@/components/home/faq-section"
+import { fetchAllReviewSummaries } from "@/modules/reviews/api"
 
 export const metadata = buildSeoMetadata({ title: "Leather Product Categories", description: "Explore Eligo Leather product categories including wallets, belts, keychains, cases, bags and handcrafted leather accessories available across Pakistan.", path: "/categories", keywords: ["leather product categories", "wallets belts and accessories"] })
 
@@ -43,6 +44,9 @@ function getFirstImage(product: CatalogApiProduct, index: number) {
 export default async function ProductsCatalogPage() {
   let productsList: CategoryProduct[] = []
 
+  // Real average star ratings + counts from approved reviews (backend).
+  const reviewSummaries = await fetchAllReviewSummaries()
+
   try {
     const rawProducts = (await listProducts({ limit: 24 })) as unknown
 
@@ -52,6 +56,7 @@ export default async function ProductsCatalogPage() {
           const salePrice = product.price || 1699
           const originalPrice =
             product.compareAtPrice || Math.round(salePrice * 1.5)
+          const summary = reviewSummaries[String(product.id)]
 
           return {
             id: product.id,
@@ -59,8 +64,8 @@ export default async function ProductsCatalogPage() {
               product.title || product.name || "Handmade Leather Product",
             originalPrice,
             salePrice,
-            rating: product.rating || 5,
-            reviewCount: product.reviewCount || 35,
+            rating: summary?.average_rating ?? 0,
+            reviewCount: summary?.review_count ?? 0,
             image: getFirstImage(product, index),
             secondaryImage:
               product.secondaryImage ||

@@ -475,3 +475,64 @@ class GiftCard(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )
+
+
+# ===========================================================================
+# Gift Card Product (product listing for gift cards)
+# ===========================================================================
+
+class GiftCardProduct(Base):
+    __tablename__ = "gift_card_products"
+    __table_args__ = (
+        Index("ix_gift_card_products_url_handle", "url_handle"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    code: Mapped[str | None] = mapped_column(String, nullable=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        SAEnum(ProductStatus, name="gift_card_product_status"),
+        default=ProductStatus.draft,
+    )
+    base_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    compare_at_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    seo_title: Mapped[str | None] = mapped_column(String(70), nullable=True)
+    seo_description: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    meta_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    url_handle: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    product_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    images = relationship(
+        "GiftCardProductImage", back_populates="gift_card_product",
+        cascade="all, delete-orphan",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class GiftCardProductImage(Base):
+    __tablename__ = "gift_card_product_images"
+    __table_args__ = (
+        Index("ix_gc_product_images_gc_product_id", "gift_card_product_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    gift_card_product_id: Mapped[int] = mapped_column(
+        ForeignKey("gift_card_products.id", ondelete="CASCADE"), nullable=False,
+    )
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    alt_text: Mapped[str | None] = mapped_column(String, nullable=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+    gift_card_product = relationship("GiftCardProduct", back_populates="images")
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )

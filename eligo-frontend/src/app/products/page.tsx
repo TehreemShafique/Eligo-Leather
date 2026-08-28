@@ -7,6 +7,7 @@ import { buildSeoMetadata } from "@/lib/seo"
 import { CategoryContent, type CategoryProduct } from "@/components/category/category-content"
 import { CategorySeoSection } from "@/components/category/category-seo-section"
 import { FaqSection, PRODUCT_FAQS } from "@/components/home/faq-section"
+import { fetchAllReviewSummaries } from "@/modules/reviews/api"
 
 export const metadata = buildSeoMetadata({ title: "Shop Genuine Leather Products Online", description: "Browse genuine leather wallets, belts, keychains, cases and accessories handcrafted for everyday use, gifting and delivery throughout Pakistan.", path: "/products", keywords: ["buy leather products online", "leather wallets Pakistan", "leather accessories Pakistan"] })
 
@@ -15,6 +16,9 @@ export default async function ProductsCatalogPage() {
   let sidebarCategories: Awaited<
     ReturnType<typeof flattenCategoryGroups>
   > = []
+
+  // Real average star ratings + counts from approved reviews (backend).
+  const reviewSummaries = await fetchAllReviewSummaries()
 
   try {
     // Admin-created collections power both this listing and its sidebar.
@@ -38,14 +42,15 @@ export default async function ProductsCatalogPage() {
             : undefined) ||
           sortedImgs[1]?.url ||
           primaryImg
+        const summary = reviewSummaries[String(p.id)]
         return {
           id: p.id,
           slug: p.url_handle?.trim() ? p.url_handle : String(p.id),
           title: p.title || "Handmade Leather Product",
           originalPrice: p.compare_at_price ? parseFloat(p.compare_at_price) : Math.round((p.price ? parseFloat(p.price) : 0) * 1.2),
           salePrice: p.price ? parseFloat(p.price) : 0,
-          rating: 5.0,
-          reviewCount: 35,
+          rating: summary?.average_rating ?? 0,
+          reviewCount: summary?.review_count ?? 0,
           image: primaryImg,
           secondaryImage: hoverImg,
           isSale: Boolean(p.compare_at_price),

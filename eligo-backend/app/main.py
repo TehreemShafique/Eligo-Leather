@@ -28,6 +28,7 @@ from app.modules.catalog.router import (
     purchase_order_router,
     transfer_router,
     gift_card_router,
+    gift_card_product_router,
 )
 from app.modules.companies.router import router as companies_router
 from app.modules.segments.router import router as segments_router
@@ -42,6 +43,7 @@ from app.modules.content.router import (
     blog_posts_router,
     blog_comments_router,
     pages_router,
+    storefront_metaobject_router,
 )
 from app.modules.settings.router import router as settings_router
 from app.modules.settings.checkout.router import public_checkout_router
@@ -115,6 +117,7 @@ app.include_router(inventory_router, prefix="/api/v1")
 app.include_router(purchase_order_router, prefix="/api/v1")
 app.include_router(transfer_router, prefix="/api/v1")
 app.include_router(gift_card_router, prefix="/api/v1")
+app.include_router(gift_card_product_router, prefix="/api/v1")
 app.include_router(companies_router, prefix="/api/v1")
 app.include_router(segments_router, prefix="/api/v1")
 app.include_router(discounts_router, prefix="/api/v1")
@@ -128,6 +131,7 @@ app.include_router(url_redirects_router, prefix="/api/v1")
 app.include_router(blog_posts_router, prefix="/api/v1")
 app.include_router(blog_comments_router, prefix="/api/v1")
 app.include_router(pages_router, prefix="/api/v1")
+app.include_router(storefront_metaobject_router, prefix="/api/v1")
 app.include_router(settings_router, prefix="/api/v1")
 app.include_router(public_checkout_router, prefix="/api/v1")
 app.include_router(public_shipping_router, prefix="/api/v1")

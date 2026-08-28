@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,8 @@ from sqlalchemy.orm import selectinload
 from app.modules.content.model import (
     MetaobjectDefinition,
     MetaobjectEntry,
+    MetaobjectDefinitionField,
+    MetaobjectEntryValue,
     File,
     Menu,
     MenuItem,
@@ -18,6 +21,7 @@ from app.modules.content.model import (
 from app.modules.content.schema import (
     MetaobjectDefinitionCreate,
     MetaobjectDefinitionUpdate,
+    MetaobjectDefinitionFieldCreate,
     MetaobjectEntryCreate,
     MetaobjectEntryUpdate,
     FileCreate,
@@ -48,8 +52,33 @@ from app.modules.content.schema import (
 async def create_metaobject_definition(
     db: AsyncSession, data: MetaobjectDefinitionCreate,
 ) -> MetaobjectDefinition:
-    obj = MetaobjectDefinition(**data.model_dump())
+    obj = MetaobjectDefinition(
+        name=data.name,
+        type_key=data.type_key,
+        handle=data.handle,
+        description=data.description,
+        status=data.status,
+        publish_as_web_pages=data.publish_as_web_pages,
+        available_on_storefront=data.available_on_storefront,
+    )
     db.add(obj)
+    await db.flush()  # Get the ID before adding fields
+
+    # Create fields if provided
+    for field_data in data.fields:
+        field = MetaobjectDefinitionField(
+            definition_id=obj.id,
+            label=field_data.label,
+            field_type=field_data.field_type,
+            cardinality=field_data.cardinality,
+            required=field_data.required,
+            is_display_name=field_data.is_display_name,
+            is_filterable=field_data.is_filterable,
+            position=field_data.position,
+            config=json.dumps(field_data.config) if field_data.config else None,
+        )
+        db.add(field)
+
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -60,7 +89,10 @@ async def get_metaobject_definition(
 ) -> MetaobjectDefinition | None:
     result = await db.execute(
         select(MetaobjectDefinition)
-        .options(selectinload(MetaobjectDefinition.entries))
+        .options(
+            selectinload(MetaobjectDefinition.fields),
+            selectinload(MetaobjectDefinition.entries).selectinload(MetaobjectEntry.field_values),
+        )
         .where(MetaobjectDefinition.id == def_id),
     )
     return result.scalar_one_or_none()
@@ -72,7 +104,9 @@ async def list_metaobject_definitions(
     skip: int = 0,
     limit: int = 50,
 ) -> list[MetaobjectDefinition]:
-    query = select(MetaobjectDefinition)
+    query = select(MetaobjectDefinition).options(
+        selectinload(MetaobjectDefinition.fields),
+    )
     if search:
         query = query.where(
             or_(
@@ -91,8 +125,36 @@ async def update_metaobject_definition(
     obj = await get_metaobject_definition(db, def_id)
     if not obj:
         return None
-    for field, value in data.model_dump(exclude_unset=True).items():
+
+    # Update definition fields
+    update_data = data.model_dump(exclude_unset=True)
+    fields_data = update_data.pop("fields", None)
+
+    for field, value in update_data.items():
         setattr(obj, field, value)
+
+    # Update fields if provided
+    if fields_data is not None:
+        # Delete existing fields
+        for existing_field in obj.fields:
+            await db.delete(existing_field)
+        await db.flush()
+
+        # Create new fields
+        for field_data in fields_data:
+            field = MetaobjectDefinitionField(
+                definition_id=obj.id,
+                label=field_data.label,
+                field_type=field_data.field_type,
+                cardinality=field_data.cardinality,
+                required=field_data.required,
+                is_display_name=field_data.is_display_name,
+                is_filterable=field_data.is_filterable,
+                position=field_data.position,
+                config=json.dumps(field_data.config) if field_data.config else None,
+            )
+            db.add(field)
+
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -114,8 +176,28 @@ async def delete_metaobject_definition(db: AsyncSession, def_id: int) -> bool:
 async def create_metaobject_entry(
     db: AsyncSession, data: MetaobjectEntryCreate,
 ) -> MetaobjectEntry:
-    obj = MetaobjectEntry(**data.model_dump())
+    obj = MetaobjectEntry(
+        definition_id=data.definition_id,
+        display_name=data.display_name,
+        handle=data.handle,
+        status=data.status,
+        tags=data.tags,
+        added_by=data.added_by,
+    )
     db.add(obj)
+    await db.flush()  # Get the ID before adding field values
+
+    # Create field values if provided
+    for value_data in data.field_values:
+        field_value = MetaobjectEntryValue(
+            entry_id=obj.id,
+            field_id=value_data.field_id,
+            value=value_data.value,
+            reference_id=value_data.reference_id,
+            reference_type=value_data.reference_type,
+        )
+        db.add(field_value)
+
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -126,7 +208,10 @@ async def get_metaobject_entry(
 ) -> MetaobjectEntry | None:
     result = await db.execute(
         select(MetaobjectEntry)
-        .options(selectinload(MetaobjectEntry.definition))
+        .options(
+            selectinload(MetaobjectEntry.definition).selectinload(MetaobjectDefinition.fields),
+            selectinload(MetaobjectEntry.field_values),
+        )
         .where(MetaobjectEntry.id == entry_id),
     )
     return result.scalar_one_or_none()
@@ -142,7 +227,8 @@ async def list_metaobject_entries(
     limit: int = 50,
 ) -> list[MetaobjectEntry]:
     query = select(MetaobjectEntry).options(
-        selectinload(MetaobjectEntry.definition),
+        selectinload(MetaobjectEntry.definition).selectinload(MetaobjectDefinition.fields),
+        selectinload(MetaobjectEntry.field_values),
     )
     if definition_id:
         query = query.where(MetaobjectEntry.definition_id == definition_id)
@@ -171,8 +257,32 @@ async def update_metaobject_entry(
     obj = await get_metaobject_entry(db, entry_id)
     if not obj:
         return None
-    for field, value in data.model_dump(exclude_unset=True).items():
+
+    # Update entry fields
+    update_data = data.model_dump(exclude_unset=True)
+    field_values_data = update_data.pop("field_values", None)
+
+    for field, value in update_data.items():
         setattr(obj, field, value)
+
+    # Update field values if provided
+    if field_values_data is not None:
+        # Delete existing field values
+        for existing_value in obj.field_values:
+            await db.delete(existing_value)
+        await db.flush()
+
+        # Create new field values
+        for value_data in field_values_data:
+            field_value = MetaobjectEntryValue(
+                entry_id=obj.id,
+                field_id=value_data.field_id,
+                value=value_data.value,
+                reference_id=value_data.reference_id,
+                reference_type=value_data.reference_type,
+            )
+            db.add(field_value)
+
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -843,4 +953,71 @@ async def delete_page(db: AsyncSession, page_id: int) -> bool:
     await db.delete(obj)
     await db.commit()
     return True
+
+
+# ===========================================================================
+# Public Storefront Metaobject – Read-only (no drafts)
+# ===========================================================================
+
+async def list_storefront_definitions(
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 50,
+) -> list[MetaobjectDefinition]:
+    """List all active definitions available on storefront."""
+    query = select(MetaobjectDefinition).options(
+        selectinload(MetaobjectDefinition.fields),
+    ).where(
+        MetaobjectDefinition.available_on_storefront == True,
+        MetaobjectDefinition.status == "active",
+    ).order_by(MetaobjectDefinition.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def get_storefront_definition_by_type_key(
+    db: AsyncSession, type_key: str,
+) -> MetaobjectDefinition | None:
+    """Get a single definition by type_key (storefront only, active only)."""
+    result = await db.execute(
+        select(MetaobjectDefinition)
+        .options(
+            selectinload(MetaobjectDefinition.fields),
+        )
+        .where(
+            MetaobjectDefinition.type_key == type_key,
+            MetaobjectDefinition.available_on_storefront == True,
+            MetaobjectDefinition.status == "active",
+        ),
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_storefront_entries(
+    db: AsyncSession,
+    type_key: str,
+    skip: int = 0,
+    limit: int = 50,
+) -> list[MetaobjectEntry]:
+    """List active entries for a definition (storefront only, no drafts)."""
+    # First get the definition
+    def_result = await db.execute(
+        select(MetaobjectDefinition).where(
+            MetaobjectDefinition.type_key == type_key,
+            MetaobjectDefinition.available_on_storefront == True,
+            MetaobjectDefinition.status == "active",
+        ),
+    )
+    definition = def_result.scalar_one_or_none()
+    if not definition:
+        return []
+
+    query = select(MetaobjectEntry).options(
+        selectinload(MetaobjectEntry.field_values),
+    ).where(
+        MetaobjectEntry.definition_id == definition.id,
+        MetaobjectEntry.status == "active",
+    ).order_by(MetaobjectEntry.display_name.asc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    return list(result.scalars().all())
 

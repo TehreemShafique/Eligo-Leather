@@ -2,9 +2,11 @@ import { api, getApiErrorMessage } from "@/lib/api-client"
 import { DEFAULT_CURRENCY, NAV_LINKS, STORE_NAME } from "@/lib/constants"
 import {
   HeaderScriptOutSchema,
+  PublicStoreSchemaOutSchema,
   StoreBrandOutSchema,
   StoreSettingOutSchema,
   StorefrontConfigSchema,
+  type PublicStoreSchemaOut,
   type StorefrontConfig,
 } from "./schema"
 
@@ -55,6 +57,12 @@ export async function fetchHeaderScripts(userId: number): Promise<string> {
   const script = await api.get(`/store/${userId}/header-scripts`, { auth: false })
   const parsed = HeaderScriptOutSchema.safeParse(script)
   return parsed.success ? parsed.data.header_scripts : ""
+}
+
+export async function fetchStoreSchemas(): Promise<PublicStoreSchemaOut[]> {
+  const schemas = await api.get(`/store/public/schemas`, { auth: false })
+  if (!Array.isArray(schemas)) return []
+  return schemas.filter((s) => PublicStoreSchemaOutSchema.safeParse(s).success)
 }
 
 export function getStorefrontErrorMessage(error: unknown): string {

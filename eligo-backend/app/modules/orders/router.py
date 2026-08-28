@@ -1419,7 +1419,7 @@ async def export_abandoned_checkouts(
 
 
 @router.get("/{order_id}", response_model=OrderOut)
-async def get_order(order_id: int, db: AsyncSession = Depends(get_db)):
+async def get_order(order_id: str, db: AsyncSession = Depends(get_db)):
     order = await service.get_order(db, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")

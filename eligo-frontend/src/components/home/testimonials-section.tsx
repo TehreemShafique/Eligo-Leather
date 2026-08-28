@@ -5,6 +5,7 @@ import Image from "next/image"
 import { WriteReviewButton } from "./write-review-button"
 import { listApprovedReviews } from "@/modules/reviews/api"
 import type { StoreReview } from "@/modules/reviews/schema"
+import { resolveApiMediaUrl } from "@/lib/utils"
 
 interface Testimonial {
   id: number | string
@@ -49,12 +50,14 @@ function toTestimonial(review: StoreReview): Testimonial {
     id: review.id,
     author: review.reviewer_name,
     initials: toInitials(review.reviewer_name || "Eligo"),
-    avatar: review.avatar_url?.trim() || "",
+    avatar: resolveApiMediaUrl(review.avatar_url),
     timeAgo: formatTimeAgo(review.created_at),
     rating: Math.min(5, Math.max(1, Math.round(review.rating))),
     title: review.title?.trim() || "Verified Purchase",
     content: review.body?.trim() || "",
-    photos: (review.images.length > 0 ? review.images : review.photo_urls).slice(0, 3),
+    photos: (review.images.length > 0 ? review.images : review.photo_urls)
+      .map(resolveApiMediaUrl)
+      .slice(0, 3),
   }
 }
 

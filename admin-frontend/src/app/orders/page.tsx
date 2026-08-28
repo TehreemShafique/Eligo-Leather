@@ -258,7 +258,7 @@ export default function AdminOrdersPage() {
                   filteredOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-[#faf9f7] transition-colors">
                       <td className="eligo-td">
-                        <Link href={`/orders/${order.id}`} className="font-bold text-amber-900 hover:underline">
+                        <Link href={`/orders/${encodeURIComponent(order.order_number)}`} className="font-bold text-amber-900 hover:underline">
                           {order.order_number}
                         </Link>
                       </td>

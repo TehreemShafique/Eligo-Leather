@@ -8,7 +8,7 @@ version control, but its changes were already applied to the dev database:
 This empty stub restores the linear migration chain.
 
 Revision ID: a1b2c3d4e5f6
-Revises: b7c3e9a1f2d4
+Revises: 42cd80795693
 Create Date: 2026-08-21
 
 """
@@ -20,7 +20,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "a1b2c3d4e5f6"
-down_revision: Union[str, Sequence[str], None] = "b7c3e9a1f2d4"
+down_revision: Union[str, Sequence[str], None] = "42cd80795693"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

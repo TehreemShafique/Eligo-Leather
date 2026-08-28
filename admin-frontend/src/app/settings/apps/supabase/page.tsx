@@ -22,6 +22,15 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
+// Customer-uploaded review photos are stored as backend-relative paths
+// (e.g. `/static/uploads/x.webp`). Resolve them against the backend API base.
+function resolveMediaUrl(url?: string | null): string {
+  if (!url) return ""
+  if (/^https?:\/\//i.test(url)) return url
+  if (url.startsWith("/")) return `${API_BASE}${url}`
+  return url
+}
+
 interface CustomerReview {
   id: string | number
   productId: number | string
@@ -117,7 +126,7 @@ export default function SupabaseReviewsAdminPage() {
     const fetchSupabaseReviews = async () => {
       setLoading(true)
       try {
-        const res = await fetch(`${API_BASE}/api/v1/apps/supabase_reviews/action`, {
+        const res = await fetch(`${API_BASE}/api/v1/settings/apps/supabase_reviews/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "fetch_reviews", payload: { page: 1, per_page: 50 } }),
@@ -125,8 +134,8 @@ export default function SupabaseReviewsAdminPage() {
 
         if (res.ok) {
           const data = await res.json()
-          if (isMounted && data?.result?.reviews && Array.isArray(data.result.reviews)) {
-            const mapped: CustomerReview[] = data.result.reviews.map((r: any) => ({
+          if (isMounted && data?.data?.reviews && Array.isArray(data.data.reviews)) {
+            const mapped: CustomerReview[] = data.data.reviews.map((r: any) => ({
               id: r.id,
               productId: r.product_id || "1",
               productTitle: r.product_title || `Product #${r.product_id}`,
@@ -169,7 +178,7 @@ export default function SupabaseReviewsAdminPage() {
   // Admin Decision: Update Review Status (Approve vs Reject)
   const handleUpdateStatus = async (reviewId: string | number, newStatus: "approved" | "rejected") => {
     try {
-      await fetch(`${API_BASE}/api/v1/apps/supabase_reviews/action`, {
+      await fetch(`${API_BASE}/api/v1/settings/apps/supabase_reviews/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -198,7 +207,7 @@ export default function SupabaseReviewsAdminPage() {
   // Delete Review
   const handleDeleteReview = async (reviewId: string | number) => {
     try {
-      await fetch(`${API_BASE}/api/v1/apps/supabase_reviews/action`, {
+      await fetch(`${API_BASE}/api/v1/settings/apps/supabase_reviews/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -467,7 +476,7 @@ export default function SupabaseReviewsAdminPage() {
                             onClick={() => setPreviewImage(imgUrl)}
                             className="w-16 h-16 rounded-xl border border-gray-300 overflow-hidden cursor-pointer hover:opacity-85 transition-opacity relative group"
                           >
-                            <img src={imgUrl} alt="Review upload" className="w-full h-full object-cover" />
+                            <img src={resolveMediaUrl(imgUrl)} alt="Review upload" className="w-full h-full object-cover" />
                             <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
                               <Eye className="w-4 h-4" />
                             </div>
@@ -538,7 +547,7 @@ export default function SupabaseReviewsAdminPage() {
             >
               <X className="w-5 h-5" />
             </button>
-            <img src={previewImage} alt="Uploaded customer review photo" className="w-full max-h-[75vh] object-contain rounded-xl" />
+            <img src={resolveMediaUrl(previewImage)} alt="Uploaded customer review photo" className="w-full max-h-[75vh] object-contain rounded-xl" />
           </div>
         </div>
       )}

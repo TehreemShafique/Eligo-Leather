@@ -144,3 +144,26 @@ async def get_public_schemas(db: AsyncSession, user_id: int) -> list[PublicStore
         )
         for s in schemas
     ]
+
+
+async def list_public_schemas(db: AsyncSession) -> list[PublicStoreSchemaOut]:
+    """All active schemas for the single-owner store, consumed by the storefront
+    SchemaInjector. The storefront matches these against the current page path
+    via ``target_pages`` (e.g. ``/leather``) regardless of the owning user."""
+    result = await db.execute(
+        select(StoreSchema).where(
+            StoreSchema.is_active == True,  # noqa: E712
+        )
+    )
+    schemas = result.scalars().all()
+    return [
+        PublicStoreSchemaOut(
+            id=s.id,
+            name=s.name,
+            schema_type=s.schema_type,
+            target_pages=s.target_pages,
+            schema_json=s.schema_json,
+            is_active=s.is_active,
+        )
+        for s in schemas
+    ]

@@ -36,7 +36,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
 
   return (
     <Link
-      href={`/products/${slug}`}
+      href={`/${slug}`}
       className={cn(
         "group flex flex-col overflow-hidden bg-card ring-1 ring-foreground/10 transition-colors duration-150 hover:ring-brand-brown/50",
         className,

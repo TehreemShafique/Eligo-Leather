@@ -157,7 +157,7 @@ export function ProductsSection({
                   className={`group relative flex flex-col justify-between rounded-[20px] border border-gray-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-xl lg:absolute lg:top-[9.322917cqw] lg:h-[25.3125cqw] lg:w-[16.666667cqw] lg:block lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:hover:shadow-none ${PRODUCT_LEFT_POSITIONS[index]}`}
                 >
                   <Link
-                    href={`/products/${item.slug || item.id}`}
+                    href={`/${item.slug || item.id}`}
                     className="group/image relative mb-3.5 block aspect-square w-full overflow-hidden rounded-[20px] bg-zinc-100 lg:absolute lg:left-0 lg:top-0 lg:mb-0 lg:h-[16.666667cqw] lg:w-[16.666667cqw] lg:rounded-[1.041667cqw]"
                   >
                     <Image
@@ -230,7 +230,7 @@ export function ProductsSection({
                   </h3>
 
                   <Link
-                    href={`/products/${item.slug || item.id}`}
+                    href={`/${item.slug || item.id}`}
                     className="inline-flex w-full items-center justify-center rounded-[5px] border border-amber-800 px-4 py-2.5 text-center text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-800 hover:text-white lg:absolute lg:left-0 lg:top-[23.229167cqw] lg:h-[2.083333cqw] lg:w-[16.666667cqw] lg:rounded-[0.260417cqw] lg:px-[1.458333cqw] lg:py-0 lg:text-[0.729167cqw] lg:leading-[1.041667cqw]"
                   >
                     View

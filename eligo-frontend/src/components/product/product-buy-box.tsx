@@ -142,10 +142,11 @@ export function ProductBuyBox({
 
       {/* Rating Stars */}
       <div className="flex items-center gap-2">
-        <div className="flex items-center text-amber-500 gap-0.5 text-base font-serif tracking-widest">
-          ★★★★☆
+        <div className="flex items-center text-amber-500 gap-0.5 text-base font-serif tracking-widest" aria-label={`Rated ${rating} out of 5`}>
+          {"★".repeat(Math.min(5, Math.max(0, Math.round(rating))))}
+          {"★".repeat(Math.min(5, Math.max(0, 5 - Math.round(rating)))).replace(/★/g, "☆")}
         </div>
-        <span className="text-xs text-gray-700 font-medium">{reviewText}</span>
+        <span className="text-xs text-gray-700 font-medium">{reviewText || "No reviews yet"}</span>
       </div>
 
       {/* Product Description */}

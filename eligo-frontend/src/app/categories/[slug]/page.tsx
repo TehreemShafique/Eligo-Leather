@@ -10,6 +10,8 @@ import { getCategoryLabel, isCategorySlug, type ProductCategory } from "@/module
 import { CategoryContent, type CategoryProduct } from "@/components/category/category-content"
 import { FaqSection, createCategoryFaqs } from "@/components/home/faq-section"
 import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
+import { fetchStoreSchemas } from "@/modules/store/api"
+import { fetchAllReviewSummaries } from "@/modules/reviews/api"
 
 type CategoryPageProps = {
   params: Promise<{ slug: string }>
@@ -87,6 +89,9 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     titleLabel = `${slug.toUpperCase()} Category`
   }
 
+  // Real review summaries from approved reviews, keyed by product id.
+  const reviewSummaries = await fetchAllReviewSummaries()
+
   try {
     let rawProducts: Awaited<ReturnType<typeof listProducts>> = []
 
@@ -141,14 +146,15 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             : undefined) ||
           sortedImgs[1]?.url ||
           primaryImg
+        const summary = reviewSummaries[String(p.id)]
         return {
           id: p.id,
           slug: p.url_handle?.trim() ? p.url_handle : String(p.id),
           title: p.title || "Handmade Leather Product",
           originalPrice: p.compare_at_price ? parseFloat(p.compare_at_price) : Math.round((p.price ? parseFloat(p.price) : 0) * 1.2),
           salePrice: p.price ? parseFloat(p.price) : 0,
-          rating: 5.0,
-          reviewCount: 35,
+          rating: summary?.average_rating ?? 0,
+          reviewCount: summary?.review_count ?? 0,
           image: primaryImg,
           secondaryImage: hoverImg,
           isSale: Boolean(p.compare_at_price),
@@ -182,7 +188,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             "item": {
               "@type": "Product",
               "name": p.title,
-              "url": absoluteUrl(`/products/${p.slug ?? p.id}`),
+              "url": absoluteUrl(`/${p.slug ?? p.id}`),
               "image": p.image,
             },
           })),
@@ -224,12 +230,35 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     ],
   }
 
+  // A schema published from the admin category editor for THIS category replaces
+  // the built-in CollectionPage/Breadcrumb JSON-LD to avoid duplicate markup.
+  let publishedSchemaJson: string | null = null
+  try {
+    const schemas = await fetchStoreSchemas()
+    const target = `/categories/${slug}`
+    const match = schemas.find(
+      (s) => s.is_active && s.schema_type === "collection" && s.target_pages === target,
+    )
+    if (match && match.schema_json.trim()) {
+      publishedSchemaJson = match.schema_json
+    }
+  } catch {
+    publishedSchemaJson = null
+  }
+
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionJsonLd).replace(/</g, "\\u003c") }}
-      />
+      {publishedSchemaJson ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: publishedSchemaJson.replace(/</g, "\\u003c") }}
+        />
+      ) : (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionJsonLd).replace(/</g, "\\u003c") }}
+        />
+      )}
       <CategoryContent
         initialProducts={productsList.length > 0 ? productsList : undefined}
         categoryTitle={titleLabel}

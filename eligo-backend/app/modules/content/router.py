@@ -9,9 +9,12 @@ from app.modules.content.schema import (
     MetaobjectDefinitionUpdate,
     MetaobjectDefinitionOut,
     MetaobjectDefinitionWithEntries,
+    MetaobjectDefinitionWithFields,
+    MetaobjectDefinitionFieldOut,
     MetaobjectEntryCreate,
     MetaobjectEntryUpdate,
     MetaobjectEntryOut,
+    MetaobjectEntryWithValues,
     FileCreate,
     FileUpdate,
     FileOut,
@@ -74,7 +77,7 @@ async def create_metaobject_definition(
     return await service.create_metaobject_definition(db, data)
 
 
-@metaobject_definition_router.get("/", response_model=list[MetaobjectDefinitionOut])
+@metaobject_definition_router.get("/", response_model=list[MetaobjectDefinitionWithFields])
 async def list_metaobject_definitions(
     search: str | None = Query(None),
     skip: int = Query(0, ge=0),
@@ -156,7 +159,7 @@ async def create_metaobject_entry(
     return await service.create_metaobject_entry(db, data)
 
 
-@metaobject_entry_router.get("/", response_model=list[MetaobjectEntryOut])
+@metaobject_entry_router.get("/", response_model=list[MetaobjectEntryWithValues])
 async def list_metaobject_entries(
     definition_id: int | None = Query(None),
     status_filter: str | None = Query(None, alias="status"),
@@ -177,7 +180,7 @@ async def list_metaobject_entries(
     )
 
 
-@metaobject_entry_router.get("/{entry_id}", response_model=MetaobjectEntryOut)
+@metaobject_entry_router.get("/{entry_id}", response_model=MetaobjectEntryWithValues)
 async def get_metaobject_entry(
     entry_id: int,
     db: AsyncSession = Depends(get_db),
@@ -191,7 +194,7 @@ async def get_metaobject_entry(
     return obj
 
 
-@metaobject_entry_router.patch("/{entry_id}", response_model=MetaobjectEntryOut)
+@metaobject_entry_router.patch("/{entry_id}", response_model=MetaobjectEntryWithValues)
 async def update_metaobject_entry(
     entry_id: int,
     data: MetaobjectEntryUpdate,
@@ -806,5 +809,53 @@ async def save_robots_txt_content(payload: dict, db: AsyncSession = Depends(get_
         from app.modules.content.schema import PageUpdate
         obj = await service.update_page(db, obj.id, PageUpdate(content=content_val))
     return {"status": "success", "content": obj.content}
+
+
+# ===========================================================================
+# Public Storefront Metaobject API (no auth required, no drafts)
+# ===========================================================================
+
+storefront_metaobject_router = APIRouter(
+    prefix="/storefront/metaobjects",
+    tags=["Storefront Metaobjects"],
+)
+
+
+@storefront_metaobject_router.get("/", response_model=list[MetaobjectDefinitionOut])
+async def list_storefront_definitions(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all active definitions available on storefront (no auth required)."""
+    return await service.list_storefront_definitions(db, skip=skip, limit=limit)
+
+
+@storefront_metaobject_router.get("/{type_key}", response_model=MetaobjectDefinitionWithFields)
+async def get_storefront_definition(
+    type_key: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a single definition by type_key (no auth required)."""
+    obj = await service.get_storefront_definition_by_type_key(db, type_key)
+    if not obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Definition not found or not available on storefront",
+        )
+    return obj
+
+
+@storefront_metaobject_router.get("/{type_key}/entries", response_model=list[MetaobjectEntryWithValues])
+async def list_storefront_entries(
+    type_key: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """List active entries for a definition (no auth required, no drafts)."""
+    return await service.list_storefront_entries(
+        db, type_key=type_key, skip=skip, limit=limit,
+    )
 
 

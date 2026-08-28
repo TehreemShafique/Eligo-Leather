@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { AdminSidebar } from "./admin-sidebar"
 import { AdminHeader } from "./admin-header"
+import { UnsavedChangesProvider } from "@/components/unsaved-changes"
 import { getAuthToken, patchFetch } from "@/lib/api"
 
 patchFetch()
@@ -38,23 +39,27 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   if (isSettings || isLogin) {
     return (
-      <div className="min-h-screen bg-[#f1f1f1] font-sans antialiased text-[#1a1a1a] overflow-x-hidden">
-        {children}
-      </div>
+      <UnsavedChangesProvider>
+        <div className="min-h-screen bg-[#f1f1f1] font-sans antialiased text-[#1a1a1a] overflow-x-hidden">
+          {children}
+        </div>
+      </UnsavedChangesProvider>
     )
   }
 
   return (
-    <div className="flex h-screen bg-[#f1f1f1] font-sans antialiased text-[#1a1a1a] overflow-hidden">
-      <AdminSidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <AdminHeader />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-5 sm:p-6">
-          <div className="mx-auto w-full max-w-[1280px] min-w-0">
-            {children}
-          </div>
-        </main>
+    <UnsavedChangesProvider>
+      <div className="flex h-screen bg-[#f1f1f1] font-sans antialiased text-[#1a1a1a] overflow-hidden">
+        <AdminSidebar />
+        <div className="flex-1 flex flex-col min-w-0">
+          <AdminHeader />
+          <main className="flex-1 overflow-y-auto overflow-x-hidden p-5 sm:p-6">
+            <div className="mx-auto w-full max-w-[1280px] min-w-0">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </UnsavedChangesProvider>
   )
 }

@@ -516,6 +516,97 @@ class GiftCardOut(BaseModel):
 
 
 # ===========================================================================
+# Gift Card Product Image
+# ===========================================================================
+
+class GiftCardProductImageCreate(BaseModel):
+    url: str
+    alt_text: str | None = None
+    position: int = 0
+
+
+class GiftCardProductImageOut(BaseModel):
+    id: int
+    gift_card_product_id: int
+    url: str
+    alt_text: str | None = None
+    position: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ===========================================================================
+# Gift Card Product
+# ===========================================================================
+
+class GiftCardProductCreate(BaseModel):
+    code: str | None = None
+    title: str
+    description: str | None = None
+    status: ProductStatus = ProductStatus.draft
+    base_price: Decimal = Decimal("0")
+    compare_at_price: Decimal = Decimal("0")
+    seo_title: str | None = Field(None, max_length=70)
+    seo_description: str | None = Field(None, max_length=160)
+    meta_description: str | None = None
+    url_handle: str | None = None
+    product_ids: str | None = None
+    images: list[GiftCardProductImageCreate] = []
+
+
+class GiftCardProductUpdate(BaseModel):
+    code: str | None = None
+    title: str | None = None
+    description: str | None = None
+    status: ProductStatus | None = None
+    base_price: Decimal | None = None
+    compare_at_price: Decimal | None = None
+    seo_title: str | None = Field(None, max_length=70)
+    seo_description: str | None = Field(None, max_length=160)
+    meta_description: str | None = None
+    url_handle: str | None = None
+    product_ids: str | None = None
+
+
+class GiftCardProductOut(BaseModel):
+    id: int
+    code: str | None = None
+    title: str
+    description: str | None
+    status: ProductStatus
+    base_price: Decimal
+    compare_at_price: Decimal
+    seo_title: str | None
+    seo_description: str | None
+    meta_description: str | None = None
+    url_handle: str | None
+    product_ids: str | None = None
+    images: list[GiftCardProductImageOut] = []
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GiftCardProductListOut(BaseModel):
+    id: int
+    code: str | None = None
+    title: str
+    status: ProductStatus
+    base_price: Decimal
+    compare_at_price: Decimal
+    seo_title: str | None
+    url_handle: str | None
+    product_ids: str | None = None
+    image_url: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ===========================================================================
 # Catalog Overview (dashboard)
 # ===========================================================================
 

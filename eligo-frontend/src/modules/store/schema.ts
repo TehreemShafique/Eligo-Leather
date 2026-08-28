@@ -27,6 +27,15 @@ const HeaderScriptOutSchema = z.object({
   disclaimer: z.string(),
 })
 
+const PublicStoreSchemaOutSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  schema_type: z.string(),
+  target_pages: z.string(),
+  schema_json: z.string(),
+  is_active: z.boolean(),
+})
+
 const NavItemSchema = z.object({
   label: z.string(),
   href: z.string(),
@@ -47,6 +56,7 @@ export {
   StoreSettingOutSchema,
   StoreBrandOutSchema,
   HeaderScriptOutSchema,
+  PublicStoreSchemaOutSchema,
   NavItemSchema,
   StorefrontConfigSchema,
 }
@@ -54,4 +64,5 @@ export {
 export type StoreSettingOut = z.infer<typeof StoreSettingOutSchema>
 export type StoreBrandOut = z.infer<typeof StoreBrandOutSchema>
 export type HeaderScriptOut = z.infer<typeof HeaderScriptOutSchema>
+export type PublicStoreSchemaOut = z.infer<typeof PublicStoreSchemaOutSchema>
 export type StorefrontConfig = z.infer<typeof StorefrontConfigSchema>

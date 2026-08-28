@@ -43,3 +43,16 @@ export type StoreReview = {
   photo_urls: string[]
   created_at?: string | null
 }
+
+// Aggregated star rating + count computed server-side from APPROVED reviews.
+export const ReviewSummarySchema = z.object({
+  product_id: z.union([z.number(), z.string()]),
+  average_rating: z.coerce.number().min(0).max(5).catch(0),
+  review_count: z.coerce.number().int().min(0).catch(0),
+})
+
+export type ReviewSummary = {
+  product_id: number | string
+  average_rating: number
+  review_count: number
+}

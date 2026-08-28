@@ -18,6 +18,7 @@ from app.modules.catalog.model import (          # noqa: F401
     Location, InventoryItem,
     PurchaseOrder, PurchaseOrderItem,
     Transfer, GiftCard,
+    GiftCardProduct, GiftCardProductImage,
 )
 from app.modules.discounts.model import (  # noqa: F401
     Discount, WelcomeDiscountSettings, WelcomeDiscountLog,
@@ -56,7 +57,7 @@ from app.modules.settings.shipping_and_delivery.model import (  # noqa: F401
 
 from app.modules.settings.locations.model import Location  # noqa: F401
 
-from app.modules.settings.apps.model import StoreIntegration  # noqa: F401
+from app.modules.settings.apps.model import StoreIntegration, Review  # noqa: F401
 
 from app.modules.settings.sales_channels.model import (  # noqa: F401
     SalesChannel,
@@ -73,6 +74,7 @@ from app.modules.settings.notifications.model import (  # noqa: F401
     EmailTemplate,
     WebhookEndpoint,
     DispatchRule,
+    NotificationSetting,
     NotificationLog,
 )
 

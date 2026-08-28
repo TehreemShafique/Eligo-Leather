@@ -29,6 +29,7 @@ interface CustomerRow {
 
 export default function AdminCustomersPage() {
   const [searchQuery, setSearchQuery] = useState("")
+
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [customers, setCustomers] = useState<CustomerRow[]>([])
   const [loading, setLoading] = useState(false)

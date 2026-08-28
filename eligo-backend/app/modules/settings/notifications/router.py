@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -9,6 +9,7 @@ from app.modules.settings.notifications.model import (
     NotificationLog,
 )
 from app.modules.settings.notifications.schema import (
+    CustomerSearchResult,
     DispatchRequest,
     DispatchResponse,
     DispatchRuleCreate,
@@ -17,11 +18,16 @@ from app.modules.settings.notifications.schema import (
     EmailTemplateCreate,
     EmailTemplateOut,
     EmailTemplateUpdate,
+    ManualEmailRequest,
+    ManualEmailResponse,
     NotificationLogOut,
+    NotificationSettingOut,
+    NotificationSettingUpdate,
     SenderConfigOut,
     SenderConfigUpdate,
     TestEmailRequest,
     TestEmailResponse,
+    TestEmailWithTemplateRequest,
     WebhookEndpointCreate,
     WebhookEndpointOut,
     WebhookEndpointUpdate,
@@ -57,6 +63,24 @@ async def update_sender(data: SenderConfigUpdate, db: AsyncSession = Depends(get
 async def test_sender(data: TestEmailRequest, db: AsyncSession = Depends(get_db)):
     """Send a test email to verify the SMTP configuration."""
     return await service.send_test_email(db, data.to)
+
+
+# ============================== Notification Settings ==============================
+
+
+@router.get("/settings", response_model=list[NotificationSettingOut])
+async def list_notification_settings(db: AsyncSession = Depends(get_db)):
+    """Get enable/disable status for each automatic notification type."""
+    return await service.get_notification_settings(db)
+
+
+@router.patch("/settings/{notification_type}", response_model=NotificationSettingOut)
+async def update_notification_setting(
+    notification_type: str,
+    data: NotificationSettingUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.update_notification_setting(db, notification_type, data.enabled)
 
 
 # ============================== Email templates ==============================
@@ -174,7 +198,13 @@ async def delete_rule(rule_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/logs", response_model=list[NotificationLogOut])
-async def list_logs(skip: int = 0, limit: int = 50, db: AsyncSession = Depends(get_db)):
+async def list_logs(
+    skip: int = 0,
+    limit: int = 50,
+    event_type: str | None = None,
+    status_filter: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
     """Audit trail of every email / webhook dispatch attempt."""
     return await service.list_logs(db, skip, limit)
 
@@ -186,3 +216,33 @@ async def dispatch_event(data: DispatchRequest, db: AsyncSession = Depends(get_d
     e.g. POST {"event_type": "admin_notification", "payload": {"message": "..."}}
     """
     return await service.dispatch_event(data.event_type, data.payload, db)
+
+
+# ============================== Customer search for manual email ==============================
+
+
+@router.get("/customers/search", response_model=list[CustomerSearchResult])
+async def search_customers(
+    q: str = Query("", description="Search by name or email"),
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.search_customers_for_email(db, q, limit)
+
+
+# ============================== Manual email ==============================
+
+
+@router.post("/send", response_model=ManualEmailResponse)
+async def send_manual_email(data: ManualEmailRequest, db: AsyncSession = Depends(get_db)):
+    """Send a manual email to a customer using a template."""
+    return await service.send_manual_email(db, data)
+
+
+# ============================== Test email with template ==============================
+
+
+@router.post("/test", response_model=TestEmailResponse)
+async def test_email_with_template(data: TestEmailWithTemplateRequest, db: AsyncSession = Depends(get_db)):
+    """Send a test email using a specific template with mock data."""
+    return await service.send_test_with_template(db, data)

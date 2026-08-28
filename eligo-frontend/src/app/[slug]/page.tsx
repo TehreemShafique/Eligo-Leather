@@ -5,6 +5,7 @@ import { sanitizeCmsHtml } from "@/lib/sanitize-html"
 import { truncate } from "@/lib/utils"
 import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
 import { ProductDetailView } from "@/components/product/product-detail-view"
+import { fetchStoreSchemas } from "@/modules/store/api"
 import type { ProductListOut, ProductOut } from "@/modules/catalog/schema"
 
 type ProductPageProps = {
@@ -35,9 +36,6 @@ async function resolveProduct(slug: string) {
 
 async function fetchRelatedProducts(currentProduct: ProductOut): Promise<ProductListOut[]> {
   try {
-    // Resolve which admin-created collection this product belongs to, using
-    // the same assignment data the admin form sends (comma-separated
-    // category titles stored on the product row).
     const collections = await listCollections()
     const ownCategories = (currentProduct.categories ?? "")
       .split(",")
@@ -52,9 +50,6 @@ async function fetchRelatedProducts(currentProduct: ProductOut): Promise<Product
           )
         : undefined
 
-    // Same-collection-group scope when known (e.g. any category under the
-    // Wallets type); otherwise fall back to the product's top-level
-    // category.
     const products = await listProducts({
       status: "Active",
       limit: 200,
@@ -66,8 +61,6 @@ async function fetchRelatedProducts(currentProduct: ProductOut): Promise<Product
     const others = products.filter((p) => p.id !== currentProduct.id)
     if (!ownerCollection) return others.slice(0, 5)
 
-    // Prefer products from a different category within the same collection,
-    // then fill with remaining ones from that collection.
     const differentCategory = others.filter((p) => {
       const titles = (p.categories ?? "")
         .split(",")
@@ -121,6 +114,22 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const firstVariant = product?.variants?.[0]
   const price = firstVariant?.price ? parseFloat(firstVariant.price) : undefined
   const images = product?.images && product.images.length > 0 ? product.images.map((img) => img.url) : []
+
+  // A schema published from the admin product editor for THIS slug replaces the
+  // built-in JSON-LD (Product/Organization/Breadcrumb) to avoid duplicate markup.
+  let publishedSchemaJson: string | null = null
+  try {
+    const schemas = await fetchStoreSchemas()
+    const target = `/${product.url_handle || product.id}`
+    const match = schemas.find(
+      (s) => s.is_active && s.schema_type === "product" && s.target_pages === target,
+    )
+    if (match && match.schema_json.trim()) {
+      publishedSchemaJson = match.schema_json
+    }
+  } catch {
+    publishedSchemaJson = null
+  }
 
   const jsonLdSchema = product
     ? {
@@ -190,12 +199,17 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   return (
     <>
-      {jsonLdSchema && (
+      {publishedSchemaJson ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: publishedSchemaJson.replace(/</g, "\\u003c") }}
+        />
+      ) : jsonLdSchema ? (
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdSchema).replace(/</g, "\\u003c") }}
         />
-      )}
+      ) : null}
       <ProductDetailView
         product={{
           ...product,

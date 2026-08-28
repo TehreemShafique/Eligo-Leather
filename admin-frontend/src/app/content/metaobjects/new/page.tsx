@@ -15,15 +15,6 @@ import {
   CaretDown,
   MagnifyingGlass,
   Info,
-  TextT,
-  FileImage,
-  LinkSimple,
-  Hash,
-  Calendar,
-  Sparkle,
-  Code,
-  Globe,
-  Tag,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
@@ -37,7 +28,6 @@ interface MetaobjectFieldRow {
   isTypeOpen?: boolean
 }
 
-// Categorized Field Types List matching User Prompt & Pic 2
 const CATEGORIZED_FIELD_TYPES = [
   {
     category: "Recommended",
@@ -70,33 +60,24 @@ const CATEGORIZED_FIELD_TYPES = [
   {
     category: "Reference",
     types: [
-      { name: "Blog post", desc: "Reference store blog posts" },
-      { name: "Collection", desc: "Reference product collections" },
-      { name: "Company", desc: "B2B company profiles" },
-      { name: "Customer", desc: "Reference customer accounts" },
-      { name: "Metaobject", desc: "Nested metaobject entries" },
-      { name: "Order", desc: "Store order reference" },
-      { name: "Page", desc: "Storefront content page" },
       { name: "Product", desc: "Link store products" },
-      { name: "Product variant", desc: "Link specific color/size variants" },
+      { name: "Collection", desc: "Reference product collections" },
+      { name: "Metaobject", desc: "Nested metaobject entries" },
     ],
   },
   {
     category: "Number",
     types: [
-      { name: "ID", desc: "Unique external identifier" },
-      { name: "Money", desc: "Currency values with decimals" },
-      { name: "Decimal", desc: "Floating point numbers" },
       { name: "Integer", desc: "Whole count numbers" },
-      { name: "Rating", desc: "1 to 5 star ratings" },
-      { name: "Measurement", desc: "Dimensions, weight, area" },
+      { name: "Decimal", desc: "Floating point numbers" },
+      { name: "Money", desc: "Currency values with decimals" },
     ],
   },
   {
     category: "Link",
     types: [
-      { name: "Link", desc: "Internal store navigation link" },
       { name: "URL", desc: "External website URL" },
+      { name: "Link", desc: "Internal store navigation link" },
     ],
   },
   {
@@ -111,13 +92,6 @@ const CATEGORIZED_FIELD_TYPES = [
     types: [
       { name: "True or false", desc: "Boolean checkbox" },
       { name: "Color", desc: "Hex color code (#A52A2A)" },
-      { name: "Language", desc: "Locale language codes" },
-    ],
-  },
-  {
-    category: "Advanced",
-    types: [
-      { name: "JSON", desc: "Structured raw JSON data schema" },
     ],
   },
 ]
@@ -125,21 +99,17 @@ const CATEGORIZED_FIELD_TYPES = [
 export default function CreateMetaobjectDefinitionPage() {
   const router = useRouter()
 
-  // Form State
   const [name, setName] = useState("")
   const [typeKey, setTypeKey] = useState("")
+  const [handle, setHandle] = useState("")
   const [description, setDescription] = useState("")
   const [showDescription, setShowDescription] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // Metaobject Options Toggles matching Pic 1
-  const [activeDraftStatus, setActiveDraftStatus] = useState(true)
-  const [translations, setTranslations] = useState(false)
+  const [status, setStatus] = useState<"active" | "draft">("active")
   const [publishAsWebPages, setPublishAsWebPages] = useState(false)
-  const [storefrontsApiAccess, setStorefrontsApiAccess] = useState(true)
-  const [customerAccountApiAccess, setCustomerAccountApiAccess] = useState(false)
+  const [availableOnStorefront, setAvailableOnStorefront] = useState(true)
 
-  // Fields Array State matching Pic 1 & Pic 2
   const [fields, setFields] = useState<MetaobjectFieldRow[]>([
     {
       id: "f-1",
@@ -152,10 +122,8 @@ export default function CreateMetaobjectDefinitionPage() {
     },
   ])
 
-  // Field type search query inside type picker
   const [fieldTypeSearch, setFieldTypeSearch] = useState("")
 
-  // Auto-generate Type Key from Name
   useEffect(() => {
     if (name) {
       const generated = name
@@ -164,12 +132,13 @@ export default function CreateMetaobjectDefinitionPage() {
         .trim()
         .replace(/\s+/g, "_")
       setTypeKey(generated)
+      setHandle(generated)
     } else {
       setTypeKey("")
+      setHandle("")
     }
   }, [name])
 
-  // Add field row
   const handleAddField = () => {
     setFields([
       ...fields,
@@ -185,7 +154,6 @@ export default function CreateMetaobjectDefinitionPage() {
     ])
   }
 
-  // Remove field row
   const handleRemoveField = (id: string) => {
     if (fields.length === 1) {
       toast.error("A metaobject definition must contain at least one field.")
@@ -194,7 +162,6 @@ export default function CreateMetaobjectDefinitionPage() {
     setFields(fields.filter((f) => f.id !== id))
   }
 
-  // Update field property
   const handleUpdateField = (id: string, prop: keyof MetaobjectFieldRow, val: any) => {
     setFields((prev) =>
       prev.map((f) => {
@@ -210,7 +177,6 @@ export default function CreateMetaobjectDefinitionPage() {
     )
   }
 
-  // Save Metaobject Definition to Database
   const handleSaveMetaobject = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) {
@@ -230,21 +196,21 @@ export default function CreateMetaobjectDefinitionPage() {
     const payload = {
       name: name.trim(),
       type_key: finalTypeKey,
-      description: description,
-      field_definitions: validFields.map((f) => ({
-        key: f.key || f.label.toLowerCase().replace(/\s+/g, "_"),
-        name: f.label.trim(),
-        type: f.fieldType,
-        list: f.cardinality === "list",
+      handle: handle || finalTypeKey,
+      description: description || null,
+      status: status,
+      publish_as_web_pages: publishAsWebPages,
+      available_on_storefront: availableOnStorefront,
+      fields: validFields.map((f, idx) => ({
+        label: f.label.trim(),
+        field_type: f.fieldType,
+        cardinality: f.cardinality,
         required: true,
+        is_display_name: idx === 0,
+        is_filterable: false,
+        position: idx,
+        config: null,
       })),
-      options: {
-        active_draft_status: activeDraftStatus,
-        translations,
-        publish_as_web_pages: publishAsWebPages,
-        storefronts_api_access: storefrontsApiAccess,
-        customer_account_api_access: customerAccountApiAccess,
-      },
     }
 
     try {
@@ -255,30 +221,21 @@ export default function CreateMetaobjectDefinitionPage() {
       })
 
       if (res.ok) {
-        toast.success(`Metaobject definition "${name}" saved to database!`)
+        toast.success(`Metaobject definition "${name}" created successfully!`)
+        router.push("/content/metaobjects")
       } else {
-        toast.success(`Metaobject definition "${name}" created!`)
+        const err = await res.json().catch(() => ({ detail: "Failed to create" }))
+        toast.error(err.detail || "Failed to create definition")
       }
     } catch (err) {
-      toast.success(`Metaobject definition "${name}" created!`)
+      toast.error("Network error - please try again")
     } finally {
-      // Local backup sync
-      try {
-        const stored = localStorage.getItem("eligo_created_metaobjects")
-        const existing = stored ? JSON.parse(stored) : []
-        localStorage.setItem("eligo_created_metaobjects", JSON.stringify([{ id: Date.now(), ...payload }, ...existing]))
-      } catch (e) {
-        console.log("localStorage error", e)
-      }
-
       setSaving(false)
-      router.push("/content/metaobjects")
     }
   }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 font-sans text-gray-900 pb-20">
-      {/* Breadcrumb Header matching Pic 1 */}
       <div className="flex items-center gap-2 text-sm text-gray-600 font-medium">
         <Link href="/content/metaobjects" className="p-1 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors">
           <Browsers className="w-5 h-5 text-gray-700" />
@@ -288,7 +245,7 @@ export default function CreateMetaobjectDefinitionPage() {
       </div>
 
       <form onSubmit={handleSaveMetaobject} className="space-y-6 text-xs">
-        {/* Card 1: Name & Type matching Pic 1 */}
+        {/* Card 1: Name & Type */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="font-bold text-gray-900 text-xs block">Name</label>
@@ -301,9 +258,9 @@ export default function CreateMetaobjectDefinitionPage() {
             />
           </div>
 
-          <div className="text-xs text-gray-500 font-medium flex items-center gap-2">
-            <span>Type:</span>
-            <span className="font-mono font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{typeKey || "—"}</span>
+          <div className="flex items-center gap-4 text-xs text-gray-500 font-medium">
+            <span>Type: <span className="font-mono font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{typeKey || "—"}</span></span>
+            <span>Handle: <span className="font-mono text-gray-600">{handle || "—"}</span></span>
           </div>
 
           {showDescription ? (
@@ -328,7 +285,7 @@ export default function CreateMetaobjectDefinitionPage() {
           )}
         </div>
 
-        {/* Card 2: Fields List matching Pic 1 & Pic 2 */}
+        {/* Card 2: Fields List */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-4">
           <h2 className="text-sm font-bold text-gray-900">Fields</h2>
 
@@ -336,12 +293,10 @@ export default function CreateMetaobjectDefinitionPage() {
             {fields.map((fRow) => (
               <div key={fRow.id} className="bg-gray-50/70 rounded-2xl border border-gray-200 p-4 space-y-3 relative hover:border-gray-300">
                 <div className="flex flex-wrap items-center gap-3">
-                  {/* Drag Handle */}
                   <div className="cursor-grab text-gray-400 hover:text-gray-600 shrink-0">
                     <DotsSixVertical className="w-4 h-4" />
                   </div>
 
-                  {/* Field Label Input */}
                   <div className="flex-1 min-w-[200px]">
                     <input
                       type="text"
@@ -352,7 +307,7 @@ export default function CreateMetaobjectDefinitionPage() {
                     />
                   </div>
 
-                  {/* Cardinality Dropdown (Pic 2: One value vs List of values) */}
+                  {/* Cardinality Dropdown */}
                   <div className="relative shrink-0">
                     <button
                       type="button"
@@ -364,7 +319,7 @@ export default function CreateMetaobjectDefinitionPage() {
                     </button>
 
                     {fRow.isCardinalityOpen && (
-                      <div className="absolute left-0 mt-1 w-44 bg-white rounded-2xl border border-gray-200 shadow-xl z-50 p-1.5 space-y-1 animate-scale-in">
+                      <div className="absolute left-0 mt-1 w-44 bg-white rounded-2xl border border-gray-200 shadow-xl z-50 p-1.5 space-y-1">
                         <button
                           type="button"
                           onClick={() => {
@@ -372,7 +327,7 @@ export default function CreateMetaobjectDefinitionPage() {
                             handleUpdateField(fRow.id, "isCardinalityOpen", false)
                           }}
                           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
-                            fRow.cardinality === "one" ? "bg-amber-50 text-amber-900 font-extrabold" : "hover:bg-gray-100 text-gray-800"
+                            fRow.cardinality === "one" ? "bg-amber-50 text-amber-900" : "hover:bg-gray-100 text-gray-800"
                           }`}
                         >
                           <div className="flex items-center gap-2">
@@ -389,7 +344,7 @@ export default function CreateMetaobjectDefinitionPage() {
                             handleUpdateField(fRow.id, "isCardinalityOpen", false)
                           }}
                           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
-                            fRow.cardinality === "list" ? "bg-amber-50 text-amber-900 font-extrabold" : "hover:bg-gray-100 text-gray-800"
+                            fRow.cardinality === "list" ? "bg-amber-50 text-amber-900" : "hover:bg-gray-100 text-gray-800"
                           }`}
                         >
                           <div className="flex items-center gap-2">
@@ -402,7 +357,7 @@ export default function CreateMetaobjectDefinitionPage() {
                     )}
                   </div>
 
-                  {/* Field Type Picker Dropdown matching User Prompt */}
+                  {/* Field Type Picker */}
                   <div className="relative flex-1 min-w-[220px]">
                     <button
                       type="button"
@@ -414,10 +369,9 @@ export default function CreateMetaobjectDefinitionPage() {
                     </button>
 
                     {fRow.isTypeOpen && (
-                      <div className="absolute left-0 right-0 mt-1 bg-white rounded-2xl border border-gray-200 shadow-2xl z-50 p-2 max-h-72 overflow-y-auto space-y-3 animate-scale-in">
-                        {/* Search bar inside field type picker */}
-                        <div className="relative sticky top-0 bg-white pb-1 z-10">
-                          <MagnifyingGlass className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+                      <div className="absolute left-0 right-0 mt-1 bg-white rounded-2xl border border-gray-200 shadow-2xl z-50 flex flex-col max-h-72">
+                        <div className="relative p-2 pb-0 shrink-0">
+                          <MagnifyingGlass className="w-3.5 h-3.5 text-gray-400 absolute left-4.5 top-2.5" />
                           <input
                             type="text"
                             value={fieldTypeSearch}
@@ -427,7 +381,7 @@ export default function CreateMetaobjectDefinitionPage() {
                           />
                         </div>
 
-                        {/* Categorized Options */}
+                        <div className="overflow-y-auto p-2 space-y-3">
                         {CATEGORIZED_FIELD_TYPES.map((catGroup) => {
                           const filtered = catGroup.types.filter((t) => {
                             if (!fieldTypeSearch.trim()) return true
@@ -463,11 +417,11 @@ export default function CreateMetaobjectDefinitionPage() {
                             </div>
                           )
                         })}
+                        </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Delete Row Button */}
                   <button
                     type="button"
                     onClick={() => handleRemoveField(fRow.id)}
@@ -481,7 +435,6 @@ export default function CreateMetaobjectDefinitionPage() {
             ))}
           </div>
 
-          {/* Add Field Button */}
           <div className="pt-1">
             <button
               type="button"
@@ -494,45 +447,30 @@ export default function CreateMetaobjectDefinitionPage() {
           </div>
         </div>
 
-        {/* Card 3: Metaobject options matching Pic 1 */}
+        {/* Card 3: Metaobject options */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-4">
           <div className="flex items-center gap-1.5 border-b border-gray-100 pb-3">
             <h2 className="text-sm font-bold text-gray-900">Metaobject options</h2>
-            <span title="Options controlling storefront API visibility and draft states.">
-              <Info className="w-4 h-4 text-gray-400" />
-            </span>
+            <Info className="w-4 h-4 text-gray-400" />
           </div>
 
           <div className="space-y-4 text-xs">
-            {/* Option 1: Active-draft status */}
             <div className="flex items-center justify-between py-1 border-b border-gray-100">
-              <span className="font-bold text-gray-800">Active-draft status</span>
-              <button
-                type="button"
-                onClick={() => setActiveDraftStatus(!activeDraftStatus)}
-                className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${
-                  activeDraftStatus ? "bg-black" : "bg-gray-300"
-                }`}
-              >
-                <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow-md ${activeDraftStatus ? "translate-x-5" : "translate-x-0"}`} />
-              </button>
+              <span className="font-bold text-gray-800">Status</span>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">{status === "active" ? "Active" : "Draft"}</span>
+                <button
+                  type="button"
+                  onClick={() => setStatus(status === "active" ? "draft" : "active")}
+                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${
+                    status === "active" ? "bg-black" : "bg-gray-300"
+                  }`}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow-md ${status === "active" ? "translate-x-5" : "translate-x-0"}`} />
+                </button>
+              </div>
             </div>
 
-            {/* Option 2: Translations */}
-            <div className="flex items-center justify-between py-1 border-b border-gray-100">
-              <span className="font-bold text-gray-800">Translations</span>
-              <button
-                type="button"
-                onClick={() => setTranslations(!translations)}
-                className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${
-                  translations ? "bg-black" : "bg-gray-300"
-                }`}
-              >
-                <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow-md ${translations ? "translate-x-5" : "translate-x-0"}`} />
-              </button>
-            </div>
-
-            {/* Option 3: Publish entries as web pages */}
             <div className="flex items-center justify-between py-1 border-b border-gray-100">
               <span className="font-bold text-gray-800">Publish entries as web pages</span>
               <button
@@ -546,31 +484,16 @@ export default function CreateMetaobjectDefinitionPage() {
               </button>
             </div>
 
-            {/* Option 4: Storefronts API access */}
-            <div className="flex items-center justify-between py-1 border-b border-gray-100">
-              <span className="font-bold text-gray-800">Storefronts API access</span>
-              <button
-                type="button"
-                onClick={() => setStorefrontsApiAccess(!storefrontsApiAccess)}
-                className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${
-                  storefrontsApiAccess ? "bg-black" : "bg-gray-300"
-                }`}
-              >
-                <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow-md ${storefrontsApiAccess ? "translate-x-5" : "translate-x-0"}`} />
-              </button>
-            </div>
-
-            {/* Option 5: Customer Account API access */}
             <div className="flex items-center justify-between py-1">
-              <span className="font-bold text-gray-800">Customer Account API access</span>
+              <span className="font-bold text-gray-800">Available on Client Storefront</span>
               <button
                 type="button"
-                onClick={() => setCustomerAccountApiAccess(!customerAccountApiAccess)}
+                onClick={() => setAvailableOnStorefront(!availableOnStorefront)}
                 className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${
-                  customerAccountApiAccess ? "bg-black" : "bg-gray-300"
+                  availableOnStorefront ? "bg-black" : "bg-gray-300"
                 }`}
               >
-                <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow-md ${customerAccountApiAccess ? "translate-x-5" : "translate-x-0"}`} />
+                <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow-md ${availableOnStorefront ? "translate-x-5" : "translate-x-0"}`} />
               </button>
             </div>
           </div>

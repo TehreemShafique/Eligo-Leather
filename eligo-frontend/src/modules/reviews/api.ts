@@ -1,5 +1,10 @@
 import { api } from "@/lib/api-client"
-import { StoreReviewSchema, type StoreReview } from "./schema"
+import {
+  StoreReviewSchema,
+  ReviewSummarySchema,
+  type StoreReview,
+  type ReviewSummary,
+} from "./schema"
 
 // Public, admin-moderated review endpoints (Supabase Reviews app).
 // Mounted by the settings module, hence the /settings/apps prefix.
@@ -36,6 +41,48 @@ export async function listApprovedReviews(
   }
 }
 
+// Average star rating + review count for a single product, computed from
+// approved reviews in the backend. Returns null when there are no approved
+// reviews (callers fall back to their defaults).
+export async function fetchReviewSummary(
+  productId: string | number | null | undefined,
+): Promise<ReviewSummary | null> {
+  if (productId == null || productId === "") return null
+  try {
+    const data = await api.get<unknown>(
+      `${REVIEWS_BASE}/summary?product_id=${encodeURIComponent(String(productId))}`,
+      { auth: false, ...REVIEWS_CACHE },
+    )
+    if (!data || typeof data !== "object") return null
+    return ReviewSummarySchema.parse(data)
+  } catch {
+    return null
+  }
+}
+
+// Average star ratings for every product that has approved reviews, keyed by
+// product id string. One backend call serves a whole product catalog page.
+export async function fetchAllReviewSummaries(): Promise<
+  Record<string, ReviewSummary>
+> {
+  try {
+    const data = await api.get<unknown>(`${REVIEWS_BASE}/summary`, {
+      auth: false,
+      ...REVIEWS_CACHE,
+    })
+    if (!data || !Array.isArray(data)) return {}
+    const list = ReviewSummarySchema.array().safeParse(data)
+    if (!list.success) return {}
+    const map: Record<string, ReviewSummary> = {}
+    for (const item of list.data) {
+      map[String(item.product_id)] = item
+    }
+    return map
+  } catch {
+    return {}
+  }
+}
+
 export type SubmitReviewInput = {
   productId?: string | number | null
   name: string
@@ -43,6 +90,7 @@ export type SubmitReviewInput = {
   rating: number
   title?: string
   content: string
+  images?: string[]
 }
 
 export async function submitReview(input: SubmitReviewInput): Promise<void> {
@@ -58,7 +106,26 @@ export async function submitReview(input: SubmitReviewInput): Promise<void> {
       rating: input.rating,
       title: input.title?.trim() || "",
       body: input.content.trim(),
+      images: input.images ?? [],
     },
     { auth: false },
   )
+}
+
+// Upload customer review photos to the backend (no auth). Accepts multiple
+// files, converts each to WebP, and returns the public URLs to attach to the
+// review. Relative /static/... paths are resolved later by resolveApiMediaUrl.
+export async function uploadReviewPhotos(
+  files: FileList | File[],
+): Promise<string[]> {
+  const formData = new FormData()
+  for (const file of Array.from(files)) {
+    formData.append("files", file)
+  }
+  const data = await api.post<{ success: boolean; urls: string[] }>(
+    `${REVIEWS_BASE}/upload`,
+    formData as unknown as Record<string, unknown>,
+    { auth: false },
+  )
+  return data?.urls ?? []
 }

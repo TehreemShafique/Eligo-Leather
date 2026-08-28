@@ -16,6 +16,7 @@ import {
   Eye,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { CharCounter } from "@/components/ui/char-counter"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
 import { AddMetafieldDefinitionModal } from "@/components/modals/add-metafield-definition-modal"
 
@@ -512,20 +513,28 @@ export default function EditPageDetailScreen() {
             {showSeoFields && (
               <div className="space-y-3 pt-2 border-t border-gray-100">
                 <div>
-                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Page Title</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Page Title</label>
+                    <CharCounter value={seoTitle} limit={60} />
+                  </div>
                   <input
                     type="text"
+                    maxLength={60}
                     value={seoTitle}
                     onChange={(e) => setSeoTitle(e.target.value)}
                     className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Meta Description</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Meta Description</label>
+                    <CharCounter value={seoDescription} limit={160} />
+                  </div>
                   <textarea
                     value={seoDescription}
                     onChange={(e) => setSeoDescription(e.target.value)}
                     rows={2}
+                    maxLength={160}
                     className="w-full p-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden"
                   />
                 </div>

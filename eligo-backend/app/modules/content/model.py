@@ -52,14 +52,25 @@ class MetaobjectDefinition(Base):
     __tablename__ = "metaobject_definitions"
     __table_args__ = (
         Index("ix_metaobject_definitions_type_key", "type_key"),
+        Index("ix_metaobject_definitions_handle", "handle"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     type_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    handle: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        SAEnum(MetaobjectStatus, name="metaobject_definition_status"),
+        default=MetaobjectStatus.active,
+    )
+    publish_as_web_pages: Mapped[bool] = mapped_column(Boolean, default=False)
     available_on_storefront: Mapped[bool] = mapped_column(Boolean, default=False)
-    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    fields = relationship(
+        "MetaobjectDefinitionField", back_populates="definition",
+        cascade="all, delete-orphan", order_by="MetaobjectDefinitionField.position",
+    )
     entries = relationship(
         "MetaobjectEntry", back_populates="definition",
         cascade="all, delete-orphan",
@@ -91,7 +102,6 @@ class MetaobjectEntry(Base):
     )
     display_name: Mapped[str] = mapped_column(String, nullable=False)
     handle: Mapped[str | None] = mapped_column(String, nullable=True)
-    fields: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         SAEnum(MetaobjectStatus, name="metaobject_status"),
         default=MetaobjectStatus.active,
@@ -101,6 +111,77 @@ class MetaobjectEntry(Base):
     references_count: Mapped[int] = mapped_column(Integer, default=0)
 
     definition = relationship("MetaobjectDefinition", back_populates="entries")
+    field_values = relationship(
+        "MetaobjectEntryValue", back_populates="entry",
+        cascade="all, delete-orphan",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Metaobject Definition Fields
+# ---------------------------------------------------------------------------
+
+class MetaobjectDefinitionField(Base):
+    __tablename__ = "metaobject_definition_fields"
+    __table_args__ = (
+        Index("ix_metaobject_definition_fields_definition_id", "definition_id"),
+        Index("ix_metaobject_definition_fields_position", "position"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    definition_id: Mapped[int] = mapped_column(
+        ForeignKey("metaobject_definitions.id", ondelete="CASCADE"),
+    )
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    field_type: Mapped[str] = mapped_column(String, nullable=False)
+    cardinality: Mapped[str] = mapped_column(String, default="one")  # "one" or "list"
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_display_name: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_filterable: Mapped[bool] = mapped_column(Boolean, default=False)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    config: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON for type-specific config (max_length, min, max, etc.)
+
+    definition = relationship("MetaobjectDefinition", back_populates="fields")
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Metaobject Entry Values
+# ---------------------------------------------------------------------------
+
+class MetaobjectEntryValue(Base):
+    __tablename__ = "metaobject_entry_values"
+    __table_args__ = (
+        Index("ix_metaobject_entry_values_entry_id", "entry_id"),
+        Index("ix_metaobject_entry_values_field_id", "field_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    entry_id: Mapped[int] = mapped_column(
+        ForeignKey("metaobject_entries.id", ondelete="CASCADE"),
+    )
+    field_id: Mapped[int] = mapped_column(
+        ForeignKey("metaobject_definition_fields.id", ondelete="CASCADE"),
+    )
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)  # Text value or JSON for complex types (references, lists)
+    reference_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # FK to referenced entity (product, collection, etc.)
+    reference_type: Mapped[str | None] = mapped_column(String, nullable=True)  # e.g. "product", "collection", "metaobject"
+
+    entry = relationship("MetaobjectEntry", back_populates="field_values")
+    field = relationship("MetaobjectDefinitionField")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),

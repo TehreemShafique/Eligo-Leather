@@ -37,3 +37,18 @@ export function parseError(error: unknown): string{
   if(typeof error === "string") return error;
   return "Something went wrong."
 }
+
+// Backend media (uploaded files, review photos) is stored as a backend-relative
+// path like `/static/uploads/x.webp`. The frontend runs on its own origin, so
+// convert it to an absolute URL against the backend API host. External URLs
+// (https://...) are returned unchanged.
+export function resolveApiMediaUrl(
+  url: string | null | undefined,
+): string {
+  if (!url) return ""
+  if (/^https?:\/\//i.test(url)) return url
+  if (url.startsWith("/")) {
+    return `${process.env.NEXT_PUBLIC_API_URL ?? ""}${url}`
+  }
+  return url
+}
