@@ -784,6 +784,70 @@ async def register_challan(db: AsyncSession, challan_no: str) -> LeopardLoadShee
     return sheet
 
 
+async def ensure_load_sheet_for_cn(db: AsyncSession, cn_number: str) -> str | None:
+    """Generate a Leopards load sheet for a booked CN and register the challan
+    locally so it shows up in the Generate Load Sheets tab.
+
+    Best-effort: never raises — callers must not fail a booking because the
+    challan could not be registered.
+    """
+    cn_number = str(cn_number).strip()
+    if not cn_number:
+        return None
+    try:
+        res = await leopard_client.generate_load_sheet([cn_number])
+    except Exception as exc:
+        logger.warning("ensure_load_sheet_for_cn: generate_load_sheet failed for CN %s: %s", cn_number, exc)
+        return None
+
+    challan_no = None
+    if isinstance(res, dict):
+        challan_no = (
+            res.get("load_sheet_id")
+            or res.get("challan_id")
+            or res.get("id")
+            or res.get("load_sheet_number")
+            or res.get("challan_number")
+            or res.get("sheet_id")
+        )
+        nested = res.get("data")
+        if not challan_no and isinstance(nested, dict):
+            challan_no = (
+                nested.get("load_sheet_id")
+                or nested.get("challan_id")
+                or nested.get("id")
+            )
+    if not challan_no:
+        # The CN may already belong to a load sheet generated on the Leopards
+        # portal. The API then replies with an error dict like
+        # {"<CN>": "Already Generate Loadsheet"} and no challan id — the
+        # challan can only be recovered by pasting its number in the
+        # Sync Challans modal.
+        error_val = res.get("error") if isinstance(res, dict) else None
+        if isinstance(error_val, dict):
+            first_err = next(iter(error_val.values()), "") if error_val else ""
+            if "loadsheet" in str(first_err).lower() or "already" in str(first_err).lower():
+                logger.info(
+                    "ensure_load_sheet_for_cn: CN %s already has a load sheet (%s)",
+                    cn_number,
+                    str(first_err)[:200],
+                )
+                return None
+        logger.warning(
+            "ensure_load_sheet_for_cn: no challan id in response for CN %s: %s",
+            cn_number,
+            str(res)[:500],
+        )
+        return None
+
+    try:
+        sheet = await register_challan(db, str(challan_no))
+    except Exception as exc:
+        logger.warning("ensure_load_sheet_for_cn: register_challan failed for %s: %s", challan_no, exc)
+        return None
+    return sheet.challan_no if sheet else str(challan_no)
+
+
 async def fetch_load_sheets(db: AsyncSession) -> list[dict]:
     """List load sheets from DB. These are registered via:
     - generate_load_sheet API (auto-stores challan)
@@ -1106,6 +1170,10 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
     )
 
     await db.commit()
+
+    # Auto-register the load-sheet challan so the CN shows up in the
+    # Generate Load Sheets tab. Best-effort; booking already succeeded.
+    await ensure_load_sheet_for_cn(db, cn_number)
 
     business_address = await get_business_address(db)
 

@@ -123,16 +123,29 @@ async def generate_load_sheet(
 ) -> dict:
     """Generate a load sheet on Leopards for the given CNs.
 
-    Returns the parsed JSON response (contains the new challan number).
-    The Leopards API requires comma-separated CN numbers.
+    Returns the parsed JSON response (contains the new challan number in
+    ``load_sheet_id``). Verified live (2026-08): the API requires a JSON body
+    with ``cn_numbers`` sent as a *list* plus the courier name/code — the older
+    form-encoded ``cn_number`` (comma-joined) is rejected with
+    ``"CN Number is required"``, so challans were never registered.
     """
-    cn_csv = ",".join(cn_numbers)
-    resp = await _post(
-        "/api/generateLoadSheet/format/json/",
-        cn_number=cn_csv,
-        courier_name=courier_name or "Leopards Courier Service",
-        courier_code=courier_code or "LCS",
-    )
+    data = {
+        "api_key": LEOPARDS_API_KEY,
+        "api_password": LEOPARDS_API_PASSWORD,
+        "cn_numbers": list(cn_numbers),
+        "courier_name": courier_name or "Leopards Courier Service",
+        "courier_code": courier_code or "LCS",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.post(
+                f"{LEOPARDS_API_BASE_URL}/api/generateLoadSheet/format/json/",
+                json=data,
+            )
+            resp.raise_for_status()
+    except Exception as exc:
+        logger.warning("generateLoadSheet JSON call failed: %s", exc)
+        return {"status": 0, "error": str(exc)}
     try:
         return resp.json()
     except Exception:

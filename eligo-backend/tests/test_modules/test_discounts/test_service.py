@@ -119,6 +119,46 @@ async def test_evaluate_welcome_discount_enabled_once(db_session):
 
 
 @pytest.mark.asyncio
+async def test_evaluate_welcome_discount_visitor_based_once(db_session):
+    """The anonymous visitor id drives eligibility: one offer per visitor,
+    with no email/IP required at all."""
+    await service.update_welcome_settings(
+        db_session, WelcomeDiscountUpdate(is_active=True), updated_by=1
+    )
+    first = await service.evaluate_welcome_discount(db_session, visitor_id="visitor-A")
+    assert first.show_welcome_discount is True
+    assert first.discount_percentage == 10
+
+    # Same visitor returning later must never see the offer again.
+    second = await service.evaluate_welcome_discount(db_session, visitor_id="visitor-A")
+    assert second.show_welcome_discount is False
+
+    # A different anonymous browser is eligible for its own offer.
+    other = await service.evaluate_welcome_discount(db_session, visitor_id="visitor-B")
+    assert other.show_welcome_discount is True
+
+
+@pytest.mark.asyncio
+async def test_evaluate_welcome_discount_inactive_campaign_blocks_visitor(db_session):
+    await service.update_welcome_settings(
+        db_session, WelcomeDiscountUpdate(is_active=False), updated_by=1
+    )
+    result = await service.evaluate_welcome_discount(db_session, visitor_id="visitor-A")
+    assert result.show_welcome_discount is False
+
+
+@pytest.mark.asyncio
+async def test_list_welcome_logs_returns_visitor_rows(db_session):
+    await service.update_welcome_settings(
+        db_session, WelcomeDiscountUpdate(is_active=True), updated_by=1
+    )
+    await service.evaluate_welcome_discount(db_session, visitor_id="visitor-X")
+    logs = await service.list_welcome_logs(db_session, limit=10)
+    assert len(logs) >= 1
+    assert logs[0]["visitor_id"] == "visitor-X"
+
+
+@pytest.mark.asyncio
 async def test_list_discounts_date_range(db_session):
     await service.create_discount(db_session, DiscountCreate(title="Recent"))
     start = datetime.now(timezone.utc) - timedelta(days=1)

@@ -364,3 +364,84 @@ async def test_idempotency_key_reuses_existing_order(client, db_session):
     variant = await db_session.get(ProductVariant, variant.id)
     await db_session.refresh(variant)
     assert variant.inventory_quantity == 3  # deducted exactly once
+
+
+async def test_returning_customer_profile_updates_under_same_email(client, db_session):
+    """A returning customer (same email) may change name, contact and address
+    on the next checkout, and every order stays under the SAME customer row."""
+    from app.modules.customers.model import Customer, CustomerAddress
+
+    product, variant = await _seed_product(db_session, stock=10)
+
+    first_payload = _payload(
+        product,
+        variant,
+        first_name="Ali",
+        last_name="Raza",
+        email="returning@example.com",
+        phone="03001234567",
+        city="Lahore",
+        shipping_address="Ali Raza | Phone: 03001234567 | 1 Street, Lahore, Pakistan",
+        destination="Lahore",
+    )
+    second_payload = _payload(
+        product,
+        variant,
+        quantity=2,
+        first_name="Bilal",
+        last_name="Khan",
+        email="returning@example.com",
+        phone="03121234567",
+        city="Karachi",
+        postal_code="75500",
+        shipping_address="House 9, Phase 4, Karachi, 75500, Pakistan",
+        destination="Karachi",
+    )
+
+    first = await client.post("/api/v1/orders/create-order", json=first_payload)
+    assert first.status_code == 200
+    first_order_id = first.json()["order_id"]
+
+    db_session.expire_all()
+    first_order = await _load_order(db_session, first_order_id)
+    customer_id = first_order.customer_id
+    assert customer_id is not None
+
+    customer = await db_session.get(Customer, customer_id)
+    assert customer.email == "returning@example.com"
+    assert customer.first_name == "Ali"
+    assert customer.last_name == "Raza"
+    assert customer.phone == "03001234567"
+    assert customer.default_address_id is not None
+
+    # Second checkout: same email, but changed name, contact and address.
+    second = await client.post("/api/v1/orders/create-order", json=second_payload)
+    assert second.status_code == 200
+    second_order_id = second.json()["order_id"]
+
+    db_session.expire_all()
+    second_order = await _load_order(db_session, second_order_id)
+    # History stays grouped under the SAME customer / email.
+    assert second_order.customer_id == customer_id
+
+    fresh = await db_session.get(Customer, customer_id)
+    assert fresh.first_name == "Bilal"
+    assert fresh.last_name == "Khan"
+    assert fresh.phone == "03121234567"
+    assert fresh.email == "returning@example.com"
+    assert fresh.postal_code == "75500"
+    assert fresh.total_orders == 2
+
+    # Default shipping address reflects the LATEST checkout.
+    addr_result = await db_session.execute(
+        select(CustomerAddress)
+        .where(CustomerAddress.customer_id == customer_id)
+        .order_by(CustomerAddress.id.desc())
+        .limit(1)
+    )
+    latest_addr = addr_result.scalar_one()
+    assert latest_addr.is_default is True
+    assert latest_addr.address_line1 == "House 9, Phase 4, Karachi, 75500, Pakistan"
+    assert latest_addr.city == "Karachi"
+    assert latest_addr.postal_code == "75500"
+    assert latest_addr.phone == "03121234567"

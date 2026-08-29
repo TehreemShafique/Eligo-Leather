@@ -242,7 +242,19 @@ async def generate_leopard_cn_api(request: Request, db: AsyncSession = Depends(g
             consignee_address = leopard_service.clean_consignee_address(
                 order_row.shipping_address
             )
-            destination_city = order_row.destination or "Islamabad"
+            destination_city = (
+                order_row.shipping_city
+                or order_row.destination
+                or ""
+            ).strip()
+            if not destination_city or destination_city.lower() == "pakistan":
+                generated_cns.append({
+                    "order_id": oid,
+                    "cn_number": None,
+                    "status": "MISSING_CITY",
+                    "error": "Order has no consignee city — set one before generating a CN.",
+                })
+                continue
             cod_amount = str(order_row.total_price or 0)
             weight = "500"
             pieces = "1"
@@ -350,6 +362,17 @@ async def generate_leopard_cn_api(request: Request, db: AsyncSession = Depends(g
                         f"CN #{cn_number} booked for {consignee_name} to {destination_city}. COD: Rs {cod_amount}",
                     )
                     generated_cns.append({"order_id": oid, "cn_number": cn_number, "status": "CN_GENERATED_SUCCESSFULLY"})
+
+                    # Auto-register the load-sheet challan so the CN appears
+                    # in the Generate Load Sheets tab. Best-effort.
+                    try:
+                        await leopard_service.ensure_load_sheet_for_cn(db, cn_number)
+                    except Exception as sheet_exc:
+                        logging.getLogger(__name__).warning(
+                            "generate-cn: challan registration failed for CN %s: %s",
+                            cn_number,
+                            sheet_exc,
+                        )
                 else:
                     # No CN returned from API
                     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -667,7 +690,13 @@ async def _auto_book_leopards(db: AsyncSession, order: Order, shipping_settings)
     consignee_address = order.shipping_address_line1 or leopard_service.clean_consignee_address(
         order.shipping_address
     )
-    destination_city = order.shipping_city or order.destination or "Islamabad"
+    destination_city = (order.shipping_city or order.destination or "").strip()
+    if not destination_city or destination_city.lower() == "pakistan":
+        logger.info(
+            "Skipping auto Leopards booking for %s: no consignee city on the order",
+            order.order_number,
+        )
+        return
     cod_amount = str(order.total_price or 0) if order.payment_status == PaymentStatus.pending else "0"
 
     book_payload = {
@@ -735,6 +764,17 @@ async def _auto_book_leopards(db: AsyncSession, order: Order, shipping_settings)
         db, order.order_number, "Auto Booking", "Success",
         f"CN #{cn_number} booked automatically for {consignee_name} to {destination_city}. COD: Rs {cod_amount}",
     )
+
+    # Auto-register the load-sheet challan so the CN shows up in the
+    # Generate Load Sheets tab. Best-effort; booking already succeeded.
+    try:
+        await leopard_service.ensure_load_sheet_for_cn(db, cn_number)
+    except Exception as sheet_exc:
+        logging.getLogger(__name__).warning(
+            "auto-booking: challan registration failed for CN %s: %s",
+            cn_number,
+            sheet_exc,
+        )
 
 
 MAX_ORDER_LINE_QUANTITY = 99
@@ -1038,14 +1078,15 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
     full_name = f"{first_name} {last_name}".strip()
 
     customer = None
+    matched_by_phone = False
     if phone:
         result = await db.execute(select(Customer).where(Customer.phone == phone))
         customer = result.scalar_one_or_none()
+        matched_by_phone = customer is not None
     if customer is None and email:
         result = await db.execute(select(Customer).where(Customer.email == email))
         customer = result.scalar_one_or_none()
 
-    is_new_customer = False
     if customer is None:
         customer = Customer(
             first_name=first_name or None,
@@ -1057,22 +1098,67 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         )
         db.add(customer)
         await db.flush()
-        is_new_customer = True
+    else:
+        # Returning customer (same email/phone): refresh the profile with the
+        # latest checkout values so name, contact and address stay editable,
+        # while every order keeps linking to this same customer row/email.
+        if first_name:
+            customer.first_name = first_name
+        if last_name:
+            customer.last_name = last_name
+        if phone:
+            customer.phone = phone
+        if email:
+            # Email is the record's identity when matched by email — never
+            # rewrite it. When matched by phone, adopt the new email only if no
+            # other customer already owns it (unique-constraint guard).
+            if matched_by_phone:
+                owner = (
+                    await db.execute(select(Customer).where(Customer.email == email))
+                ).scalar_one_or_none()
+                if owner is None or owner.id == customer.id:
+                    customer.email = email
+        if city or country:
+            customer.location = ", ".join(x for x in (city, country) if x) or None
+        if postal_code:
+            customer.postal_code = postal_code
 
-    if address_body and is_new_customer:
-        db.add(CustomerAddress(
-            customer_id=customer.id,
-            first_name=first_name or None,
-            last_name=last_name or None,
-            address_line1=address_body or "—",
-            city=city or "—",
-            province=None,
-            postal_code=postal_code or None,
-            country=country,
-            phone=phone,
-            is_default=True,
-            address_type="shipping",
-        ))
+    # Keep the customer's default shipping address in sync with the checkout
+    # address: create it for new customers, update it for returning ones.
+    if (address_body or city or postal_code or country):
+        addr_result = await db.execute(
+            select(CustomerAddress)
+            .where(CustomerAddress.customer_id == customer.id)
+            .order_by(CustomerAddress.is_default.desc(), CustomerAddress.id.desc())
+            .limit(1)
+        )
+        default_addr = addr_result.scalar_one_or_none()
+        addr_fields = {
+            "first_name": first_name or None,
+            "last_name": last_name or None,
+            "address_line1": address_body or "—",
+            "city": city or "—",
+            "province": (data.get("province") or "").strip() or None,
+            "postal_code": postal_code or None,
+            "country": country,
+            "phone": phone,
+        }
+        if default_addr is not None:
+            for field, value in addr_fields.items():
+                setattr(default_addr, field, value)
+            default_addr.is_default = True
+            default_addr.address_type = "shipping"
+        else:
+            addr = CustomerAddress(
+                customer_id=customer.id,
+                **addr_fields,
+                is_default=True,
+                address_type="shipping",
+            )
+            db.add(addr)
+            await db.flush()
+            if customer.default_address_id is None:
+                customer.default_address_id = addr.id
 
     # ---- Order number: max existing numeric suffix + 1 ----
     result = await db.execute(select(Order.order_number))
@@ -1299,6 +1385,15 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
             detail="Your order could not be placed right now. Please try again in a moment.",
         ) from exc
     await db.refresh(new_order)
+
+    # ---- Order confirmation email (background; must never break checkout) ----
+    try:
+        import asyncio
+        asyncio.create_task(background_dispatch_order_confirmation(new_order.id))
+    except Exception as notif_exc:
+        logging.getLogger(__name__).warning(
+            "Order confirmation notification failed for %s: %s", order_number, notif_exc
+        )
 
     # ---- Auto-book with Leopards (best effort; must never break checkout) ----
     try:

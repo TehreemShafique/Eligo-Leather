@@ -26,7 +26,12 @@ async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends
     token = create_access_token(data= {"sub": user.email})
     await record_login_session(db, user, token, request)
 
-    welcome = await evaluate_welcome_discount(db, user.email, _client_ip(request))
+    welcome = await evaluate_welcome_discount(
+        db,
+        user_email=user.email,
+        ip_address=_client_ip(request),
+        visitor_id=request.cookies.get("eligo_visitor_id") or None,
+    )
     return Token(
         access_token=token,
         show_welcome_discount=welcome.show_welcome_discount,

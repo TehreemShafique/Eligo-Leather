@@ -122,18 +122,24 @@ class WelcomeDiscountSettings(Base):
 
 
 class WelcomeDiscountLog(Base):
-    """Tracks which email/IP combinations already claimed the offer. A user
-    is ineligible if either their email OR their IP appears here."""
+    """Tracks which anonymous visitors already received the offer.
+
+    Identity is the persistent ``eligo_visitor_id`` cookie. Email/IP are kept
+    only for backward compatibility with legacy claim rows and are never the
+    primary identification mechanism.
+    """
 
     __tablename__ = "welcome_discount_logs"
     __table_args__ = (
         Index("ix_welcome_discount_logs_user_email", "user_email"),
         Index("ix_welcome_discount_logs_ip_address", "ip_address"),
+        Index("ix_welcome_discount_logs_visitor_id", "visitor_id", unique=True),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    user_email: Mapped[str] = mapped_column(String, nullable=False)
-    ip_address: Mapped[str] = mapped_column(String, nullable=False)
+    visitor_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    user_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String, nullable=True)
     claimed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )

@@ -238,14 +238,47 @@ async def _send_email(
     subject: str,
     html_body: str,
 ) -> dict:
-    """Send email via Resend or SMTP fallback. Returns provider info dict."""
+    """Send email via the configured SMTP server (Gmail), falling back to
+    Resend only when no SMTP password is stored.
+
+    Gmail SMTP is the primary provider because Resend does not allow sending
+    from @gmail.com addresses. The Gmail app password is managed in
+    Settings -> Notifications -> Sender Config.
+    """
+    import aiosmtplib
+
+    password = _decrypt_smtp_password(config)
+    if password:
+        message = EmailMessage()
+        message["From"] = f"{config.from_name} <{config.from_email}>"
+        message["To"] = to
+        message["Subject"] = subject
+        message.set_content(_strip_html(html_body))
+        message.add_alternative(html_body, subtype="html")
+
+        await aiosmtplib.send(
+            message,
+            hostname=config.smtp_host,
+            port=config.smtp_port,
+            username=config.smtp_username,
+            password=password,
+            start_tls=config.use_tls,
+            use_tls=config.use_ssl,
+            timeout=30,
+        )
+        return {"provider": "smtp", "provider_message_id": None}
+
     import os
     resend_key = os.getenv("RESEND_API_KEY")
     if resend_key:
         try:
             import resend
             resend.api_key = resend_key
-            sender_email = config.from_email if "@" in config.from_email and not config.from_email.endswith("@gmail.com") else "onboarding@resend.dev"
+            sender_email = (
+                config.from_email
+                if "@" in config.from_email and not config.from_email.endswith("@gmail.com")
+                else "onboarding@resend.dev"
+            )
             params = {
                 "from": f"{config.from_name} <{sender_email}>",
                 "to": [to],
@@ -255,31 +288,13 @@ async def _send_email(
             result = resend.Emails.send(params)
             message_id = result.get("id") if isinstance(result, dict) else None
             return {"provider": "resend", "provider_message_id": message_id}
-        except Exception as _rexc:
-            print(f"[RESEND FALLBACK] Resend send failed, falling back to SMTP: {_rexc}")
+        except Exception as _rexc:  # noqa: BLE001 - logged, then raise a clearer error
+            print(f"[RESEND] Resend send failed (SMTP password not configured): {_rexc}")
 
-    import aiosmtplib
-
-    password = _decrypt_smtp_password(config)
-
-    message = EmailMessage()
-    message["From"] = f"{config.from_name} <{config.from_email}>"
-    message["To"] = to
-    message["Subject"] = subject
-    message.set_content(_strip_html(html_body))
-    message.add_alternative(html_body, subtype="html")
-
-    await aiosmtplib.send(
-        message,
-        hostname=config.smtp_host,
-        port=config.smtp_port,
-        username=config.smtp_username,
-        password=password,
-        start_tls=config.use_tls,
-        use_tls=config.use_ssl,
-        timeout=30,
+    raise RuntimeError(
+        "No email provider configured. Save your Gmail SMTP app password in "
+        "Settings -> Notifications -> Sender Config.",
     )
-    return {"provider": "smtp", "provider_message_id": None}
 
 
 async def send_test_email(db: AsyncSession, to: str | None = None) -> TestEmailResponse:

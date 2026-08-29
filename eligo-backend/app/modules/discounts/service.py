@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select, or_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.discounts.model import (
@@ -140,36 +141,81 @@ async def update_welcome_settings(
 
 async def evaluate_welcome_discount(
     db: AsyncSession,
-    user_email: str,
-    ip_address: str,
+    user_email: str | None = None,
+    ip_address: str | None = None,
+    *,
+    visitor_id: str | None = None,
 ) -> WelcomeDiscountResult:
-    """Run the one-time welcome-discount check on login.
+    """Decide whether an anonymous visitor may be shown the welcome offer.
 
-    If the email OR the IP is already in the claim log, the offer is
-    suppressed. Otherwise the offer is shown (when globally enabled) and the
-    email + IP combination is recorded immediately so it is never shown again.
+    The visitor is identified by the persistent ``eligo_visitor_id`` cookie
+    and is eligible at most once, ever, and only while the campaign is
+    active. Email/IP are kept as a backward-compatible fallback for callers
+    that cannot supply a visitor id; they are never the primary mechanism.
     """
-    already_claimed = await db.execute(
-        select(WelcomeDiscountLog.id).where(
-            or_(
-                WelcomeDiscountLog.user_email == user_email,
-                WelcomeDiscountLog.ip_address == ip_address,
-            ),
-        ).limit(1),
-    )
-    if already_claimed.scalar_one_or_none() is not None:
-        return WelcomeDiscountResult(show_welcome_discount=False)
-
     settings = await get_welcome_settings(db)
     if not settings.is_active:
         return WelcomeDiscountResult(show_welcome_discount=False)
 
-    db.add(WelcomeDiscountLog(user_email=user_email, ip_address=ip_address))
-    await db.commit()
+    already_claimed = False
+    if visitor_id:
+        result = await db.execute(
+            select(WelcomeDiscountLog.id)
+            .where(WelcomeDiscountLog.visitor_id == visitor_id)
+            .limit(1),
+        )
+        already_claimed = result.scalar_one_or_none() is not None
+    elif user_email or ip_address:
+        result = await db.execute(
+            select(WelcomeDiscountLog.id).where(
+                or_(
+                    WelcomeDiscountLog.user_email == user_email,
+                    WelcomeDiscountLog.ip_address == ip_address,
+                ),
+            ).limit(1),
+        )
+        already_claimed = result.scalar_one_or_none() is not None
+
+    if already_claimed:
+        return WelcomeDiscountResult(show_welcome_discount=False)
+
+    try:
+        db.add(WelcomeDiscountLog(
+            visitor_id=visitor_id,
+            user_email=user_email or None,
+            ip_address=ip_address or None,
+        ))
+        await db.commit()
+    except IntegrityError:
+        # A concurrent check already claimed this visitor.
+        await db.rollback()
+        return WelcomeDiscountResult(show_welcome_discount=False)
+
     return WelcomeDiscountResult(
         show_welcome_discount=True,
         discount_percentage=float(settings.discount_percentage),
     )
+
+
+async def list_welcome_logs(
+    db: AsyncSession, limit: int = 50,
+) -> list[dict]:
+    """Return the most recent welcome-offer claims for the admin panel."""
+    result = await db.execute(
+        select(WelcomeDiscountLog)
+        .order_by(WelcomeDiscountLog.claimed_at.desc())
+        .limit(limit),
+    )
+    return [
+        {
+            "id": log.id,
+            "visitor_id": log.visitor_id,
+            "email": log.user_email,
+            "ip_address": log.ip_address,
+            "claimed_at": log.claimed_at,
+        }
+        for log in result.scalars().all()
+    ]
 
 
 # =====================================================================

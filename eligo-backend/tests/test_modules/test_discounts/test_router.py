@@ -238,3 +238,84 @@ async def test_public_verify_coupon_supports_welcome_code(client, db_session):
     assert body["valid"] is True
     assert body["discount_type"] == "welcome_discount"
     assert body["discount_amount"] == 250.0
+
+
+# ------------------------------------------------------------------------
+# Public welcome-check (visitor_id based eligibility)
+# ------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_welcome_check_visitor_eligible_when_active(client, db_session):
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-1"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["eligible"] is True
+    assert body["discount_percentage"] == 10.0
+    assert body["coupon_code"] == "WELCOME10"
+    assert body["is_active"] is True
+
+
+@pytest.mark.asyncio
+async def test_welcome_check_returning_visitor_not_eligible(client, db_session):
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
+    await db_session.commit()
+
+    first = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-1"},
+    )
+    assert first.json()["eligible"] is True
+
+    returning = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-1"},
+    )
+    assert returning.json()["eligible"] is False
+
+
+@pytest.mark.asyncio
+async def test_welcome_check_inactive_campaign_not_eligible(client, db_session):
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=False))
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-1"},
+    )
+    assert response.status_code == 200
+    assert response.json()["eligible"] is False
+
+
+@pytest.mark.asyncio
+async def test_welcome_check_without_visitor_id_not_eligible(client, db_session):
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={},
+    )
+    assert response.status_code == 200
+    assert response.json()["eligible"] is False
+
+
+@pytest.mark.asyncio
+async def test_welcome_check_does_not_require_email(client, db_session):
+    """The visitor flow works with an empty payload email/IP — no identity
+    fields are required and none are used to decide eligibility."""
+    db_session.add(WelcomeDiscountSettings(discount_percentage=15, is_active=True))
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-b", "email": "", "ip_address": ""},
+    )
+    assert response.json()["eligible"] is True
+    assert response.json()["coupon_code"] == "WELCOME15"

@@ -81,6 +81,16 @@ async def update_welcome_discount_settings(
     )
 
 
+@router.get("/welcome/logs")
+async def list_welcome_discount_logs(
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    _user7: User = Depends(require_discount_manager),
+):
+    """Return the most recent welcome-offer claims (tracked by visitor id)."""
+    return await service.list_welcome_logs(db, limit=limit)
+
+
 @router.get("/{discount_id}", response_model=DiscountOut)
 async def get_discount(
     discount_id: int,
@@ -141,21 +151,40 @@ async def check_welcome_discount(
     payload: dict,
     db: AsyncSession = Depends(get_db),
 ):
-    """Check if visitor qualifies for Welcome Scratch & Win offer (by email/IP)."""
-    email = payload.get("email", "guest@visitor.com")
-    ip_address = payload.get("ip_address", "127.0.0.1")
+    """Decide whether an anonymous visitor is eligible for the Welcome
+    Scratch & Win offer.
 
-    res = await service.evaluate_welcome_discount(db, user_email=email, ip_address=ip_address)
+    The visitor is identified by the persistent ``eligo_visitor_id`` cookie
+    (never by IP/email). A visitor is eligible at most once, and only while
+    the admin campaign is active. Any failure to identify the visitor or to
+    reach the settings/config results in ``eligibility: false``.
+    """
+    visitor_id = (payload.get("visitor_id") or "").strip() or None
+    email = (payload.get("email") or "").strip() or None
+    ip_address = (payload.get("ip_address") or "").strip() or None
+
+    if not visitor_id and not email and not ip_address:
+        return {
+            "eligible": False,
+            "discount_percentage": None,
+            "coupon_code": None,
+            "is_active": None,
+        }
+
+    res = await service.evaluate_welcome_discount(
+        db,
+        user_email=email,
+        ip_address=ip_address,
+        visitor_id=visitor_id,
+    )
     settings = await service.get_welcome_settings(db)
-
     pct = int(float(settings.discount_percentage))
-    coupon_code = f"WELCOME{pct}"
 
     return {
-        "eligible": res.show_welcome_discount or True,
+        "eligible": bool(res.show_welcome_discount),
         "discount_percentage": float(settings.discount_percentage),
-        "coupon_code": coupon_code,
-        "is_active": settings.is_active or True,
+        "coupon_code": f"WELCOME{pct}",
+        "is_active": bool(settings.is_active),
     }
 
 
