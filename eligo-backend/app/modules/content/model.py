@@ -88,6 +88,7 @@ class MetaobjectEntry(Base):
         Index("ix_metaobject_entries_status", "status"),
         Index("ix_metaobject_entries_created_at", "created_at"),
         Index("ix_metaobject_entries_definition_id", "definition_id"),
+        Index("ix_metaobject_entries_code", "code"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -95,6 +96,10 @@ class MetaobjectEntry(Base):
         ForeignKey("metaobject_definitions.id", ondelete="CASCADE"),
     )
     display_name: Mapped[str] = mapped_column(String, nullable=False)
+    # Stable, user-defined token (e.g. "RED") used to build variant SKUs
+    # (base SKU + code). Kept independent from display_name so renaming the
+    # entry (e.g. "Red" -> "Dark Red") never changes the generated SKUs.
+    code: Mapped[str | None] = mapped_column(String, nullable=True)
     handle: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(
         SAEnum(MetaobjectStatus, name="metaobject_status"),

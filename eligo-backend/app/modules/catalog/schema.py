@@ -17,6 +17,7 @@ class VariantCreate(BaseModel):
     title: str
     color_name: str | None = None
     color_hex: str | None = None
+    metaobject_entry_id: int | None = None
     is_canonical: bool = False
     image_url: str | None = None
     sku: str | None = None
@@ -36,6 +37,7 @@ class VariantUpdate(BaseModel):
     title: str | None = None
     color_name: str | None = None
     color_hex: str | None = None
+    metaobject_entry_id: int | None = None
     is_canonical: bool | None = None
     image_url: str | None = None
     sku: str | None = None
@@ -57,6 +59,7 @@ class VariantOut(BaseModel):
     title: str
     color_name: str | None = None
     color_hex: str | None = None
+    metaobject_entry_id: int | None = None
     is_canonical: bool = False
     image_url: str | None = None
     sku: str | None = None

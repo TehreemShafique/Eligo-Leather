@@ -9,6 +9,7 @@ from app.modules.content.model import (
 from app.modules.content.schema import (
     MetaobjectDefinitionCreate,
     MetaobjectDefinitionUpdate,
+    MetaobjectDefinitionFieldCreate,
     MetaobjectEntryCreate,
     MetaobjectEntryUpdate,
     FileCreate,
@@ -53,6 +54,30 @@ async def test_metaobject_definition_crud(db_session):
     assert await service.update_metaobject_definition(
         db_session, 99999, MetaobjectDefinitionUpdate(name="x"),
     ) is None
+
+    with_fields = await service.update_metaobject_definition(
+        db_session, definition.id,
+        MetaobjectDefinitionUpdate(
+            description="Rebuilt fields",
+            fields=[
+                MetaobjectDefinitionFieldCreate(
+                    label="Title", field_type="Single line text",
+                    cardinality="one", required=True,
+                    is_display_name=True, is_filterable=False, position=0,
+                ),
+                MetaobjectDefinitionFieldCreate(
+                    label="Color", field_type="Color",
+                    cardinality="one", required=False,
+                    is_display_name=False, is_filterable=True, position=1,
+                ),
+            ],
+        ),
+    )
+    assert with_fields.description == "Rebuilt fields"
+    rebuilt = await service.get_metaobject_definition(db_session, definition.id)
+    assert [f.label for f in rebuilt.fields] == ["Title", "Color"]
+    assert all(f.definition_id == rebuilt.id for f in rebuilt.fields)
+    assert rebuilt.fields[1].is_filterable is True
 
     assert await service.delete_metaobject_definition(db_session, definition.id) is True
     assert await service.delete_metaobject_definition(db_session, definition.id) is False

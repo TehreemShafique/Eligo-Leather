@@ -141,14 +141,14 @@ async def update_metaobject_definition(
         for field_data in fields_data:
             field = MetaobjectDefinitionField(
                 definition_id=obj.id,
-                label=field_data.label,
-                field_type=field_data.field_type,
-                cardinality=field_data.cardinality,
-                required=field_data.required,
-                is_display_name=field_data.is_display_name,
-                is_filterable=field_data.is_filterable,
-                position=field_data.position,
-                config=json.dumps(field_data.config) if field_data.config else None,
+                label=field_data["label"],
+                field_type=field_data["field_type"],
+                cardinality=field_data["cardinality"],
+                required=field_data["required"],
+                is_display_name=field_data["is_display_name"],
+                is_filterable=field_data["is_filterable"],
+                position=field_data["position"],
+                config=json.dumps(field_data["config"]) if field_data.get("config") else None,
             )
             db.add(field)
 
@@ -176,6 +176,7 @@ async def create_metaobject_entry(
     obj = MetaobjectEntry(
         definition_id=data.definition_id,
         display_name=data.display_name,
+        code=data.code,
         handle=data.handle,
         status=data.status,
         tags=data.tags,

@@ -164,6 +164,14 @@ class ProductVariant(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     color_name: Mapped[str | None] = mapped_column(String, nullable=True)
     color_hex: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Links the variant to a reusable metaobject entry (e.g. a Color entry
+    # whose `code` was used to build the variant SKU: base SKU + "-" + code).
+    # Nullable so existing variants without a metaobject link keep working.
+    metaobject_entry_id: Mapped[int | None] = mapped_column(
+        ForeignKey("metaobject_entries.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     is_canonical: Mapped[bool] = mapped_column(Boolean, default=False)
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     sku: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
@@ -182,6 +190,9 @@ class ProductVariant(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     product = relationship("Product", back_populates="variants")
+    metaobject_entry = relationship(
+        "MetaobjectEntry", foreign_keys=[metaobject_entry_id],
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),

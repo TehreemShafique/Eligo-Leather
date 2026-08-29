@@ -150,6 +150,8 @@ class MetaobjectEntryValueOut(BaseModel):
 class MetaobjectEntryCreate(BaseModel):
     definition_id: int
     display_name: str
+    # Stable SKU token independent of display_name (e.g. "RED").
+    code: str | None = None
     handle: str | None = None
     status: MetaobjectStatus = MetaobjectStatus.active
     tags: str | None = None
@@ -160,6 +162,7 @@ class MetaobjectEntryCreate(BaseModel):
 class MetaobjectEntryUpdate(BaseModel):
     definition_id: int | None = None
     display_name: str | None = None
+    code: str | None = None
     handle: str | None = None
     status: MetaobjectStatus | None = None
     tags: str | None = None
@@ -172,6 +175,7 @@ class MetaobjectEntryOut(BaseModel):
     id: int
     definition_id: int
     display_name: str
+    code: str | None
     handle: str | None
     status: MetaobjectStatus
     tags: str | None
