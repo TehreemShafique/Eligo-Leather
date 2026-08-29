@@ -22,6 +22,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 type CustomerDetailPageProps = {
   params: Promise<{ id: string }>
@@ -95,6 +96,9 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
   const [smsSub, setSmsSub] = useState(false)
   const [whatsappSub, setWhatsappSub] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty({ emailSub, smsSub, whatsappSub }, dataLoaded)
 
   const fetchCustomer = useCallback(async () => {
     try {
@@ -107,6 +111,7 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
       setNotFound(true)
     } finally {
       setLoading(false)
+      setDataLoaded(true)
     }
   }, [id])
 
@@ -137,6 +142,7 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
         body: JSON.stringify(body),
       })
       toast.success("Customer subscription settings updated!")
+      reset()
     } catch {
       toast.error("Failed to update subscription")
       // revert on failure

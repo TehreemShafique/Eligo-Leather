@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import { Package, DownloadSimple, UploadSimple, X, MagnifyingGlass } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
 import { apiFetch, API_BASE} from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 interface InventoryRowItem {
   id: number
@@ -32,6 +33,15 @@ export default function AdminInventoryPage() {
 
   const [inventoryRows, setInventoryRows] = useState<InventoryRowItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const onHandValues = useMemo(() => {
+    const map: Record<string, number> = {}
+    inventoryRows.forEach((item) => { map[String(item.id)] = item.onHand })
+    return map
+  }, [inventoryRows])
+
+  const { reset } = useFormDirty(onHandValues, dataLoaded)
 
   const fetchInventoryFromBackend = async () => {
     setLoading(true)
@@ -94,6 +104,7 @@ export default function AdminInventoryPage() {
       console.error("Error loading inventory from DB:", err)
     } finally {
       setLoading(false)
+      setDataLoaded(true)
     }
   }
 
@@ -119,6 +130,7 @@ export default function AdminInventoryPage() {
 
       if (res.ok) {
         toast.success("Updated variant inventory stock in database!")
+        reset()
       }
     } catch (err) {
       toast.info("Updated stock quantity locally.")

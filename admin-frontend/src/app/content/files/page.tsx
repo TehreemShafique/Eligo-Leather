@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react"
 import Image from "next/image"
+import { ImageUploadNote } from "@/components/ui/image-upload-note"
 import {
   FolderOpen,
   Plus,
@@ -22,6 +23,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminFilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -71,6 +73,8 @@ export default function AdminFilesPage() {
       updated: "Feb 1, 2026",
     },
   ])
+
+  useFormDirty({ altText, focalPoint, files })
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFiles = e.target.files
@@ -147,6 +151,8 @@ export default function AdminFilesPage() {
           </button>
         }
       />
+
+      <ImageUploadNote />
 
       {/* Backend WebP Conversion Active Banner */}
       <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200 flex items-center justify-between text-xs">

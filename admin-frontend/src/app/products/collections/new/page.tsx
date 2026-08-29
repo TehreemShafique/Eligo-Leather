@@ -11,6 +11,7 @@ import {
   ArrowLeft,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 import { CharCounter } from "@/components/ui/char-counter"
 
 const COLLECTION_TYPES = [
@@ -32,6 +33,16 @@ export default function AdminNewCollectionPage() {
 
   const [customScriptOverride, setCustomScriptOverride] = useState<string>("")
   const [isScriptEdited, setIsScriptEdited] = useState<boolean>(false)
+
+  const { reset } = useFormDirty({
+    title,
+    slugInput,
+    description,
+    collectionType,
+    pageTitle,
+    metaDescription,
+    customScriptOverride,
+  })
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,6 +72,7 @@ export default function AdminNewCollectionPage() {
 
       if (res.ok) {
         toast.success(`Category "${title}" created in ${collectionType} collection!`)
+        reset()
         setTimeout(() => {
           router.push("/products/collections")
         }, 400)

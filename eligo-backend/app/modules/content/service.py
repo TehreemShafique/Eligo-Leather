@@ -15,7 +15,6 @@ from app.modules.content.model import (
     MenuItem,
     UrlRedirect,
     BlogPost,
-    BlogComment,
     Page,
 )
 from app.modules.content.schema import (
@@ -34,8 +33,6 @@ from app.modules.content.schema import (
     UrlRedirectUpdate,
     BlogPostCreate,
     BlogPostUpdate,
-    BlogCommentCreate,
-    BlogCommentUpdate,
     PageCreate,
     PageUpdate,
     ContentOverview,
@@ -627,7 +624,6 @@ async def get_blog_post(
 ) -> BlogPost | None:
     result = await db.execute(
         select(BlogPost)
-        .options(selectinload(BlogPost.comments))
         .where(BlogPost.id == post_id),
     )
     return result.scalar_one_or_none()
@@ -676,68 +672,6 @@ async def update_blog_post(
 
 async def delete_blog_post(db: AsyncSession, post_id: int) -> bool:
     obj = await get_blog_post(db, post_id)
-    if not obj:
-        return False
-    await db.delete(obj)
-    await db.commit()
-    return True
-
-
-# ===========================================================================
-# Blog Comment – CRUD
-# ===========================================================================
-
-async def create_blog_comment(
-    db: AsyncSession, data: BlogCommentCreate,
-) -> BlogComment:
-    obj = BlogComment(**data.model_dump())
-    db.add(obj)
-    await db.commit()
-    await db.refresh(obj)
-    return obj
-
-
-async def get_blog_comment(
-    db: AsyncSession, comment_id: int,
-) -> BlogComment | None:
-    result = await db.execute(
-        select(BlogComment).where(BlogComment.id == comment_id),
-    )
-    return result.scalar_one_or_none()
-
-
-async def list_blog_comments(
-    db: AsyncSession,
-    post_id: int | None = None,
-    status: str | None = None,
-    skip: int = 0,
-    limit: int = 50,
-) -> list[BlogComment]:
-    query = select(BlogComment)
-    if post_id:
-        query = query.where(BlogComment.post_id == post_id)
-    if status:
-        query = query.where(BlogComment.status == status)
-    query = query.order_by(BlogComment.created_at.desc()).offset(skip).limit(limit)
-    result = await db.execute(query)
-    return list(result.scalars().all())
-
-
-async def update_blog_comment(
-    db: AsyncSession, comment_id: int, data: BlogCommentUpdate,
-) -> BlogComment | None:
-    obj = await get_blog_comment(db, comment_id)
-    if not obj:
-        return None
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(obj, field, value)
-    await db.commit()
-    await db.refresh(obj)
-    return obj
-
-
-async def delete_blog_comment(db: AsyncSession, comment_id: int) -> bool:
-    obj = await get_blog_comment(db, comment_id)
     if not obj:
         return False
     await db.delete(obj)
@@ -823,18 +757,6 @@ async def get_content_overview(db: AsyncSession) -> ContentOverview:
     )
     blog_row = blog_counts.one()
 
-    comment_counts = await db.execute(
-        select(
-            func.coalesce(func.count(BlogComment.id), 0).label("total"),
-            func.coalesce(
-                func.count(BlogComment.id).filter(
-                    BlogComment.status == "pending",
-                ), 0,
-            ).label("pending"),
-        ),
-    )
-    comment_row = comment_counts.one()
-
     return ContentOverview(
         metaobjects=MetaobjectSummary(
             total_definitions=len(all_defs),
@@ -851,8 +773,6 @@ async def get_content_overview(db: AsyncSession) -> ContentOverview:
             total_posts=int(blog_row.total),
             visible_posts=int(blog_row.visible),
             hidden_posts=int(blog_row.hidden),
-            pending_comments=int(comment_row.pending),
-            total_comments=int(comment_row.total),
         ),
     )
 

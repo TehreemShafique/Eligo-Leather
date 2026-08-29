@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, MagnifyingGlass, ArrowsLeftRight, Check, LinkBreak, Paperclip } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminNewTransferPage() {
   const router = useRouter()
@@ -15,9 +16,19 @@ export default function AdminNewTransferPage() {
   const [note, setNote] = useState("Shipment includes 45 hides of full-grain cowhide leather.")
   const [tags, setTags] = useState("In-Transit, High-Priority")
 
+  const { reset } = useFormDirty({
+    origin,
+    destination,
+    transferDate,
+    referenceName,
+    note,
+    tags,
+  })
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault()
     toast.success(`Transfer "${referenceName}" created and placed In Transit!`)
+    reset()
     setTimeout(() => {
       router.push("/products/transfers")
     }, 400)

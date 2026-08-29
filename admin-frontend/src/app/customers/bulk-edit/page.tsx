@@ -7,6 +7,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { CaretLeft, Sliders, Check } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 interface BulkCustomerRow {
   id: number
@@ -32,6 +33,9 @@ export default function BulkEditCustomersPage() {
     { id: 10, firstName: "Syed Imran", lastName: "Hussain", tags: "", email: "syedimranhossain2021@gmail.com", acceptsEmail: true },
   ])
   const [saving, setSaving] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty({ rows }, dataLoaded)
 
   // Fetch live customers from DB for bulk edit
   useEffect(() => {
@@ -56,6 +60,7 @@ export default function BulkEditCustomersPage() {
       } catch (err) {
         console.log("Bulk edit backend fetch fallback")
       }
+      if (isMounted) setDataLoaded(true)
     }
     fetchCustomers()
     return () => {
@@ -88,9 +93,11 @@ export default function BulkEditCustomersPage() {
         )
       )
       toast.success("Bulk customer changes saved to database!")
+      reset()
       router.push("/customers/segments/new")
     } catch (err) {
       toast.success("Bulk customer changes saved!")
+      reset()
       router.push("/customers/segments/new")
     } finally {
       setSaving(false)

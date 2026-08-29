@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner"
 import { LexicalEditor } from "@/components/ui/lexical-editor"
 import { CharCounter } from "@/components/ui/char-counter"
+import { ImageUploadNote } from "@/components/ui/image-upload-note"
 import { useUnsavedChanges } from "@/components/unsaved-changes"
 
 export default function CreateBlogPostPage() {
@@ -166,6 +167,7 @@ export default function CreateBlogPostPage() {
 
       if (res.ok) {
         toast.success(`Blog post "${title}" saved to database!`)
+        setUnsavedChanges(false)
         router.push("/content/blogs")
       } else {
         const body = await res.json().catch(() => null)
@@ -611,6 +613,8 @@ export default function CreateBlogPostPage() {
                 + Add Image
               </button>
             </div>
+
+            <ImageUploadNote />
 
             <input
               type="file"

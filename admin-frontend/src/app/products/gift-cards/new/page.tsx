@@ -16,8 +16,10 @@ import {
   Gift,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 import { LexicalEditor } from "@/components/ui/lexical-editor"
 import { CharCounter } from "@/components/ui/char-counter"
+import { ImageUploadNote } from "@/components/ui/image-upload-note"
 
 interface MediaItem {
   id: number
@@ -61,6 +63,20 @@ export default function AdminNewGiftCardProductPage() {
 
   const [availableProducts, setAvailableProducts] = useState<ProductItem[]>([])
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([])
+
+  const { reset } = useFormDirty({
+    giftCardCode,
+    slugInput,
+    title,
+    description,
+    status,
+    basePrice,
+    compareAtPrice,
+    mediaItems,
+    pageTitle,
+    metaDescription,
+    selectedProductIds,
+  })
 
   useEffect(() => {
     setMounted(true)
@@ -187,6 +203,7 @@ export default function AdminNewGiftCardProductPage() {
 
       if (res.ok) {
         toast.success(`Gift card product "${title}" saved to database successfully!`)
+        reset()
         setTimeout(() => {
           router.push("/products/gift-cards")
         }, 400)
@@ -335,6 +352,8 @@ export default function AdminNewGiftCardProductPage() {
                 <span>Add pics</span>
               </button>
             </div>
+
+            <ImageUploadNote />
 
             {mediaItems.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

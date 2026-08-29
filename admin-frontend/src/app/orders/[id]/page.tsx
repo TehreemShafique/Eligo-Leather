@@ -31,6 +31,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 type OrderDetailPageProps = {
   params: Promise<{ id: string }>
@@ -157,6 +158,8 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
   const [editNoteText, setEditNoteText] = useState("")
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
+  const [dataLoaded, setDataLoaded] = useState(false)
+  const { reset } = useFormDirty({ editShippingAddress, commentText, editNoteText }, dataLoaded)
 
   const fetchOrder = useCallback(async () => {
     if (!id) return
@@ -164,13 +167,14 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
       const data = await apiFetch<OrderData>(`/api/v1/orders/${encodeURIComponent(id)}`)
       setOrder(data)
       setOrderId(data.id)
-      setEditShippingAddress(data.shipping_address || "")
+      if (!editAddressOpen) setEditShippingAddress(data.shipping_address || "")
     } catch {
       toast.error("Could not load order details")
     } finally {
       setLoading(false)
+      setDataLoaded(true)
     }
-  }, [id])
+  }, [id, editAddressOpen])
 
   const fetchAuditLog = useCallback(async () => {
     if (orderId == null) return
@@ -335,6 +339,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
         method: "PATCH",
         body: JSON.stringify({ shipping_address: editShippingAddress }),
       })
+      reset()
       setEditAddressOpen(false); toast.success("Shipping address updated!"); fetchOrder(); fetchAuditLog()
     } catch { toast.error("Failed to update address") }
   }

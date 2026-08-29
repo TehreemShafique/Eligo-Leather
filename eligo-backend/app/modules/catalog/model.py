@@ -122,6 +122,12 @@ class Product(Base):
     tags: Mapped[str | None] = mapped_column(String, nullable=True)
     categories: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    @property
+    def category_list(self) -> list[str]:
+        if not self.categories:
+            return []
+        return [c.strip() for c in self.categories.split(",") if c.strip()]
+
     variants = relationship(
         "ProductVariant", back_populates="product",
         cascade="all, delete-orphan",

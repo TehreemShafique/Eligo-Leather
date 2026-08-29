@@ -24,12 +24,6 @@ class Visibility(str, enum.Enum):
     hidden = "Hidden"
 
 
-class BlogCommentStatus(str, enum.Enum):
-    pending = "pending"
-    approved = "approved"
-    spam = "spam"
-
-
 class MenuTarget(str, enum.Enum):
     same_window = "same_window"
     new_window = "new_window"
@@ -349,46 +343,11 @@ class BlogPost(Base):
         DateTime(timezone=True), nullable=True,
     )
 
-    comments = relationship(
-        "BlogComment", back_populates="post",
-        cascade="all, delete-orphan",
-    )
-
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Blog Comments
-# ---------------------------------------------------------------------------
-
-class BlogComment(Base):
-    __tablename__ = "blog_comments"
-    __table_args__ = (
-        Index("ix_blog_comments_post_id", "post_id"),
-        Index("ix_blog_comments_status", "status"),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    post_id: Mapped[int] = mapped_column(
-        ForeignKey("blog_posts.id", ondelete="CASCADE"),
-    )
-    author_name: Mapped[str] = mapped_column(String, nullable=False)
-    author_email: Mapped[str] = mapped_column(String, nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(
-        SAEnum(BlogCommentStatus, name="blog_comment_status"),
-        default=BlogCommentStatus.pending,
-    )
-
-    post = relationship("BlogPost", back_populates="comments")
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
     )
 
 

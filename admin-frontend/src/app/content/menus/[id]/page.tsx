@@ -20,6 +20,7 @@ import {
   House,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 interface MenuItemRow {
   localId: string
@@ -57,6 +58,16 @@ export default function EditMenuPage() {
   const [items, setItems] = useState<MenuItemRow[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty(
+    {
+      name,
+      handle,
+      items: items.map(({ localId, label, link }) => ({ localId, label, link })),
+    },
+    dataLoaded
+  )
 
   useEffect(() => {
     let isMounted = true
@@ -85,6 +96,7 @@ export default function EditMenuPage() {
               isDropdownOpen: false,
             })),
         )
+        if (isMounted) setDataLoaded(true)
       } catch (err) {
         toast.error("Could not load this menu. It may not exist in the database.")
         router.replace("/content/menus")
@@ -174,6 +186,7 @@ export default function EditMenuPage() {
       )
 
       toast.success(`Menu "${name.trim()}" saved.`)
+      reset()
       router.push("/content/menus")
     } catch (err) {
       toast.error("Failed to save the menu. Please try again.")

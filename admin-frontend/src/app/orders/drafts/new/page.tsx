@@ -20,6 +20,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 interface Variant {
   id: number
@@ -109,6 +110,10 @@ export default function AdminCreateDraftOrderPage() {
   const [customIsPhysical, setCustomIsPhysical] = useState(true)
   const [customWeight, setCustomWeight] = useState("0")
   const [customWeightUnit, setCustomWeightUnit] = useState("kg")
+
+  const { reset } = useFormDirty(
+    { items, discount, shippingCost, tax, tags, currency, selectedCustomer }
+  )
 
   // Fetch real product catalog + customers from the backend database
   useEffect(() => {
@@ -259,6 +264,7 @@ export default function AdminCreateDraftOrderPage() {
         body: JSON.stringify(payload),
       })
       toast.success(`Order ${data.order_number || ""} created in the database!`)
+      reset()
       router.push("/orders")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to create the order")

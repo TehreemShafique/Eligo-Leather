@@ -4,7 +4,6 @@ import Image from "next/image"
 import { Calendar } from "@phosphor-icons/react"
 import { PageBreadcrumb } from "@/components/ui/page-breadcrumb"
 import { FaqSection, type FAQItem } from "@/components/home/faq-section"
-import { BlogCommentForm } from "./blog-comment-form"
 import type { BlogPostOut } from "@/modules/content/schema"
 
 function formatDate(dateStr: string): string {
@@ -108,9 +107,6 @@ export function BlogDetailContent({
 
       {/* FAQ Accordion Section — post FAQs when the admin added them */}
       <FaqSection items={faqItems ?? undefined} />
-
-      {/* Comment Form Section */}
-      <BlogCommentForm />
     </article>
   )
 }

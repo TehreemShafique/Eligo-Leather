@@ -14,6 +14,7 @@ import {
   ArrowClockwise,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 const DEFAULT_ROBOTS_TXT = `# Eligo Leather Storefront robots.txt
 # Controls search engine crawler indexing (Googlebot, Bingbot, YandexBot)
@@ -36,6 +37,9 @@ export default function AdminRobotsTxtPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<string | null>(null)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty({ robotsContent }, dataLoaded)
 
   // Fetch current robots.txt from PostgreSQL DB
   useEffect(() => {
@@ -49,6 +53,7 @@ export default function AdminRobotsTxtPage() {
           if (isMounted) {
             setRobotsContent(data.content || DEFAULT_ROBOTS_TXT)
             setLoading(false)
+            setDataLoaded(true)
             return
           }
         }
@@ -59,6 +64,7 @@ export default function AdminRobotsTxtPage() {
       if (isMounted) {
         setRobotsContent(DEFAULT_ROBOTS_TXT)
         setLoading(false)
+        setDataLoaded(true)
       }
     }
 
@@ -92,6 +98,7 @@ export default function AdminRobotsTxtPage() {
         const dateStr = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
         setLastSaved(dateStr)
         toast.success("robots.txt updated in DB & live on storefront!")
+        reset()
       } else {
         toast.success("robots.txt saved!")
       }

@@ -17,6 +17,7 @@ import {
   Info,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 interface MetaobjectFieldRow {
   id: string
@@ -124,6 +125,23 @@ export default function CreateMetaobjectDefinitionPage() {
 
   const [fieldTypeSearch, setFieldTypeSearch] = useState("")
 
+  const { reset } = useFormDirty({
+    name,
+    typeKey,
+    handle,
+    description,
+    status,
+    publishAsWebPages,
+    availableOnStorefront,
+    fields: fields.map(({ id, label, key, cardinality, fieldType }) => ({
+      id,
+      label,
+      key,
+      cardinality,
+      fieldType,
+    })),
+  })
+
   useEffect(() => {
     if (name) {
       const generated = name
@@ -222,6 +240,7 @@ export default function CreateMetaobjectDefinitionPage() {
 
       if (res.ok) {
         toast.success(`Metaobject definition "${name}" created successfully!`)
+        reset()
         router.push("/content/metaobjects")
       } else {
         const err = await res.json().catch(() => ({ detail: "Failed to create" }))

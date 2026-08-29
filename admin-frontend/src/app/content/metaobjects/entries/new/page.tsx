@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 interface MetaobjectField {
   id: number
@@ -51,6 +52,15 @@ export default function CreateMetaobjectEntryPage() {
   const [tags, setTags] = useState("")
   const [fieldValues, setFieldValues] = useState<Record<number, string>>({})
   const [saving, setSaving] = useState(false)
+
+  const { reset } = useFormDirty({
+    selectedDefinitionId,
+    displayName,
+    handle,
+    status,
+    tags,
+    fieldValues,
+  })
 
   useEffect(() => {
     fetchDefinitions()
@@ -139,6 +149,7 @@ export default function CreateMetaobjectEntryPage() {
       })
 
       toast.success(`Entry "${displayName}" created successfully!`)
+      reset()
       router.push("/content/metaobjects/entries")
     } catch (err) {
       toast.error("Failed to create entry")

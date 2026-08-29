@@ -31,9 +31,6 @@ from app.modules.content.schema import (
     BlogPostCreate,
     BlogPostUpdate,
     BlogPostOut,
-    BlogCommentCreate,
-    BlogCommentUpdate,
-    BlogCommentOut,
     PageCreate,
     PageUpdate,
     PageBulkDelete,
@@ -615,84 +612,6 @@ async def delete_blog_post(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Blog post not found",
-        )
-
-
-# ===========================================================================
-# Blog Comments
-# ===========================================================================
-
-blog_comments_router = APIRouter(
-    prefix="/blog-comments",
-    tags=["Blog Comments"],
-    dependencies=[Depends(get_current_user)],
-)
-
-
-@blog_comments_router.post(
-    "/", response_model=BlogCommentOut, status_code=status.HTTP_201_CREATED,
-)
-async def create_blog_comment(
-    data: BlogCommentCreate,
-    db: AsyncSession = Depends(get_db),
-):
-    return await service.create_blog_comment(db, data)
-
-
-@blog_comments_router.get("/", response_model=list[BlogCommentOut])
-async def list_blog_comments(
-    post_id: int | None = Query(None),
-    status_filter: str | None = Query(None, alias="status"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
-):
-    return await service.list_blog_comments(
-        db, post_id=post_id, status=status_filter, skip=skip, limit=limit,
-    )
-
-
-@blog_comments_router.get("/{comment_id}", response_model=BlogCommentOut)
-async def get_blog_comment(
-    comment_id: int,
-    db: AsyncSession = Depends(get_db),
-):
-    obj = await service.get_blog_comment(db, comment_id)
-    if not obj:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Blog comment not found",
-        )
-    return obj
-
-
-@blog_comments_router.patch("/{comment_id}", response_model=BlogCommentOut)
-async def update_blog_comment(
-    comment_id: int,
-    data: BlogCommentUpdate,
-    db: AsyncSession = Depends(get_db),
-):
-    obj = await service.update_blog_comment(db, comment_id, data)
-    if not obj:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Blog comment not found",
-        )
-    return obj
-
-
-@blog_comments_router.delete(
-    "/{comment_id}", status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_blog_comment(
-    comment_id: int,
-    db: AsyncSession = Depends(get_db),
-):
-    deleted = await service.delete_blog_comment(db, comment_id)
-    if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Blog comment not found",
         )
 
 

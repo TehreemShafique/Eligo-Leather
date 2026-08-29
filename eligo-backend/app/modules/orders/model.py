@@ -3,7 +3,7 @@ from app.db.base import Base
 from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Boolean, ForeignKey, Numeric, func, Text, DateTime, Integer
+from sqlalchemy import String, Boolean, ForeignKey, Numeric, func, Text, DateTime, Integer, Index
 from sqlalchemy import Enum as SAEnum
 
 # ==== Timestamps ====
@@ -92,10 +92,21 @@ class AuditEventType(str, enum.Enum):
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        # Enforce at the PostgreSQL level that a given checkout request can
+        # only ever produce one order (idempotency). Duplicate submissions —
+        # double-clicks, browser/network retries — hit the unique index instead
+        # of creating a second order / double-deducting stock. NULL allows
+        # legacy orders that were never issued an idempotency key.
+        Index("ix_orders_idempotency_key", "idempotency_key", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     order_number: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True)
+    # Client-supplied, DB-unique checkout/order request identifier used to
+    # make order creation idempotent (see POST /api/v1/orders/create-order).
+    idempotency_key: Mapped[str | None] = mapped_column(String, nullable=True)
     # location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
 
     # Timestamps

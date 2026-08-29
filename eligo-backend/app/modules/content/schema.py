@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.modules.content.model import (
     MetaobjectStatus,
     Visibility,
-    BlogCommentStatus,
     MenuTarget,
     RedirectTargetType,
 )
@@ -413,37 +412,6 @@ class BlogPostOut(BaseModel):
 
 
 # ===========================================================================
-# Blog Comment
-# ===========================================================================
-
-class BlogCommentCreate(BaseModel):
-    post_id: int
-    author_name: str
-    author_email: str
-    content: str
-    status: BlogCommentStatus = BlogCommentStatus.pending
-
-
-class BlogCommentUpdate(BaseModel):
-    author_name: str | None = None
-    author_email: str | None = None
-    content: str | None = None
-    status: BlogCommentStatus | None = None
-
-
-class BlogCommentOut(BaseModel):
-    id: int
-    post_id: int
-    author_name: str
-    author_email: str
-    content: str
-    status: BlogCommentStatus
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# ===========================================================================
 # Content Overview (dashboard summary)
 # ===========================================================================
 
@@ -473,8 +441,6 @@ class BlogSummary(BaseModel):
     total_posts: int
     visible_posts: int
     hidden_posts: int
-    pending_comments: int
-    total_comments: int
 
     model_config = ConfigDict(from_attributes=True)
 

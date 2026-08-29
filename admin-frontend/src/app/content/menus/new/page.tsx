@@ -20,6 +20,7 @@ import {
   House,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 interface MenuItemRow {
   id: string
@@ -57,6 +58,12 @@ export default function CreateMenuPage() {
   const [items, setItems] = useState<MenuItemRow[]>([
     { id: "item-1", label: "", link: "", isDropdownOpen: false },
   ])
+
+  const { reset } = useFormDirty({
+    name,
+    handle,
+    items: items.map(({ id, label, link }) => ({ id, label, link })),
+  })
 
   // Auto-generate handle slug from name
   useEffect(() => {
@@ -171,6 +178,7 @@ export default function CreateMenuPage() {
       }
 
       setSaving(false)
+      reset()
       router.push("/content/menus")
     }
   }

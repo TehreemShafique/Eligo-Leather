@@ -218,11 +218,44 @@ async def update_product(db: AsyncSession, product_id: int, data: ProductUpdate)
     product = await get_product(db, product_id)
     if not product:
         return None
-    for field, value in data.model_dump(exclude_unset=True).items():
+    payload = data.model_dump(exclude_unset=True)
+
+    variants = payload.pop("variants", None)
+    images = payload.pop("images", None)
+
+    for field, value in payload.items():
         setattr(product, field, value)
+
+    # Full replacement of the variant & image collections when the client
+    # sends them (edit flow), so updates keep the product row in place while
+    # its child records are re-synced to match the form.
+    #
+    # Delete the existing child rows first and flush BEFORE inserting the new
+    # set. Otherwise SQLAlchemy flushes new INSERTs ahead of the orphan
+    # DELETEs, which collides on the unique `sku` constraint (500) whenever a
+    # product is re-saved with the same variant SKUs.
+    if variants is not None:
+        for child in list(product.variants):
+            await db.delete(child)
+    if images is not None:
+        for child in list(product.images):
+            await db.delete(child)
+    await db.flush()
+
+    if variants is not None:
+        product.variants = [
+            ProductVariant(product_id=product_id, **VariantCreate(**v).model_dump()) for v in variants
+        ]
+    if images is not None:
+        product.images = [
+            ProductImage(product_id=product_id, **ProductImageCreate(**img).model_dump()) for img in images
+        ]
+
     await db.commit()
-    await db.refresh(product, attribute_names=["variants", "images"])
-    return product
+    # Re-load with eager-loaded relationships (variants/images) so response
+    # serialization never triggers a lazy load outside the async context
+    # (which raises MissingGreenlet and produces a 500).
+    return await get_product(db, product_id)
 
 
 async def delete_product(db: AsyncSession, product_id: int) -> bool:

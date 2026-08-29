@@ -25,6 +25,8 @@ class DiscountCreate(BaseModel):
     value: str | None = None
     percentage_value: float | None = Field(default=None, ge=0, le=100)
     value_amount: float | None = Field(default=None, ge=0)
+    applies_to_products: list[int] = []
+    applies_to_variants: list[int] = []
     start_date: datetime | None = None
     end_date: datetime | None = None
 
@@ -41,6 +43,8 @@ class DiscountUpdate(BaseModel):
     value: str | None = None
     percentage_value: float | None = Field(default=None, ge=0, le=100)
     value_amount: float | None = Field(default=None, ge=0)
+    applies_to_products: list[int] | None = None
+    applies_to_variants: list[int] | None = None
     start_date: datetime | None = None
     end_date: datetime | None = None
 
@@ -58,6 +62,8 @@ class DiscountOut(BaseModel):
     value: str | None
     percentage_value: float | None
     value_amount: float | None
+    applies_to_products: list[int] = []
+    applies_to_variants: list[int] = []
     start_date: datetime | None
     end_date: datetime | None
     created_at: datetime

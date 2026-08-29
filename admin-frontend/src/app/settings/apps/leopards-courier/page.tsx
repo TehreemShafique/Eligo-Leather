@@ -1,6 +1,7 @@
 "use client"
 
 import { API_BASE } from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 import { useState, useEffect, Suspense, useRef } from "react"
 import { useSearchParams } from "next/navigation"
@@ -167,6 +168,32 @@ function LeopardsCourierFormContent() {
   const [manualConsigneeAddress, setManualConsigneeAddress] = useState("")
   const [manualSpecialInstructions, setManualSpecialInstructions] = useState("")
 
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty(
+    {
+      shipmentType: manualShipmentType,
+      pieces: manualPieces,
+      weight: manualWeightGrams,
+      cod: manualCodAmount,
+      orderId: manualOrderId,
+      shipperAddr: manualShipperAddr,
+      consigneeType: manualConsigneeType,
+      destinationCity: manualDestinationCity,
+      consigneeName: manualConsigneeName,
+      consigneeEmail: manualConsigneeEmail,
+      consigneePhone: manualConsigneePhone,
+      consigneePhone2: manualConsigneePhone2,
+      consigneePhone3: manualConsigneePhone3,
+      consigneeAddress: manualConsigneeAddress,
+      instructions: manualSpecialInstructions,
+      defaultShipper: settingsData.default_shipper,
+      additionalShippers: settingsData.additional_shippers,
+      courierSettings: settingsData.courier_settings,
+    },
+    dataLoaded
+  )
+
   // Fetch single order details when redirected with ?order_id=
   useEffect(() => {
     const qOrderId = searchParams ? searchParams.get("order_id") : null
@@ -197,6 +224,7 @@ function LeopardsCourierFormContent() {
                 .join(", ")
               setManualSpecialInstructions(itemSummary)
             }
+            setDataLoaded(true)
           }
         })
         .catch(() => {})
@@ -504,6 +532,7 @@ function LeopardsCourierFormContent() {
         const data = await res.json()
         if (data.settings) {
           setSettingsData(data.settings)
+          setDataLoaded(true)
         }
       } else {
         console.warn("Leopard settings API returned", res.status)

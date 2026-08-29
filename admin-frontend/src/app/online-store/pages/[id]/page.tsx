@@ -19,6 +19,7 @@ import { toast } from "sonner"
 import { CharCounter } from "@/components/ui/char-counter"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
 import { AddMetafieldDefinitionModal } from "@/components/modals/add-metafield-definition-modal"
+import { useFormDirty, useUnsavedChanges } from "@/components/unsaved-changes"
 
 export default function EditPageDetailScreen() {
   const router = useRouter()
@@ -57,6 +58,23 @@ export default function EditPageDetailScreen() {
   // Actions Dropdown & Loading
   const [moreActionsOpen, setMoreActionsOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { confirmLeave } = useUnsavedChanges()
+  const { reset } = useFormDirty(
+    {
+      title,
+      handle,
+      content,
+      wathappMetafield,
+      visibility,
+      template,
+      seoTitle,
+      seoDescription,
+      dynamicMetafieldValues,
+    },
+    dataLoaded
+  )
 
   // Fetch Policies from Backend DB for Template Dropdown
   useEffect(() => {
@@ -182,6 +200,7 @@ export default function EditPageDetailScreen() {
                 setWathappMetafield(parsed.wathapp || "")
               } catch (e) {}
             }
+            setDataLoaded(true)
             return
           }
         }
@@ -208,6 +227,7 @@ export default function EditPageDetailScreen() {
         setTemplate(defaultObj.template)
         setSeoTitle(defaultObj.seoTitle)
         setSeoDescription(defaultObj.seoDescription)
+        setDataLoaded(true)
       }
     }
 
@@ -270,7 +290,7 @@ export default function EditPageDetailScreen() {
     } catch (e) {
       toast.success(`Deleted page "${title}"!`)
     } finally {
-      router.push("/online-store/pages")
+      confirmLeave(() => router.push("/online-store/pages"))
     }
   }
 
@@ -303,6 +323,7 @@ export default function EditPageDetailScreen() {
 
       if (res.ok) {
         toast.success(`Updated page "${title}" in database!`)
+        reset()
       } else {
         toast.success(`Updated page "${title}"!`)
       }

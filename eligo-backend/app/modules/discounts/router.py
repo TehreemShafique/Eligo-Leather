@@ -174,6 +174,9 @@ async def verify_coupon(
     """
     code = (payload.get("code") or "").strip().upper()
     subtotal = float(payload.get("subtotal") or 0)
+    # Optional cart line detail (product_id / variant_id / total_price) so a
+    # discount scoped to specific products/variants is previewed correctly.
+    line_items = payload.get("items") if isinstance(payload.get("items"), list) else None
 
     settings = await service.get_welcome_settings(db)
     pct = int(float(settings.discount_percentage))
@@ -193,7 +196,7 @@ async def verify_coupon(
             "message": f"{discount_pct}% Welcome discount applied! You saved Rs. {discount_amount}.",
         }
 
-    promo = await service.validate_promo_code(db, code, subtotal)
+    promo = await service.validate_promo_code(db, code, subtotal, line_items=line_items)
     result = {
         "valid": promo["valid"],
         "code": promo["code"] or code,

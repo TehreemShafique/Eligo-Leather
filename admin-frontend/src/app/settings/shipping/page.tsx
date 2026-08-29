@@ -5,6 +5,7 @@ import { Truck, Globe, MapPin, Package as PackageIcon, Printer, Plus, Trash, X, 
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
 import { apiFetch } from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 const API_BASE = "/api/v1/settings/shipping-and-delivery"
 
@@ -79,6 +80,7 @@ export default function AdminSettingsShippingPage() {
   const [packages, setPackages] = useState<PackageRecord[]>([])
 
   const [loading, setLoading] = useState(true)
+  const [dataLoaded, setDataLoaded] = useState(false)
   const [profilesLoading, setProfilesLoading] = useState(false)
   const [packagesLoading, setPackagesLoading] = useState(false)
   const [routingSaving, setRoutingSaving] = useState(false)
@@ -170,6 +172,28 @@ export default function AdminSettingsShippingPage() {
       fetchPackages()
     }
   }, [activeTab, fetchProfiles, fetchCarriers, fetchPackages])
+
+  const { reset } = useFormDirty(
+    {
+      sender_name: settings?.sender_name,
+      sender_phone: settings?.sender_phone,
+      sender_address: settings?.sender_address,
+      sender_city: settings?.sender_city,
+      sender_province: settings?.sender_province,
+      sender_postal_code: settings?.sender_postal_code,
+      sender_country: settings?.sender_country,
+      return_name: settings?.return_name,
+      return_phone: settings?.return_phone,
+      return_address: settings?.return_address,
+      return_city: settings?.return_city,
+      return_province: settings?.return_province,
+      return_postal_code: settings?.return_postal_code,
+      return_country: settings?.return_country,
+      shipping_charge: settings?.shipping_charge,
+      free_shipping_threshold: settings?.free_shipping_threshold,
+    },
+    dataLoaded
+  )
 
   const saveRouting = async (patch: Partial<ShippingSettings>) => {
     if (!settings) return

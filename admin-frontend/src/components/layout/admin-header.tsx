@@ -225,7 +225,7 @@ export function AdminHeader() {
   }
 
   return (
-    <header className="h-14 shrink-0 bg-[#ebebeb] border-b border-[#d2d2d2] px-5 flex items-center justify-between gap-4 z-40 select-none">
+    <header className="h-14 shrink-0 bg-[#ebebeb] border-b border-[#d2d2d2] px-5 flex items-center justify-between gap-4 z-50 select-none">
       <div className="flex-1 max-w-xl min-w-0" ref={searchWrapRef}>
         <div className="relative flex items-center group">
           <MagnifyingGlass className="w-4 h-4 text-gray-500 absolute left-3 transition-colors group-focus-within:text-amber-800" />

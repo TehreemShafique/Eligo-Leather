@@ -28,6 +28,8 @@ import {
   $getSelection,
   $isRangeSelection,
   $isRootNode,
+  $isTextNode,
+  $isElementNode,
   FORMAT_TEXT_COMMAND,
   FORMAT_ELEMENT_COMMAND,
   $createParagraphNode,
@@ -363,27 +365,86 @@ function ToolbarPlugin() {
   )
 }
 
+// Guarantees that copying never leaks toolbar/label text. Browsers dispatch
+// copy based on the native DOM selection, which can extend over the adjacent
+// toolbar (its <select> options and button labels), so the copy event fires on
+// the toolbar element rather than the contenteditable. We listen on the whole
+// editor wrapper (capture phase) and always preventDefault() + write only the
+// editor's own selected content, so stray toolbar/label text never reaches the
+// clipboard regardless of where the copy is triggered (keyboard, menu, select).
+function CleanCopyPlugin() {
+  const [editor] = useLexicalComposerContext()
+
+  useEffect(() => {
+    const editorElement =
+      editor.getRootElement()?.closest<HTMLElement>("[data-lexical-editor-root]") ??
+      editor.getRootElement()
+
+    const onCopy = (event: ClipboardEvent) => {
+      const target = event.target as Node | null
+      if (!target || !editorElement?.contains(target)) return
+      event.preventDefault()
+      const clipboardData = event.clipboardData
+      if (!clipboardData) return
+      const editorState = editor.getEditorState()
+      editorState.read(() => {
+        const selection = $getSelection()
+        const text = selection ? selection.getTextContent() : ""
+        const html = $generateHtmlFromNodes(editor, selection)
+        clipboardData.setData("text/plain", text)
+        if (html) clipboardData.setData("text/html", html)
+      })
+    }
+
+    document.addEventListener("copy", onCopy, true)
+    return () => document.removeEventListener("copy", onCopy, true)
+  }, [editor])
+
+  return null
+}
+
 function HtmlPlugin({ value, onChange }: { value: string; onChange: (html: string) => void }) {
   const [editor] = useLexicalComposerContext()
   const isUpdatingRef = useRef(false)
   const lastHtmlRef = useRef(value)
 
+  const importValue = useCallback((html: string) => {
+    editor.update(() => {
+      const dom = new DOMParser().parseFromString(html || "<p></p>", "text/html")
+      try {
+        const nodes = $generateNodesFromDOM(editor, dom)
+        const root = $getRoot()
+        root.clear()
+        nodes.forEach((node) => {
+          if ($isTextNode(node)) {
+            const paragraph = $createParagraphNode()
+            paragraph.append(node)
+            root.append(paragraph)
+          } else {
+            root.append(node)
+          }
+        })
+      } catch (err) {
+        console.error("Lexical HTML import error:", err)
+      }
+    })
+  }, [editor])
+
+  // On mount always import the incoming value so a freshly mounted editor
+  // (e.g. after switching back from live preview) is not left blank. The
+  // ref-initialised comparison below would otherwise skip it.
+  useEffect(() => {
+    importValue(value)
+    lastHtmlRef.current = value
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor])
+
   useEffect(() => {
     if (value !== lastHtmlRef.current && !isUpdatingRef.current) {
-      editor.update(() => {
-        const dom = new DOMParser().parseFromString(value || "<p></p>", "text/html")
-        try {
-          const nodes = $generateNodesFromDOM(editor, dom)
-          const root = $getRoot()
-          root.clear()
-          nodes.forEach((node) => root.append(node))
-        } catch (err) {
-          console.error("Lexical HTML import error:", err)
-        }
-      })
+      importValue(value)
       lastHtmlRef.current = value
     }
-  }, [value, editor])
+  }, [value, importValue])
 
   useEffect(() => {
     return editor.registerUpdateListener(({ editorState }) => {
@@ -440,7 +501,10 @@ export function LexicalEditor({
   }
 
   return (
-    <div className="border border-gray-300 rounded-xl overflow-hidden bg-white shadow-2xs">
+    <div
+      data-lexical-editor-root
+      className="border border-gray-300 rounded-xl overflow-hidden bg-white shadow-2xs"
+    >
       <LexicalComposer initialConfig={initialConfig}>
         <ToolbarPlugin />
         <div className="relative">
@@ -459,6 +523,7 @@ export function LexicalEditor({
             ErrorBoundary={({ children }: { children: React.ReactNode }) => <>{children}</>}
           />
           <HtmlPlugin value={value} onChange={onChange} />
+          <CleanCopyPlugin />
           <HistoryPlugin />
           <LinkPlugin />
           <ListPlugin />

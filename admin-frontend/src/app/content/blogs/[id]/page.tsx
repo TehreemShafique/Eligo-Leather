@@ -20,7 +20,8 @@ import {
 import { toast } from "sonner"
 import { LexicalEditor } from "@/components/ui/lexical-editor"
 import { CharCounter } from "@/components/ui/char-counter"
-import { useUnsavedChanges } from "@/components/unsaved-changes"
+import { ImageUploadNote } from "@/components/ui/image-upload-note"
+import { useFormDirty, useUnsavedChanges } from "@/components/unsaved-changes"
 
 function parseBlogFaqs(raw: string | null | undefined): { question: string; answer: string }[] {
   if (!raw) return []
@@ -77,32 +78,33 @@ export default function EditBlogPostPage() {
   const [newBlogCategoryName, setNewBlogCategoryName] = useState("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const { setUnsavedChanges } = useUnsavedChanges()
   const canonicalTouchedRef = useRef(false)
 
-  const galleryModified = imageUrls.length > 0
-
-  const hasUnsavedChanges =
-    title.trim() !== "" ||
-    slugInput.trim() !== "" ||
-    content.trim() !== "" ||
-    excerpt.trim() !== "" ||
-    faqs.length > 0 ||
-    seoTitle.trim() !== "" ||
-    seoDescription.trim() !== "" ||
-    seoKeyword.trim() !== "" ||
-    seoCanonicalUrl.trim() !== "" ||
-    showSeoFields ||
-    galleryModified ||
-    tags.trim() !== "" ||
-    customScriptOverride.trim() !== ""
-
-  useEffect(() => {
-    setUnsavedChanges(hasUnsavedChanges)
-  }, [setUnsavedChanges, hasUnsavedChanges])
+  const { reset } = useFormDirty(
+    {
+      title,
+      slugInput,
+      content,
+      excerpt,
+      faqs,
+      seoTitle,
+      seoDescription,
+      seoKeyword,
+      seoCanonicalUrl,
+      visibility,
+      author,
+      selectedBlogCategory,
+      tags,
+      themeTemplate,
+      imageUrls,
+    },
+    dataLoaded
+  )
+  const { confirmLeave } = useUnsavedChanges()
 
   // Auto-derive the canonical URL from the slug (only when not manually overridden).
   useEffect(() => {
@@ -146,6 +148,7 @@ export default function EditBlogPostPage() {
         if (img) setImageUrls([img])
         setCustomScriptOverride("")
         setIsScriptEdited(false)
+        if (isMounted) setDataLoaded(true)
       } catch (err) {
         toast.error("Could not load this blog post. It may not exist in the database.")
         router.replace("/content/blogs")
@@ -230,6 +233,7 @@ export default function EditBlogPostPage() {
 
       if (res.ok) {
         toast.success(`Blog post "${title}" updated!`)
+        reset()
         router.push("/content/blogs")
       } else {
         const body = await res.json().catch(() => null)
@@ -514,6 +518,8 @@ export default function EditBlogPostPage() {
               </button>
             </div>
 
+            <ImageUploadNote />
+
             <input
               type="file"
               ref={fileInputRef}
@@ -687,7 +693,7 @@ export default function EditBlogPostPage() {
                   })
                   if (res.ok) {
                     toast.success(`Blog post "${title}" deleted.`)
-                    router.push("/content/blogs")
+                    confirmLeave(() => router.push("/content/blogs"))
                   } else {
                     toast.error("Could not delete the blog post.")
                   }

@@ -41,7 +41,6 @@ from app.modules.content.router import (
     menus_router,
     url_redirects_router,
     blog_posts_router,
-    blog_comments_router,
     pages_router,
     storefront_metaobject_router,
 )
@@ -129,7 +128,6 @@ app.include_router(files_router, prefix="/api/v1")
 app.include_router(menus_router, prefix="/api/v1")
 app.include_router(url_redirects_router, prefix="/api/v1")
 app.include_router(blog_posts_router, prefix="/api/v1")
-app.include_router(blog_comments_router, prefix="/api/v1")
 app.include_router(pages_router, prefix="/api/v1")
 app.include_router(storefront_metaobject_router, prefix="/api/v1")
 app.include_router(settings_router, prefix="/api/v1")

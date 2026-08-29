@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { apiFetch, API_BASE } from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 // Legacy orders pack "Name | Phone: 03xx | street, city" into shipping_address;
 // the slip must show the street address only.
@@ -70,6 +71,26 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
   const [bookingDate, setBookingDate] = useState("")
   const [bookingLoading, setBookingLoading] = useState(false)
   const [showSlipModal, setShowSlipModal] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty(
+    {
+      recipientName,
+      recipientPhone,
+      shippingAddress,
+      city,
+      weightGrams,
+      pieces,
+      codAmount,
+      specialInstructions,
+      accountName,
+      businessAddress,
+      shipperContact,
+      cnNumber,
+      bookingDate,
+    },
+    dataLoaded
+  )
 
   // Load order + business address on mount
   useEffect(() => {
@@ -113,7 +134,10 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
           // Not logged in as admin or endpoint unavailable - keep defaults
         }
       } finally {
-        if (!cancelled) setLoadingOrder(false)
+        if (!cancelled) {
+          setLoadingOrder(false)
+          setDataLoaded(true)
+        }
       }
     }
 
@@ -161,6 +185,7 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
         setBookingDate(details.booking_date || new Date().toISOString().slice(0, 10))
         setIsBooked(true)
         toast.success(`Leopard Shipment Booked! Consignment CN Number: ${data.cn_number}`)
+        reset()
       } else {
         toast.error(data.message || "Leopards booking failed. Check destination city and try again.")
       }

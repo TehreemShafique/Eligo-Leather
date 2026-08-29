@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     String, Integer, Numeric, Boolean, DateTime, Text, Index, ForeignKey,
-    Enum as SAEnum, func,
+    JSON, Enum as SAEnum, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -75,6 +75,11 @@ class Discount(Base):
     value_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2), nullable=True,
     )
+    # Product/variant scoping: when set, the discount only applies to these
+    # catalog items (IDs) instead of the whole cart. Null/empty = applies to
+    # all items. Persisted as JSON arrays (Postgres) / TEXT (SQLite).
+    applies_to_products: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
+    applies_to_variants: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
     start_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )

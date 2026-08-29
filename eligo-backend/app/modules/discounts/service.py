@@ -195,10 +195,32 @@ def _build_invalid(code: str, message: str) -> dict:
     }
 
 
+def _scoped_subtotal(discount, line_items, fallback: Decimal) -> Decimal:
+    """Return the dollar base the discount may be applied to.
+
+    If the discount is scoped to specific products/variants, only the line
+    items that match those IDs contribute. When no line detail is supplied
+    (or the discount is unscoped) the full fallback subtotal is used.
+    """
+    product_ids = set(discount.applies_to_products or [])
+    variant_ids = set(discount.applies_to_variants or [])
+    if (not product_ids and not variant_ids) or not line_items:
+        return fallback
+
+    total = Decimal("0")
+    for item in line_items:
+        pid = item.get("product_id")
+        vid = item.get("variant_id")
+        if pid in product_ids or vid in variant_ids:
+            total += _to_decimal(item.get("total_price") or item.get("price") or 0)
+    return total.quantize(Decimal("0.01"))
+
+
 async def validate_promo_code(
     db: AsyncSession,
     code: str,
     subtotal: Decimal | str | float,
+    line_items: list[dict] | None = None,
 ) -> dict:
     """Validate an admin-created promo code (from the ``discounts`` table)
     against the live catalog subtotal.
@@ -207,6 +229,10 @@ async def validate_promo_code(
     the order-creation flow share exactly one source of truth. Only codes
     created by the admin are validated here; the welcome scratch-and-win
     code (WELCOME+) stays a separate flow.
+
+    When the discount is scoped to specific products/variants, ``line_items``
+    (each with ``product_id``, ``variant_id`` and ``total_price``) restricts
+    the discount to the matching line items only.
     """
     normalized = (code or "").strip().upper()
     subtotal_dec = _to_decimal(subtotal)
@@ -234,13 +260,21 @@ async def validate_promo_code(
     if discount.end_date is not None and discount.end_date < now:
         return _build_invalid(normalized, f"Discount code '{normalized}' has expired.")
 
+    # Discountable base = only the cart lines in the product/variant scope.
+    scope_dec = _scoped_subtotal(discount, line_items, subtotal_dec)
+    if scope_dec <= 0:
+        return _build_invalid(
+            normalized,
+            f"Discount code '{normalized}' does not apply to the items in your cart.",
+        )
+
     if discount.type == DiscountType.percentage or discount.percentage_value is not None:
         pct = _to_decimal(discount.percentage_value)
         if pct <= 0:
             return _build_invalid(
                 normalized, f"Discount code '{normalized}' has no discount value configured."
             )
-        discount_amount = (subtotal_dec * pct / Decimal("100")).quantize(Decimal("0.01"))
+        discount_amount = (scope_dec * pct / Decimal("100")).quantize(Decimal("0.01"))
         discounted_subtotal = (subtotal_dec - discount_amount).quantize(Decimal("0.01"))
         return {
             "valid": True,
@@ -261,7 +295,7 @@ async def validate_promo_code(
             return _build_invalid(
                 normalized, f"Discount code '{normalized}' has no discount value configured."
             )
-        discount_amount = min(amount, subtotal_dec).quantize(Decimal("0.01"))
+        discount_amount = min(amount, scope_dec).quantize(Decimal("0.01"))
         discounted_subtotal = (subtotal_dec - discount_amount).quantize(Decimal("0.01"))
         return {
             "valid": True,

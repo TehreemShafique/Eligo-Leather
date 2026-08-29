@@ -13,10 +13,8 @@ from app.modules.content.model import (
     MenuItem,
     UrlRedirect,
     BlogPost,
-    BlogComment,
     MetaobjectStatus,
     Visibility,
-    BlogCommentStatus,
     MenuTarget,
     RedirectTargetType,
 )
@@ -32,7 +30,6 @@ def test_tables_registered():
         "menu_items",
         "url_redirects",
         "blog_posts",
-        "blog_comments",
     ):
         assert name in tables
 
@@ -44,9 +41,6 @@ def test_enum_values():
     assert Visibility.hidden.value == "Hidden"
     assert MetaobjectStatus.active.value == "active"
     assert MetaobjectStatus.draft.value == "draft"
-    assert BlogCommentStatus.pending.value == "pending"
-    assert BlogCommentStatus.approved.value == "approved"
-    assert BlogCommentStatus.spam.value == "spam"
     assert RedirectTargetType.home.value == "Home"
     assert RedirectTargetType.custom.value == "Custom"
 
@@ -259,44 +253,3 @@ async def test_blog_post_handle_unique(db_session):
     with pytest.raises(IntegrityError):
         await db_session.commit()
     await db_session.rollback()
-
-
-def test_blog_comment_columns_and_fk():
-    table = BlogComment.__table__
-    for name in ("id", "post_id", "author_name", "author_email", "content", "status", "created_at"):
-        assert name in table.columns.keys()
-    assert table.c.post_id.nullable is False
-    assert table.c.author_email.nullable is False
-    assert table.c.content.nullable is False
-    fk = list(table.c.post_id.foreign_keys)[0]
-    assert fk.column.table.name == "blog_posts"
-    assert fk.ondelete == "CASCADE"
-
-
-async def test_blog_comment_insert_defaults(db_session):
-    post = BlogPost(title="Post", handle="post-1")
-    db_session.add(post)
-    await db_session.commit()
-    await db_session.refresh(post)
-
-    comment = BlogComment(post_id=post.id, author_name="A", author_email="a@b.com", content="Nice")
-    db_session.add(comment)
-    await db_session.commit()
-    await db_session.refresh(comment)
-
-    assert comment.status == BlogCommentStatus.pending
-    assert comment.created_at is not None
-
-
-async def test_blog_post_cascade_deletes_comments(db_session):
-    post = BlogPost(title="Post", handle="post-2")
-    comment = BlogComment(author_name="A", author_email="a@b.com", content="Nice")
-    post.comments.append(comment)
-    db_session.add(post)
-    await db_session.commit()
-
-    await db_session.delete(post)
-    await db_session.commit()
-
-    count = (await db_session.execute(select(func.count(BlogComment.id)))).scalar()
-    assert count == 0

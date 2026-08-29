@@ -34,6 +34,7 @@ interface ProductItem {
   channels: string
   productType: string
   vendor: string
+  url_handle: string | null
   uploadedImage: string | null
   defaultImage: string
 }
@@ -75,6 +76,7 @@ export default function AdminProductsPage() {
               channels: "4 channels",
               productType: p.product_type || "Leather Goods",
               vendor: p.vendor || "Eligo Leather",
+              url_handle: p.url_handle || null,
               uploadedImage: p.image_url || null,
               defaultImage: p.image_url || "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&q=80&w=200",
             }))
@@ -208,6 +210,7 @@ export default function AdminProductsPage() {
               channels: "4 channels",
               productType: cleanCols[7] || "Leather Item",
               vendor: cleanCols[8] || "Eligo Artisans",
+              url_handle: null,
               uploadedImage: null,
               defaultImage: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=200",
             })
@@ -359,7 +362,7 @@ export default function AdminProductsPage() {
                           className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm shrink-0"
                         />
                         <div className="min-w-0">
-                          <Link href={`/products/${p.id}`} className="font-bold text-amber-900 hover:underline block text-xs truncate">
+                          <Link href={`/products/${p.url_handle || p.id}`} className="font-bold text-amber-900 hover:underline block text-xs truncate">
                             {p.title}
                           </Link>
                           <span className="text-[11px] text-gray-500 truncate block">{p.productType} &bull; {p.vendor}</span>

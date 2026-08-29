@@ -15,6 +15,7 @@ import { toast } from "sonner"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
 import { CharCounter } from "@/components/ui/char-counter"
 import { AddMetafieldDefinitionModal } from "@/components/modals/add-metafield-definition-modal"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function CreatePageScreen() {
   const router = useRouter()
@@ -38,6 +39,17 @@ export default function CreatePageScreen() {
   const [showSeoFields, setShowSeoFields] = useState(false)
 
   const [saving, setSaving] = useState(false)
+
+  const { reset } = useFormDirty({
+    title,
+    content,
+    wathappMetafield,
+    visibility,
+    template,
+    seoTitle,
+    seoDescription,
+    dynamicMetafieldValues,
+  })
 
   // Save Page to PostgreSQL Backend DB
   const handleSavePage = async (e: React.FormEvent) => {
@@ -106,6 +118,7 @@ export default function CreatePageScreen() {
       toast.success(`Page "${title}" created!`)
     } finally {
       setSaving(false)
+      reset()
       router.push("/online-store/pages")
     }
   }

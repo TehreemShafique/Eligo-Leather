@@ -955,6 +955,26 @@ async def _is_duplicate_order(
     return False
 
 
+def _order_success_response(order: Order) -> dict:
+    """Build the standard created-ok response from an order's *stored* values.
+
+    Used both for a fresh order and for the idempotent replay of an already
+    created order (same ``idempotency_key``), so a retry returns the exact same
+    server-authoritative amounts instead of creating a duplicate.
+    """
+    return {
+        "status": "success",
+        "message": f"Order {order.order_number} created successfully in database!",
+        "order_id": order.id,
+        "order_number": order.order_number,
+        "customer_id": order.customer_id,
+        # Server-authoritative amounts actually stored on the order.
+        "subtotal": float(order.subtotal or 0),
+        "shipping_cost": float(order.shipping_cost or 0),
+        "total_price": float(order.total_price or 0),
+    }
+
+
 @public_webhook_router.post("/create-order")
 async def create_order_public_api(request: Request, db: AsyncSession = Depends(get_db)):
     """Create a new order directly in the PostgreSQL database.
@@ -963,6 +983,14 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
     real Customer record from the checkout contact fields, links it to the
     order and writes the initial timeline (audit log) events so the admin
     panel order page reflects live database data.
+
+    Security contract: the browser only supplies IDs, quantities, the coupon
+    code and customer/shipping info. Every price, subtotal, tax, shipping fee,
+    discount, total and status is computed serverside from PostgreSQL — see
+    ``_resolve_and_price_order_items``. Product variants and stock are
+    validated, stock is deducted atomically under row locks, a DB-unique
+    ``idempotency_key`` makes retries idempotent, and COD forces an
+    unfulfilled, unpaid initial state.
     """
     data = await request.json()
 
@@ -1079,7 +1107,14 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
     discount_amount = Decimal("0.00")
     if discount_code_input:
         from app.modules.discounts.service import validate_promo_code
-        promo = await validate_promo_code(db, discount_code_input, subtotal)
+        # Pass the resolved (server-authoritative) line items so a discount
+        # scoped to specific products/variants only applies to those lines.
+        promo = await validate_promo_code(
+            db,
+            discount_code_input,
+            subtotal,
+            line_items=resolved_items,
+        )
         if promo.get("valid"):
             discount_amount = Decimal(str(promo["discount_amount"]))
             discount_amount = min(discount_amount, subtotal)
@@ -1096,6 +1131,25 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
     fulfillment_status = FulfillmentStatus.unfulfilled
     delivery_status = DeliveryStatus.pending
 
+    # ---- Idempotency (DB-enforced unique checkout request key) ----
+    # The storefront sends a stable ``idempotency_key`` (e.g. a cart UUID) so
+    # that browser/network retries of the *same* checkout never create a second
+    # order or double-deduct stock. Checked *before* the heuristic duplicate
+    # window below so a genuine retry returns the original order instead of a
+    # 409, and enforced again at the PostgreSQL level (unique index) so a race
+    # between two identical requests collapses to the single first response.
+    idempotency_key = (data.get("idempotency_key") or "").strip() or None
+    if idempotency_key:
+        existing = (
+            await db.execute(
+                select(Order)
+                .options(selectinload(Order.items))
+                .where(Order.idempotency_key == idempotency_key)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return _order_success_response(existing)
+
     # ---- Duplicate-order protection ----
     # An identical basket from the same customer within a short window is a
     # double-submit: reject it instead of creating a duplicate order (and
@@ -1109,6 +1163,7 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
     new_order = Order(
         order_number=order_number,
         customer_id=customer.id,
+        idempotency_key=idempotency_key,
         channel=data.get("channel", "Online Store"),
         currency=data.get("currency", "PKR"),
         subtotal=subtotal,
@@ -1151,9 +1206,18 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         ))
 
     # ---- Deduct stock for the reserved units (prevents overselling) ----
+    # The variants are locked (SELECT ... FOR UPDATE on PostgreSQL) so two
+    # concurrent checkouts of the final units cannot both pass the stock check:
+    # the second transaction blocks until the first commits, then sees the
+    # reduced stock and is rejected. The atomic conditional UPDATE below also
+    # guarantees we never write a negative quantity for tracked variants.
     variant_ids = list({item["variant_id"] for item in resolved_items})
     variant_rows = (
-        await db.execute(select(ProductVariant).where(ProductVariant.id.in_(variant_ids)))
+        await db.execute(
+            select(ProductVariant)
+            .where(ProductVariant.id.in_(variant_ids))
+            .with_for_update()
+        )
     ).scalars().all()
     for variant in variant_rows:
         if not variant.inventory_tracked:
@@ -1164,8 +1228,20 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
             if item["variant_id"] == variant.id
         )
         stock = variant.inventory_quantity or 0
-        if variant.continue_selling_out_of_stock or stock >= ordered_qty:
+        if variant.continue_selling_out_of_stock:
             variant.inventory_quantity = stock - ordered_qty
+        elif stock >= ordered_qty:
+            variant.inventory_quantity = stock - ordered_qty
+        else:
+            # Stock changed between the initial read and the lock (a concurrent
+            # order committed first) -> refuse instead of overselling.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Only {stock} in stock for "
+                    f"“{variant.title or ''}”, but you asked for {ordered_qty}."
+                ),
+            )
 
     # ---- Customer aggregate metrics stay in sync with real orders ----
     customer.total_orders = (customer.total_orders or 0) + 1
@@ -1203,9 +1279,21 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
     try:
         await db.commit()
     except IntegrityError as exc:
-        # e.g. an order-number collision from two concurrent checkouts.
+        # e.g. an order-number collision or a duplicate idempotency_key from two
+        # concurrent identical checkouts. Roll back and, for the idempotency
+        # case, return the already-created order so the retry is a no-op.
         await db.rollback()
         logging.getLogger(__name__).warning("Order creation commit failed: %s", exc)
+        if idempotency_key:
+            existing = (
+                await db.execute(
+                    select(Order)
+                    .options(selectinload(Order.items))
+                    .where(Order.idempotency_key == idempotency_key)
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                return _order_success_response(existing)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Your order could not be placed right now. Please try again in a moment.",

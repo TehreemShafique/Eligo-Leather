@@ -23,6 +23,63 @@ export function useUnsavedChanges() {
   return useContext(UnsavedChangesContext)
 }
 
+type UseFormDirtyResult = {
+  isDirty: boolean
+  reset: () => void
+}
+
+/**
+ * Tracks whether any of the provided form values have changed since the
+ * baseline snapshot and automatically reports that to the
+ * UnsavedChangesProvider.
+ *
+ * - `values`: the current form values. Object identity may change every
+ *   render; deep-equality is used to compute the dirty flag.
+ * - `loaded`: should be `false` while server data is still being fetched and
+ *   flipped to `true` once it has been applied. When it flips to `true`, the
+ *   freshly-loaded values are adopted as the new baseline so the form does
+ *   not appear dirty immediately after loading.
+ *
+ * Use `reset()` after a successful save to adopt the current values as the
+ * new clean baseline.
+ */
+export function useFormDirty(
+  values: Record<string, unknown>,
+  loaded = true
+): UseFormDirtyResult {
+  const { setUnsavedChanges } = useUnsavedChanges()
+  const [baseline, setBaseline] = useState(() => values)
+  const valuesRef = useRef(values)
+  const prevLoadedRef = useRef(loaded)
+  valuesRef.current = values
+
+  const isDirty = Object.keys(values).some(
+    (key) => JSON.stringify(values[key]) !== JSON.stringify(baseline[key])
+  )
+
+  useEffect(() => {
+    setUnsavedChanges(isDirty)
+    return () => setUnsavedChanges(false)
+  }, [setUnsavedChanges, isDirty])
+
+  // When server data finishes loading the first time, adopt the loaded values
+  // as the clean baseline so the page does not warn about "unsaved changes"
+  // immediately after a data fetch.
+  useEffect(() => {
+    if (loaded && !prevLoadedRef.current) {
+      setBaseline(values)
+    }
+    prevLoadedRef.current = loaded
+  }, [loaded, values])
+
+  const reset = useCallback(() => {
+    setBaseline(valuesRef.current)
+    setUnsavedChanges(false)
+  }, [setUnsavedChanges])
+
+  return { isDirty, reset }
+}
+
 const DEFAULT_MESSAGE = "You have unsaved changes. Are you sure you want to leave?"
 
 export function UnsavedChangesProvider({

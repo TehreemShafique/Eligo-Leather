@@ -158,6 +158,8 @@ class ProductUpdate(BaseModel):
     tags: str | None = None
     categories: str | None = None
     category_list: list[str] = []
+    variants: list[VariantCreate] | None = None
+    images: list[ProductImageCreate] | None = None
 
 
 class ProductOut(BaseModel):

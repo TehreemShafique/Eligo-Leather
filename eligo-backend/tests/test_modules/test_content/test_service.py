@@ -4,7 +4,6 @@ from app.modules.content import service
 from app.modules.content.model import (
     MetaobjectStatus,
     MenuTarget,
-    BlogCommentStatus,
     BlogPost,
 )
 from app.modules.content.schema import (
@@ -22,8 +21,6 @@ from app.modules.content.schema import (
     UrlRedirectUpdate,
     BlogPostCreate,
     BlogPostUpdate,
-    BlogCommentCreate,
-    BlogCommentUpdate,
 )
 
 
@@ -266,40 +263,6 @@ async def test_blog_post_crud_and_filters(db_session):
 
 
 # ---------------------------------------------------------------------------
-# Blog Comments
-# ---------------------------------------------------------------------------
-
-async def test_blog_comment_crud_and_filters(db_session):
-    post = await service.create_blog_post(db_session, BlogPostCreate(title="Post", handle="post-1"))
-    comment = await service.create_blog_comment(
-        db_session,
-        BlogCommentCreate(post_id=post.id, author_name="A", author_email="a@b.com", content="Nice"),
-    )
-    assert comment.id is not None
-    assert comment.status == BlogCommentStatus.pending
-
-    fetched = await service.get_blog_comment(db_session, comment.id)
-    assert fetched is not None
-    assert fetched.author_name == "A"
-    assert await service.get_blog_comment(db_session, 99999) is None
-
-    assert len(await service.list_blog_comments(db_session, post_id=post.id)) == 1
-    assert len(await service.list_blog_comments(db_session, status="pending")) == 1
-    assert len(await service.list_blog_comments(db_session, status="approved")) == 0
-
-    updated = await service.update_blog_comment(
-        db_session, comment.id, BlogCommentUpdate(status="approved"),
-    )
-    assert updated.status == BlogCommentStatus.approved
-    assert await service.update_blog_comment(
-        db_session, 99999, BlogCommentUpdate(status="approved"),
-    ) is None
-
-    assert await service.delete_blog_comment(db_session, comment.id) is True
-    assert await service.delete_blog_comment(db_session, comment.id) is False
-
-
-# ---------------------------------------------------------------------------
 # Content Overview
 # ---------------------------------------------------------------------------
 
@@ -318,10 +281,6 @@ async def test_get_content_overview(db_session):
     await service.create_menu(db_session, MenuCreate(title="Main", handle="main-menu"))
     await service.create_url_redirect(db_session, UrlRedirectCreate(from_path="/a", to_path="/b"))
     post = await service.create_blog_post(db_session, BlogPostCreate(title="Post", handle="post-9"))
-    await service.create_blog_comment(
-        db_session,
-        BlogCommentCreate(post_id=post.id, author_name="A", author_email="a@b.com", content="x"),
-    )
 
     overview = await service.get_content_overview(db_session)
 
@@ -340,5 +299,3 @@ async def test_get_content_overview(db_session):
     assert overview.blog.total_posts == 1
     assert overview.blog.visible_posts == 1
     assert overview.blog.hidden_posts == 0
-    assert overview.blog.total_comments == 1
-    assert overview.blog.pending_comments == 1

@@ -20,6 +20,7 @@ from app.modules.catalog.schema import (
 )
 
 from app.core.cache import cache_response, invalidate_cache
+from app.modules.catalog.revalidation import purge_catalog_cache
 
 # ===========================================================================
 # Catalog Overview
@@ -52,6 +53,7 @@ product_router = APIRouter(
 async def create_product(data: ProductCreate, db: AsyncSession = Depends(get_db)):
     res = await service.create_product(db, data)
     invalidate_cache("catalog")
+    await purge_catalog_cache()
     return res
 
 
@@ -87,6 +89,8 @@ async def update_product(product_id: int, data: ProductUpdate, db: AsyncSession 
     product = await service.update_product(db, product_id, data)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    invalidate_cache("catalog")
+    await purge_catalog_cache()
     return product
 
 
@@ -95,6 +99,8 @@ async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
     deleted = await service.delete_product(db, product_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Product not found")
+    invalidate_cache("catalog")
+    await purge_catalog_cache()
 
 
 # --- Variants ---

@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Building, Plus, MagnifyingGlass } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminNewCompanyPage() {
   const router = useRouter()
@@ -21,6 +22,21 @@ export default function AdminNewCompanyPage() {
   const [taxId, setTaxId] = useState("NTN-9876543-2")
   const [taxSetting, setTaxSetting] = useState("Collect tax unless exemptions apply")
 
+  const { reset } = useFormDirty({
+    companyName,
+    companyId,
+    mainContact,
+    locationId,
+    shippingAddress,
+    billingSameAsShipping,
+    market,
+    paymentTerms,
+    allowOneTimeAddress,
+    orderSubmission,
+    taxId,
+    taxSetting,
+  })
+
   const paymentTermsList = [
     "No payment terms",
     "Due on fulfillment",
@@ -35,6 +51,7 @@ export default function AdminNewCompanyPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     toast.success(`B2B Company "${companyName}" created successfully!`)
+    reset()
     setTimeout(() => {
       router.push("/customers/companies")
     }, 400)

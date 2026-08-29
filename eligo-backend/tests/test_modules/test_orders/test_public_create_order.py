@@ -332,3 +332,35 @@ async def test_create_order_ignores_unusable_promo_code(client, db_session):
     assert body["total_price"] == 2750.0 + 250.0
     order = await _load_order(db_session, body["order_id"])
     assert Decimal(str(order.discount)) == Decimal("0.00")
+
+
+async def test_idempotency_key_reuses_existing_order(client, db_session):
+    """Same ``idempotency_key`` twice -> exactly one order, same id, stock
+    deducted once (double-submit / network retry safety)."""
+    product, variant = await _seed_product(db_session, stock=5)
+
+    first = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(product, variant, quantity=2, idempotency_key="cart-uuid-123"),
+    )
+    assert first.status_code == 200
+    first_id = first.json()["order_id"]
+
+    replay = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(product, variant, quantity=2, idempotency_key="cart-uuid-123"),
+    )
+    assert replay.status_code == 200
+    replay_body = replay.json()
+    assert replay_body["order_id"] == first_id
+    assert replay_body["order_number"] == first.json()["order_number"]
+
+    rows = await db_session.execute(
+        select(Order).where(Order.idempotency_key == "cart-uuid-123")
+    )
+    orders = rows.scalars().all()
+    assert len(orders) == 1
+
+    variant = await db_session.get(ProductVariant, variant.id)
+    await db_session.refresh(variant)
+    assert variant.inventory_quantity == 3  # deducted exactly once

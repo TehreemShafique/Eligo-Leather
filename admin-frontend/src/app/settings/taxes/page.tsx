@@ -3,10 +3,13 @@
 import { useState } from "react"
 import { Receipt, Percent, Check } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminSettingsTaxesPage() {
   const [taxIncluded, setTaxIncluded] = useState(true)
   const [gstRate, setGstRate] = useState("18.00")
+
+  useFormDirty({ taxIncluded, gstRate })
 
   return (
     <div className="space-y-6 font-sans max-w-4xl">

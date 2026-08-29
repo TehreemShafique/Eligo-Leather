@@ -25,7 +25,7 @@ from app.modules.discounts.model import (  # noqa: F401
 )
 from app.modules.content.model import (           # noqa: F401
     MetaobjectDefinition, MetaobjectEntry, File,
-    Menu, MenuItem, UrlRedirect, BlogPost, BlogComment,
+    Menu, MenuItem, UrlRedirect, BlogPost,
 )
 from app.modules.store.model import StoreHeaderScript, StoreSchema  # noqa: F401
 from app.modules.settings.general.model import (

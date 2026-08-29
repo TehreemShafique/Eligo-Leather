@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Plus, MapPin, X, Check } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminNewCustomerPage() {
   const router = useRouter()
@@ -30,10 +31,34 @@ export default function AdminNewCustomerPage() {
   const [city, setCity] = useState("Lahore")
   const [postalCode, setPostalCode] = useState("54000")
 
+  const { reset } = useFormDirty(
+    {
+      firstName,
+      lastName,
+      email,
+      phone,
+      language,
+      agreeEmail,
+      agreeSms,
+      agreeWhatsapp,
+      notes,
+      tags,
+      taxSetting,
+      country,
+      company,
+      streetAddress,
+      apartment,
+      city,
+      postalCode,
+      savedAddress,
+    }
+  )
+
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault()
     toast.success(`Customer "${firstName} ${lastName}" created successfully!`)
     setTimeout(() => {
+      reset()
       router.push("/customers")
     }, 400)
   }
