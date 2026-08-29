@@ -223,6 +223,14 @@ async def update_product(db: AsyncSession, product_id: int, data: ProductUpdate)
     variants = payload.pop("variants", None)
     images = payload.pop("images", None)
 
+    # `category_list` is a read-only computed property on the model (derived
+    # from the `categories` column), so it must never be written directly.
+    # Mirror create_product: keep the client-sent `categories` string when
+    # present, otherwise rebuild it from `category_list`.
+    category_list = payload.pop("category_list", None)
+    if category_list and not payload.get("categories"):
+        payload["categories"] = ",".join(category_list)
+
     for field, value in payload.items():
         setattr(product, field, value)
 
