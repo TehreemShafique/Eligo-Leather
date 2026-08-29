@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, use, useCallback, useRef } from "react"
+import { createPortal } from "react-dom"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -30,7 +31,7 @@ import {
   Smiley,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import { apiFetch } from "@/lib/api"
+import { API_BASE, apiFetch } from "@/lib/api"
 import { useFormDirty } from "@/components/unsaved-changes"
 
 type OrderDetailPageProps = {
@@ -137,6 +138,39 @@ function formatDateLong(dateStr: string): string {
   })
 }
 
+const STORE_INFO = {
+  name: "Eligo Leather",
+  addressLines: [
+    "Off # 407, 4th floor, Gulberg Empire, Executive Block,",
+    "Gulberg Greens, Islamabad, Islamabad 04403, Pakistan",
+  ],
+  email: "eligoleather9@gmail.com",
+  website: "eligoleather.com",
+}
+
+function formatInvoiceDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+}
+
+function resolveMediaUrl(url?: string | null): string {
+  if (!url) return ""
+  if (/^https?:\/\//i.test(url)) return url
+  if (url.startsWith("/")) return `${API_BASE}${url}`
+  return url
+}
+
+function buildInvoiceAddressLines(
+  addr: string | null | undefined,
+  name: string | null | undefined,
+  phone: string | null | undefined,
+): string[] {
+  const lines = (addr || "").split("\n").map(l => l.trim()).filter(Boolean)
+  if (lines.length === 0) return []
+  if (name && lines[0] !== name) lines.unshift(name)
+  if (phone && lines[lines.length - 1] !== phone) lines.push(phone)
+  return lines
+}
+
 export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const resolvedParams = use(params)
   const id = resolvedParams?.id || ""
@@ -149,6 +183,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
 
   const [moreActionsOpen, setMoreActionsOpen] = useState(false)
   const [packingSlipOpen, setPackingSlipOpen] = useState(false)
+  const [itemImages, setItemImages] = useState<Record<number, string>>({})
   const [editAddressOpen, setEditAddressOpen] = useState(false)
   const [restocking, setRestocking] = useState(false)
 
@@ -200,6 +235,32 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
     const interval = setInterval(() => { fetchOrder(); fetchAuditLog(); fetchNotes() }, 30000)
     return () => clearInterval(interval)
   }, [fetchOrder, fetchAuditLog, fetchNotes])
+
+  // Load the first product image for each unique product in the order so the
+  // packing slip can show a product thumbnail next to every item.
+  useEffect(() => {
+    if (!packingSlipOpen || !order) return
+    const productIds = Array.from(new Set(order.items.map(i => i.product_id).filter((p): p is number => !!p)))
+    productIds.forEach(async (pid) => {
+      try {
+        const product = await apiFetch<{ images?: { url?: string | null }[] | null }>(`/api/v1/catalog/products/${pid}`)
+        const first = product.images?.find(img => img.url)?.url
+        if (first) setItemImages(prev => (prev[pid] ? prev : { ...prev, [pid]: first }))
+      } catch { /* image is optional */ }
+    })
+  }, [packingSlipOpen, order])
+
+  // Print ONLY the packing slip: marking <body> with `slip-print-active`
+  // hides the rest of the admin UI via @media print rules in globals.css.
+  const handlePrintPackingSlip = () => {
+    document.body.classList.add("slip-print-active")
+    const cleanup = () => {
+      document.body.classList.remove("slip-print-active")
+      window.removeEventListener("afterprint", cleanup)
+    }
+    window.addEventListener("afterprint", cleanup)
+    window.print()
+  }
 
   const handleMarkPaid = async () => {
     if (!order) return
@@ -641,35 +702,97 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
         </div>
       )}
 
-      {/* Packing Slip Modal */}
-      {packingSlipOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-gray-200 p-6 space-y-4 text-xs font-sans">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="text-base font-bold text-gray-900">Packing Slip - {order.order_number}</h3>
-              <button onClick={() => setPackingSlipOpen(false)} className="p-1 text-gray-400 hover:text-black cursor-pointer"><X className="w-4 h-4" /></button>
+      {/* Packing Slip / Order Invoice Modal */}
+      {packingSlipOpen && order && createPortal(
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+          <div className="order-slip-print bg-white w-full max-w-[720px] rounded-2xl shadow-2xl border border-gray-200 max-h-[92vh] overflow-y-auto">
+            {/* Modal chrome (hidden when printing) */}
+            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur px-5 sm:px-7 py-3 border-b border-gray-200 flex items-center justify-between print:hidden">
+              <h3 className="text-sm font-bold text-gray-900">Packing Slip - {order.order_number}</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={handlePrintPackingSlip} className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl cursor-pointer"><Printer className="w-4 h-4" />Print Packing Slip</button>
+                <button onClick={() => setPackingSlipOpen(false)} className="p-1.5 text-gray-400 hover:text-black cursor-pointer"><X className="w-4 h-4" /></button>
+              </div>
             </div>
-            <div className="space-y-3">
-              <div><span className="font-bold text-gray-900">Ship to:</span> <span className="text-gray-700">{order.customer_name || "Guest"}</span></div>
-              <div><span className="font-bold text-gray-900">Address:</span> <span className="text-gray-700">{order.shipping_address || "No address"}</span></div>
-              <div className="border-t border-gray-100 pt-3 space-y-2">
-                {order.items.map(item => (
-                  <div key={item.id} className="flex justify-between">
-                    <span className="text-gray-700">{item.product_name} x {item.quantity}</span>
-                    <span className="font-bold text-gray-900">Rs. {Number(item.total_price).toLocaleString()}</span>
+
+            {/* Printable invoice */}
+            <div className="p-6 sm:p-10 text-[#111]">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded bg-[#111] text-white flex items-center justify-center font-black text-sm shrink-0">EL</div>
+                  <div>
+                    <div className="text-xl font-black uppercase tracking-tight leading-none">Eligo Leather</div>
+                    <div className="text-[10px] text-gray-500 tracking-[0.25em] uppercase mt-1">Handcrafted Leather Goods</div>
                   </div>
-                ))}
+                </div>
+                <div className="text-right">
+                  <div className="text-base font-bold">Order #{order.order_number}</div>
+                  <div className="text-xs text-gray-600 mt-0.5">{formatInvoiceDate(order.created_at)}</div>
+                </div>
               </div>
-              <div className="border-t border-gray-100 pt-2 flex justify-between font-bold text-gray-900">
-                <span>Total</span><span>Rs. {Number(order.total_price).toLocaleString()}</span>
+
+              {/* Ship / Bill addresses */}
+              <div className="mt-8 grid grid-cols-2 gap-8">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider border-b border-[#111] pb-1.5">Ship To</div>
+                  <div className="mt-3 space-y-px text-xs leading-relaxed text-gray-800">
+                    {buildInvoiceAddressLines(order.shipping_address, order.customer_name, order.customer_phone).map((line, i) => <div key={i}>{line}</div>)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider border-b border-[#111] pb-1.5">Bill To</div>
+                  <div className="mt-3 space-y-px text-xs leading-relaxed text-gray-800">
+                    {buildInvoiceAddressLines(order.billing_address || order.shipping_address, order.customer_name, order.customer_phone).map((line, i) => <div key={i}>{line}</div>)}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-              <button onClick={() => window.print()} className="px-4 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900 cursor-pointer">Print</button>
-              <button onClick={() => setPackingSlipOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-pointer">Close</button>
+
+              {/* Items */}
+              <div className="mt-8">
+                <div className="flex items-end justify-between border-b-2 border-[#111] pb-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider">Items</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider">Quantity</span>
+                </div>
+                {order.items.map(item => {
+                  const img = item.product_id ? itemImages[item.product_id] : undefined
+                  return (
+                    <div key={item.id} className="flex items-start gap-4 py-3 break-inside-avoid">
+                      <div className="w-14 h-14 rounded border border-gray-200 bg-gray-50 overflow-hidden shrink-0">
+                        {img ? (
+                          <img src={resolveMediaUrl(img)} alt={item.product_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-300"><FileText className="w-5 h-5" /></div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold uppercase">{item.product_name}</div>
+                        {item.variant_title && <div className="text-xs text-gray-600 mt-0.5">{item.variant_title}</div>}
+                        {item.sku && <div className="text-xs text-gray-500 font-mono mt-0.5">{item.sku}</div>}
+                      </div>
+                      <div className="text-sm font-bold shrink-0 pt-1">{item.quantity}</div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Footer */}
+              <div className="mt-4 pt-6 border-t border-[#111] text-center">
+                <p className="text-sm font-semibold uppercase tracking-wide text-gray-800">Thank you for shopping with us!</p>
+                <div className="mt-5 space-y-0.5 text-xs text-gray-700">
+                  <div className="text-sm font-bold text-gray-900">{STORE_INFO.name}</div>
+                  {STORE_INFO.addressLines.map((line, i) => <div key={i}>{line}</div>)}
+                </div>
+                <div className="mt-2 space-y-0.5 text-xs text-gray-600">
+                  <div>{STORE_INFO.email}</div>
+                  <div>{STORE_INFO.website}</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+        ,
+        document.body,
       )}
     </div>
   )

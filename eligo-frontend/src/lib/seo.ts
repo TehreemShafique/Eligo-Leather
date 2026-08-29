@@ -31,6 +31,21 @@ export function absoluteUrl(path = "/") {
   return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`
 }
 
+/**
+ * Convert a CMS/SEO description (which may contain rich-text HTML markup from
+ * the admin editors) into clean, single-line plain text suitable for a
+ * ``<meta name="description">`` or OpenGraph/Twitter description. Tags are
+ * stripped and runs of whitespace are collapsed so search engines never see
+ * raw markup like ``<p class="...">…</p>``.
+ */
+export function cleanSeoDescription(input: string | null | undefined): string {
+  if (!input) return ""
+  return input
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
 export function buildSeoMetadata({
   title,
   description,

@@ -1077,13 +1077,15 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
 
     full_name = f"{first_name} {last_name}".strip()
 
+    # ---- Resolve customer (identified ONLY by email) ----
+    # A customer is looked up purely by their email address, so every order
+    # placed with the same email is grouped under one customer record. A new
+    # order's checkout details (name, phone, address) are snapshotted onto the
+    # order itself (shipping_name/shipping_phone/shipping_address_* below) and
+    # are NEVER written back into an existing customer profile — that keeps the
+    # original profile intact and lets each order keep its own details.
     customer = None
-    matched_by_phone = False
-    if phone:
-        result = await db.execute(select(Customer).where(Customer.phone == phone))
-        customer = result.scalar_one_or_none()
-        matched_by_phone = customer is not None
-    if customer is None and email:
+    if email:
         result = await db.execute(select(Customer).where(Customer.email == email))
         customer = result.scalar_one_or_none()
 
@@ -1098,67 +1100,29 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         )
         db.add(customer)
         await db.flush()
-    else:
-        # Returning customer (same email/phone): refresh the profile with the
-        # latest checkout values so name, contact and address stay editable,
-        # while every order keeps linking to this same customer row/email.
-        if first_name:
-            customer.first_name = first_name
-        if last_name:
-            customer.last_name = last_name
-        if phone:
-            customer.phone = phone
-        if email:
-            # Email is the record's identity when matched by email — never
-            # rewrite it. When matched by phone, adopt the new email only if no
-            # other customer already owns it (unique-constraint guard).
-            if matched_by_phone:
-                owner = (
-                    await db.execute(select(Customer).where(Customer.email == email))
-                ).scalar_one_or_none()
-                if owner is None or owner.id == customer.id:
-                    customer.email = email
-        if city or country:
-            customer.location = ", ".join(x for x in (city, country) if x) or None
-        if postal_code:
-            customer.postal_code = postal_code
 
-    # Keep the customer's default shipping address in sync with the checkout
-    # address: create it for new customers, update it for returning ones.
-    if (address_body or city or postal_code or country):
-        addr_result = await db.execute(
-            select(CustomerAddress)
-            .where(CustomerAddress.customer_id == customer.id)
-            .order_by(CustomerAddress.is_default.desc(), CustomerAddress.id.desc())
-            .limit(1)
-        )
-        default_addr = addr_result.scalar_one_or_none()
-        addr_fields = {
-            "first_name": first_name or None,
-            "last_name": last_name or None,
-            "address_line1": address_body or "—",
-            "city": city or "—",
-            "province": (data.get("province") or "").strip() or None,
-            "postal_code": postal_code or None,
-            "country": country,
-            "phone": phone,
-        }
-        if default_addr is not None:
-            for field, value in addr_fields.items():
-                setattr(default_addr, field, value)
-            default_addr.is_default = True
-            default_addr.address_type = "shipping"
-        else:
+        # New customer only: seed a default shipping address from the first
+        # checkout. Existing customers' default addresses are never rewritten
+        # by a later order's checkout data.
+        if (address_body or city or postal_code or country):
             addr = CustomerAddress(
                 customer_id=customer.id,
-                **addr_fields,
+                first_name=first_name or None,
+                last_name=last_name or None,
+                address_line1=address_body or "—",
+                city=city or "—",
+                province=(data.get("province") or "").strip() or None,
+                postal_code=postal_code or None,
+                country=country,
+                phone=phone,
                 is_default=True,
                 address_type="shipping",
             )
             db.add(addr)
             await db.flush()
-            if customer.default_address_id is None:
-                customer.default_address_id = addr.id
+            customer.default_address_id = addr.id
+    # else: existing customer found by email — the profile (name, phone,
+    # location, postal code, default address, etc.) is left untouched.
 
     # ---- Order number: max existing numeric suffix + 1 ----
     result = await db.execute(select(Order.order_number))

@@ -48,6 +48,8 @@ export default function CreateMetaobjectEntryPage() {
 
   const [displayName, setDisplayName] = useState("")
   const [handle, setHandle] = useState("")
+  const [code, setCode] = useState("")
+  const [codeTouched, setCodeTouched] = useState(false)
   const [status, setStatus] = useState<"active" | "draft">("active")
   const [tags, setTags] = useState("")
   const [fieldValues, setFieldValues] = useState<Record<number, string>>({})
@@ -57,6 +59,7 @@ export default function CreateMetaobjectEntryPage() {
     selectedDefinitionId,
     displayName,
     handle,
+    code,
     status,
     tags,
     fieldValues,
@@ -65,6 +68,36 @@ export default function CreateMetaobjectEntryPage() {
   useEffect(() => {
     fetchDefinitions()
   }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const defId = params.get("definition_id")
+    if (defId) {
+      const found = definitions.find(d => d.id === Number(defId))
+      if (found) {
+        setSelectedDefinitionId(found.id)
+        setSelectedDefinition(found)
+        setFieldValues({})
+      }
+    }
+  }, [definitions])
+
+  // Auto-suggest a stable SKU code from the display name the first time.
+  // Stays editable so the admin can pick a short token (e.g. "RED") that is
+  // permanent — renaming the entry later never changes this code.
+  useEffect(() => {
+    if (codeTouched) return
+    if (displayName.trim()) {
+      setCode(
+        displayName
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "")
+      )
+    } else {
+      setCode("")
+    }
+  }, [displayName, codeTouched])
 
   useEffect(() => {
     if (selectedDefinition) {
@@ -133,6 +166,7 @@ export default function CreateMetaobjectEntryPage() {
     const payload = {
       definition_id: selectedDefinitionId,
       display_name: displayName.trim(),
+      code: code.trim() || undefined,
       handle: handle || undefined,
       status: status,
       tags: tags || null,
@@ -360,6 +394,24 @@ export default function CreateMetaobjectEntryPage() {
 
               <div className="flex items-center gap-4 text-xs text-gray-500 font-medium">
                 <span>Handle: <span className="font-mono text-gray-600">{handle || "—"}</span></span>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold text-gray-900 text-xs block">Code <span className="font-normal text-gray-400">(SKU token)</span></label>
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => {
+                    setCode(e.target.value.toUpperCase())
+                    setCodeTouched(true)
+                  }}
+                  placeholder="E.g. RED"
+                  className="w-full h-10 px-3.5 bg-white border border-gray-300 rounded-xl font-mono font-bold text-gray-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-800/30 placeholder:text-gray-400 placeholder:font-sans placeholder:font-normal"
+                />
+                <p className="text-[10px] text-gray-400 leading-relaxed">
+                  Stable token appended to product variant SKUs (e.g. <span className="font-mono">004-RED</span>).
+                  Renaming this entry later never changes its code, so existing SKUs stay intact.
+                </p>
               </div>
 
               <div className="space-y-1.5">

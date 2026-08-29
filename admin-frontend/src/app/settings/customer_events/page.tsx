@@ -18,6 +18,7 @@ import {
   ArrowClockwise,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 const API = `${API_BASE}/api/v1/store`
 
@@ -85,6 +86,19 @@ export default function AdminSettingsCustomerEventsPage() {
   const [simulationRunning, setSimulationRunning] = useState(false)
   const [detectedTags, setDetectedTags] = useState<Array<{ name: string; type: string; status: string; id: string }>>([])
 
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty(
+    {
+      schemaName,
+      schemaType,
+      schemaTargetPages,
+      schemaJson,
+      headerScripts,
+    },
+    dataLoaded
+  )
+
   useEffect(() => {
     fetchSchemas()
     fetchHeaderScripts()
@@ -98,6 +112,7 @@ export default function AdminSettingsCustomerEventsPage() {
       if (res.ok) setSchemas(await res.json())
     } catch {} finally {
       setLoadingSchemas(false)
+      setDataLoaded(true)
     }
   }
 
@@ -147,7 +162,7 @@ export default function AdminSettingsCustomerEventsPage() {
       } else {
         res = await fetch(`${API}/schemas`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       }
-      if (res.ok) { toast.success(editingSchema ? "Schema updated!" : "Schema created!"); setShowSchemaModal(false); fetchSchemas() }
+      if (res.ok) { toast.success(editingSchema ? "Schema updated!" : "Schema created!"); setShowSchemaModal(false); fetchSchemas(); reset() }
       else { const err = await res.json(); toast.error(err.detail || "Failed to save schema") }
     } catch { toast.error("Network error saving schema") } finally { setSavingSchema(false) }
   }
@@ -178,7 +193,7 @@ export default function AdminSettingsCustomerEventsPage() {
     e.preventDefault()
     setSavingScripts(true)
     await saveScriptsToDatabase(headerScripts)
-    setTimeout(() => { setSavingScripts(false); toast.success("Header scripts saved & published!"); runScriptSimulation() }, 400)
+    setTimeout(() => { setSavingScripts(false); toast.success("Header scripts saved & published!"); runScriptSimulation(); reset() }, 400)
   }
 
   const runScriptSimulation = () => {

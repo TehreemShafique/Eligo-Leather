@@ -6,6 +6,7 @@ import { MapPin, Plus, MagnifyingGlass, House, X, Check, CaretDown, DotsThreeOut
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/layout/page-header"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminSettingsLocationsPage() {
   const [activeTab, setActiveTab] = useState<"all" | "active" | "inactive">("all")
@@ -41,6 +42,18 @@ export default function AdminSettingsLocationsPage() {
   const [locFulfillOnline, setLocFulfillOnline] = useState(true)
   const [locLocalPickup, setLocLocalPickup] = useState(false)
 
+  const { reset } = useFormDirty({
+    locName,
+    locStreet,
+    locApartment,
+    locCity,
+    locPostal,
+    locCountry,
+    locPhone,
+    locFulfillOnline,
+    locLocalPickup,
+  })
+
   const defaultLocation = locations.find((l) => l.isDefault) || locations[0]
 
   const filteredLocations = activeTab === "all"
@@ -74,6 +87,7 @@ export default function AdminSettingsLocationsPage() {
     setLocName("")
     setLocStreet("")
     toast.success(`Fulfillment location "${locName}" added successfully!`)
+    reset()
   }
 
   const handleSetDefault = (id: number) => {

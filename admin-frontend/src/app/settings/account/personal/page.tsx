@@ -17,6 +17,7 @@ import {
   X,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminPersonalAccountGeneralPage() {
   const [firstName, setFirstName] = useState("Bilal")
@@ -34,9 +35,19 @@ export default function AdminPersonalAccountGeneralPage() {
   const [updateEmailModalOpen, setUpdateEmailModalOpen] = useState(false)
   const [newEmail, setNewEmail] = useState("")
 
+  const { reset } = useFormDirty({
+    firstName,
+    lastName,
+    phone,
+    preferredLang,
+    accountTimezone,
+    newEmail,
+  })
+
   const handleSaveDetails = (e: React.FormEvent) => {
     e.preventDefault()
     toast.success("Personal account details updated successfully!")
+    reset()
   }
 
   const handleUpdateEmail = (e: React.FormEvent) => {
@@ -46,6 +57,7 @@ export default function AdminPersonalAccountGeneralPage() {
     setUpdateEmailModalOpen(false)
     setNewEmail("")
     toast.success("Verification email sent to " + newEmail + "! Please verify to update your primary login.")
+    reset()
   }
 
   return (

@@ -27,6 +27,7 @@ import {
   ArrowRight,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 const API = "/api/v1/settings/notifications"
 
@@ -107,7 +108,9 @@ export default function AdminSettingsNotificationsPage() {
   // Sender config
   const [senderConfig, setSenderConfig] = useState<SenderConfig | null>(null)
   const [savingConfig, setSavingConfig] = useState(false)
-  const [resendApiKey, setResendApiKey] = useState("")
+  const [testingConfig, setTestingConfig] = useState(false)
+  const [smtpUsername, setSmtpUsername] = useState("")
+  const [smtpPassword, setSmtpPassword] = useState("")
   const [fromEmail, setFromEmail] = useState("")
   const [fromName, setFromName] = useState("")
   const [adminEmail, setAdminEmail] = useState("")
@@ -140,11 +143,32 @@ export default function AdminSettingsNotificationsPage() {
   const [loadingLogs, setLoadingLogs] = useState(true)
   const [logPage, setLogPage] = useState(0)
 
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty(
+    {
+      smtpUsername,
+      smtpPassword,
+      fromEmail,
+      fromName,
+      adminEmail,
+      manualTemplate,
+      manualSubject,
+      manualContext,
+      manualRecipientEmail,
+      testRecipient,
+      testTemplate,
+      testContext,
+    },
+    dataLoaded
+  )
+
   useEffect(() => {
     fetchSettings()
     fetchSenderConfig()
     fetchTemplates()
     fetchLogs()
+    setDataLoaded(true)
   }, [])
 
   // ==================== DATA FETCHING ====================
@@ -168,7 +192,8 @@ export default function AdminSettingsNotificationsPage() {
       setFromEmail(data.from_email || "")
       setFromName(data.from_name || "")
       setAdminEmail(data.admin_email || "")
-      setResendApiKey(data.smtp_username || "")
+      setSmtpUsername(data.smtp_username || "")
+      setSmtpPassword("")
     } catch {}
   }
 
@@ -229,21 +254,54 @@ export default function AdminSettingsNotificationsPage() {
     e.preventDefault()
     setSavingConfig(true)
     try {
+      const payload: Record<string, string> = {
+        from_email: fromEmail,
+        from_name: fromName,
+        admin_email: adminEmail,
+        smtp_username: smtpUsername,
+      }
+      // Only include the app password when the user typed one, so a
+      // name/email-only save never clears the stored password. Changing the
+      // Gmail address requires entering that account's new app password.
+      if (smtpPassword) {
+        payload.smtp_password = smtpPassword
+      }
       await apiFetch(API + "/sender", {
         method: "PATCH",
-        body: JSON.stringify({
-          from_email: fromEmail,
-          from_name: fromName,
-          admin_email: adminEmail,
-          smtp_username: resendApiKey,
-        }),
+        body: JSON.stringify(payload),
       })
       toast.success("Sender configuration updated!")
+      setSmtpPassword("")
       fetchSenderConfig()
+      reset()
     } catch {
       toast.error("Failed to save sender config")
     } finally {
       setSavingConfig(false)
+    }
+  }
+
+  const handleTestSender = async () => {
+    const to = adminEmail || fromEmail
+    if (!to) {
+      toast.error("Enter an admin / recipient email first")
+      return
+    }
+    setTestingConfig(true)
+    try {
+      const result = await apiFetch<{ success: boolean; message: string }>(API + "/sender/test", {
+        method: "POST",
+        body: JSON.stringify({ to }),
+      })
+      if (result?.success) {
+        toast.success(result.message || `Test email sent to ${to}`)
+      } else {
+        toast.error(result?.message || "Test email failed to send")
+      }
+    } catch {
+      toast.error("Failed to send test email")
+    } finally {
+      setTestingConfig(false)
     }
   }
 
@@ -260,6 +318,7 @@ export default function AdminSettingsNotificationsPage() {
       setTemplates(prev => prev.map(t => t.id === updated.id ? { ...data, is_built_in: t.is_built_in } : t))
       setEditingTemplate({ ...data, is_built_in: updated.is_built_in })
       toast.success(`Template '${updated.name}' saved!`)
+      reset()
     } catch {
       toast.error("Failed to save template")
     }
@@ -303,6 +362,7 @@ export default function AdminSettingsNotificationsPage() {
       if (result.success) {
         toast.success(result.message)
         fetchLogs()
+        reset()
       } else {
         toast.error(result.message)
       }
@@ -345,6 +405,7 @@ export default function AdminSettingsNotificationsPage() {
 
       if (result.success) {
         toast.success(result.message)
+        reset()
       } else {
         toast.error(result.message)
       }
@@ -395,7 +456,7 @@ export default function AdminSettingsNotificationsPage() {
       .replace(/\{\{\s*message\s*\}\}/g, "This product is running low on stock.")
       .replace(/\{\{\s*event_type\s*\}\}/g, "low_stock")
       .replace(/\{\{\s*admin_name\s*\|\s*default\('[^']+'\)\s*\}\}/g, "Store Admin")
-      .replace(/\{%\s*for\s+item\s+in\s+items\s*%\}.*?\{%\s*endfor\s*%}/gs, '<tr><td>Classic Leather Wallet</td><td>1</td><td>Rs. 2,499</td></tr><tr><td>Leather Belt</td><td>1</td><td>Rs. 2,099</td></tr>')
+      .replace(/\{%\s*for\s+item\s+in\s+items\s*%\}[\s\S]*?\{%\s*endfor\s*%}/g, '<tr><td>Classic Leather Wallet</td><td>1</td><td>Rs. 2,499</td></tr><tr><td>Leather Belt</td><td>1</td><td>Rs. 2,099</td></tr>')
   }
 
   const SECTION_TABS = [
@@ -524,22 +585,43 @@ export default function AdminSettingsNotificationsPage() {
           <div className="border-b border-gray-100 pb-3">
             <h2 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
               <Key className="w-4 h-4 text-amber-800" />
-              Resend API &amp; Sender Configuration
+              Email Sender Configuration
             </h2>
-            <p className="text-xs text-gray-500 mt-0.5">Configure your email provider and sender identity.</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Emails are sent through Gmail SMTP using a Gmail App Password. All addresses can be
+              changed later - when you change the Gmail address, enter that account's app password too.
+            </p>
           </div>
 
           <form onSubmit={handleSaveSenderConfig} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
-                <label className="block font-semibold text-gray-700 mb-1">Resend API Key (RESEND_API_KEY)</label>
+                <label className="block font-semibold text-gray-700 mb-1">Gmail SMTP Address (sender login)</label>
                 <input
-                  type="password"
-                  value={resendApiKey}
-                  onChange={e => setResendApiKey(e.target.value)}
+                  type="text"
+                  value={smtpUsername}
+                  onChange={e => setSmtpUsername(e.target.value)}
+                  placeholder="e.g. eligoleather9@gmail.com"
                   className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-mono text-gray-900 focus:outline-hidden"
                 />
               </div>
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">Gmail App Password</label>
+                <input
+                  type="password"
+                  value={smtpPassword}
+                  onChange={e => setSmtpPassword(e.target.value)}
+                  placeholder={senderConfig?.has_password ? "Leave blank to keep current password" : "Enter your Gmail App Password"}
+                  className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-mono text-gray-900 focus:outline-hidden"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  {senderConfig?.has_password ? "A password is stored. Enter a new one only to replace it." : "No password stored yet - email sending needs it."}
+                  Create one at myaccount.google.com → Security → 2-Step Verification → App passwords.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
                 <label className="block font-semibold text-gray-700 mb-1">From Sender Email</label>
                 <input
@@ -549,9 +631,6 @@ export default function AdminSettingsNotificationsPage() {
                   className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-semibold text-gray-900 focus:outline-hidden"
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
                 <label className="block font-semibold text-gray-700 mb-1">Sender Name</label>
                 <input
@@ -561,6 +640,9 @@ export default function AdminSettingsNotificationsPage() {
                   className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-semibold text-gray-900 focus:outline-hidden"
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
                 <label className="block font-semibold text-gray-700 mb-1">Admin Alert Recipient Email</label>
                 <input
@@ -570,9 +652,22 @@ export default function AdminSettingsNotificationsPage() {
                   className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-semibold text-gray-900 focus:outline-hidden"
                 />
               </div>
+              <div className="flex items-end pb-2">
+                <span className="text-[11px] text-gray-400">
+                  Server: {senderConfig?.smtp_host || "smtp.gmail.com"}:{senderConfig?.smtp_port || 587} (TLS)
+                </span>
+              </div>
             </div>
 
-            <div className="flex justify-end pt-1">
+            <div className="flex justify-end items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleTestSender}
+                disabled={testingConfig}
+                className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 font-bold text-xs rounded-xl shadow-2xs cursor-pointer transition-colors disabled:opacity-50"
+              >
+                {testingConfig ? "Sending..." : "Send Test Email"}
+              </button>
               <button
                 type="submit"
                 disabled={savingConfig}

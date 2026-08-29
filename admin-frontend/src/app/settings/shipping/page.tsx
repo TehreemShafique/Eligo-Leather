@@ -159,9 +159,10 @@ export default function AdminSettingsShippingPage() {
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchSettings(), fetchCarriers(), fetchProfiles(), fetchPackages()]).finally(() =>
+    Promise.all([fetchSettings(), fetchCarriers(), fetchProfiles(), fetchPackages()]).finally(() => {
       setLoading(false)
-    )
+      setDataLoaded(true)
+    })
   }, [fetchSettings, fetchCarriers, fetchProfiles, fetchPackages])
 
   useEffect(() => {
@@ -205,6 +206,7 @@ export default function AdminSettingsShippingPage() {
       })
       setSettings(updated)
       toast.success("Shipping settings updated.")
+      reset()
     } catch (err) {
       toast.error("Could not save routing settings.")
       console.error(err)

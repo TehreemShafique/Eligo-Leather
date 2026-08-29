@@ -226,6 +226,11 @@ export default function AdminCreateDraftOrderPage() {
     setSaving(true)
 
     const nameParts = (selectedCustomer?.name || "").trim().split(/\s+/)
+    // Customer `location` is usually "City, Country" or "City". The Leopards
+    // destination must be the customer's city, so strip the country suffix.
+    const customerCity = (selectedCustomer?.address || "")
+      .replace(/\s*,\s*(Pakistan|PK)\s*$/i, "")
+      .trim()
     const payload = {
       channel: "Online Store",
       currency: currency,
@@ -240,12 +245,12 @@ export default function AdminCreateDraftOrderPage() {
       last_name: nameParts.slice(1).join(" "),
       email: selectedCustomer?.email && selectedCustomer.email.includes("@") ? selectedCustomer.email : "",
       phone: selectedCustomer?.phone || "",
-      city: selectedCustomer?.address || "",
+      city: customerCity,
       country: market,
       customer_id: selectedCustomer?.id,
       shipping_address: selectedCustomer?.address || "",
       tags: tags,
-      destination: selectedCustomer?.address || market,
+      destination: customerCity || market,
       items: items.map((i) => ({
         product_id: i.product_id ?? null,
         variant_id: i.variant_id ?? null,

@@ -49,12 +49,8 @@ export default function AdminDiscountsPage() {
     dataLoaded
   )
 
-  // Welcome Discount Claimed Logs (tracked by Email / IP)
-  const [welcomeLogs] = useState([
-    { id: 1, email: "m.ali@example.com", ip: "39.45.18.92", code: "WELCOMES", date: "Feb 11, 2026, 14:20" },
-    { id: 2, email: "zainab.k@example.com", ip: "111.68.99.14", code: "WELCOMES", date: "Feb 11, 2026, 11:05" },
-    { id: 3, email: "usman.l@example.com", ip: "182.180.44.201", code: "WELCOMES", date: "Feb 10, 2026, 19:40" },
-  ])
+  // Welcome Discount Claimed Logs (tracked by anonymized Visitor ID)
+  const [welcomeLogs, setWelcomeLogs] = useState<any[]>([])
 
   // Discounts list state (Type 2: Store Promo Discounts in DB)
   const [discounts, setDiscounts] = useState<DiscountRecord[]>([])
@@ -88,7 +84,22 @@ export default function AdminDiscountsPage() {
 
     fetchWelcomeSettings()
 
-    // 2. Fetch Type 2: Store Promo Discounts (source of truth = database)
+    // 2. Fetch Welcome Discount Claimed Logs from DB
+    const fetchWelcomeLogs = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/discounts/welcome/logs`)
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data) && isMounted) setWelcomeLogs(data)
+        }
+      } catch (err) {
+        console.log("Welcome discount logs API offline.", err)
+      }
+    }
+
+    fetchWelcomeLogs()
+
+    // 3. Fetch Type 2: Store Promo Discounts (source of truth = database)
     const fetchDiscounts = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/v1/discounts/?limit=200`)
@@ -360,21 +371,28 @@ export default function AdminDiscountsPage() {
             <div className="flex items-center justify-between border-b border-amber-200 pb-2">
               <span className="font-bold text-gray-900 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-amber-800" />
-                <span>Claimed Welcome Discount Logs (Email / IP Tracked)</span>
+                <span>Claimed Welcome Discount Logs (anonymized Visitor ID)</span>
               </span>
               <span className="text-[10px] text-amber-900 font-mono font-extrabold">{welcomeLogs.length} Claimed</span>
             </div>
 
             <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-              {welcomeLogs.map((log) => (
-                <div key={log.id} className="p-2.5 bg-white rounded-xl border border-amber-200/80 flex items-center justify-between text-[11px]">
-                  <div>
-                    <span className="font-bold text-gray-900 block">{log.email}</span>
-                    <span className="text-gray-500 font-mono text-[10px]">IP: {log.ip}</span>
+              {welcomeLogs.map((log, idx) => (
+                <div key={log.id ?? idx} className="p-2.5 bg-white rounded-xl border border-amber-200/80 flex items-center justify-between text-[11px]">
+                  <div className="min-w-0">
+                    <span className="font-bold text-gray-900 block truncate">
+                      {log.email || log.visitor_id || `Visitor #${log.id}`}
+                    </span>
+                    <span className="text-gray-500 font-mono text-[10px] block truncate">
+                      {log.visitor_id ? `Visitor: ${log.visitor_id}` : ""}
+                      {log.ip_address ? `${log.visitor_id ? " • " : ""}IP: ${log.ip_address}` : ""}
+                    </span>
                   </div>
-                  <div className="text-right">
-                    <span className="font-bold text-emerald-800 font-mono text-xs block">{log.code}</span>
-                    <span className="text-gray-400 text-[10px]">{log.date}</span>
+                  <div className="text-right shrink-0">
+                    <span className="font-bold text-emerald-800 font-mono text-xs block">WELCOME{welcomePct}</span>
+                    <span className="text-gray-400 text-[10px]">
+                      {log.claimed_at ? new Date(log.claimed_at).toLocaleString() : ""}
+                    </span>
                   </div>
                 </div>
               ))}

@@ -23,6 +23,7 @@ import {
   Check,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminSettingsGeneralPage() {
   // Modal states
@@ -76,6 +77,41 @@ export default function AdminSettingsGeneralPage() {
   const [secondaryColor, setSecondaryColor] = useState("#3E2723")
   const [slogan, setSlogan] = useState("Handcrafted Genuine Leather Accessories for Life")
   const [shortDesc, setShortDesc] = useState("Premium handcrafted leather wallets, belts, card holders, and accessories from Pakistan.")
+
+  const { reset } = useFormDirty({
+    businessType,
+    firstName,
+    lastName,
+    nickname,
+    dobMonth,
+    dobDay,
+    dobYear,
+    resAddress,
+    resCity,
+    resPostal,
+    storeName,
+    storeEmail,
+    storePhone,
+    companyName,
+    countryRegion,
+    storeStreetAddress,
+    storeApartment,
+    storeCity,
+    storePostalCode,
+    storeCurrency,
+    backupRegion,
+    unitSystem,
+    weightUnit,
+    timeZone,
+    orderPrefix,
+    orderSuffix,
+    orderProcessing,
+    autoArchive,
+    primaryColor,
+    secondaryColor,
+    slogan,
+    shortDesc,
+  })
 
   const countriesList = [
     "Pakistan",
@@ -449,7 +485,7 @@ export default function AdminSettingsGeneralPage() {
               <button onClick={() => setEditEntityModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">
                 Cancel
               </button>
-              <button onClick={() => { toast.success("Business entity updated!"); setEditEntityModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
+              <button onClick={() => { toast.success("Business entity updated!"); setEditEntityModalOpen(false); reset(); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
                 Save Entity
               </button>
             </div>
@@ -491,7 +527,7 @@ export default function AdminSettingsGeneralPage() {
               <button onClick={() => setStoreContactModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">
                 Cancel
               </button>
-              <button onClick={() => { toast.success("Store contact details updated!"); setStoreContactModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
+              <button onClick={() => { toast.success("Store contact details updated!"); setStoreContactModalOpen(false); reset(); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
                 Save Details
               </button>
             </div>
@@ -553,7 +589,7 @@ export default function AdminSettingsGeneralPage() {
               <button onClick={() => setEditStoreAddressModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">
                 Cancel
               </button>
-              <button onClick={() => { toast.success("Store address updated!"); setEditStoreAddressModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
+              <button onClick={() => { toast.success("Store address updated!"); setEditStoreAddressModalOpen(false); reset(); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
                 Submit Address
               </button>
             </div>
@@ -602,7 +638,7 @@ export default function AdminSettingsGeneralPage() {
               <button onClick={() => setBrandWorkspaceOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">
                 Cancel
               </button>
-              <button onClick={() => { toast.success("Brand assets saved!"); setBrandWorkspaceOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
+              <button onClick={() => { toast.success("Brand assets saved!"); setBrandWorkspaceOpen(false); reset(); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
                 Save Brand Assets
               </button>
             </div>

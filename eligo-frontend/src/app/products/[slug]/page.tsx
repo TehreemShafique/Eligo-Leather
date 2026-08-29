@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { listProducts, getProduct, listCollections } from "@/modules/catalog/api"
 import { sanitizeCmsHtml } from "@/lib/sanitize-html"
 import { truncate } from "@/lib/utils"
-import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
+import { absoluteUrl, buildSeoMetadata, cleanSeoDescription } from "@/lib/seo"
 import { ProductDetailView } from "@/components/product/product-detail-view"
 import type { ProductListOut, ProductOut } from "@/modules/catalog/schema"
 
@@ -96,8 +96,11 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
     })
   }
 
-  const description = product.seo_description ??
-    (product.description ? truncate(product.description.replace(/<[^>]+>/g, ""), 155) : `Shop ${product.title}, handcrafted by Eligo Leather with delivery available across Pakistan.`)
+  const description = (product.seo_description && cleanSeoDescription(product.seo_description))
+    ? truncate(cleanSeoDescription(product.seo_description), 155)
+    : product.description
+      ? truncate(product.description.replace(/<[^>]+>/g, ""), 155)
+      : `Shop ${product.title}, handcrafted by Eligo Leather with delivery available across Pakistan.`
   const image = product.images?.[0]?.url
 
   return buildSeoMetadata({

@@ -128,3 +128,61 @@ async def test_ensure_load_sheet_for_cn_never_raises(db_session, monkeypatch):
     challan = await leopard_service.ensure_load_sheet_for_cn(db_session, "ID7553167438")
 
     assert challan is None
+
+
+async def test_get_city_id_resolves_exact_and_containment(monkeypatch):
+    fake_cities = [
+        {"id": 789, "name": "Lahore"},
+        {"id": 1202, "name": "Rawalpindi"},
+        {"id": 592, "name": "Karachi"},
+        {"id": 486, "name": "Islamabad"},
+    ]
+    monkeypatch.setattr(leopard_client, "_city_cache", {})
+    monkeypatch.setattr(
+        leopard_client,
+        "get_all_cities",
+        lambda: _populate_cache(fake_cities),
+    )
+
+    assert await leopard_client.get_city_id("Lahore") == 789
+    assert await leopard_client.get_city_id("Bahria Town Lahore") == 789
+    assert await leopard_client.get_city_id("   rawalpindi  ") == 1202
+    assert await leopard_client.get_city_id("Gulberg, Lahore") == 789
+    assert await leopard_client.get_city_id("city12") is None
+    assert await leopard_client.get_city_id("Punjab") is None
+
+
+def _populate_cache(cities):
+    async def wrapper():
+        leopard_client._city_cache = {
+            c["name"].lower(): c["id"] for c in cities
+        }
+        return cities
+    return wrapper()
+
+
+async def test_book_packet_api_refuses_unresolvable_destination(monkeypatch):
+    """A destination city Leopards does not know must NOT fall back to the
+    account default ('self' -> Islamabad). It must be refused loudly."""
+    async def _no_client(*args, **kwargs):
+        raise AssertionError("bookPacket must not be called for an unknown city")
+
+    async def _no_city(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(leopard_client, "_post", _no_client)
+    monkeypatch.setattr(leopard_client, "get_city_id", _no_city)
+
+    result = await leopard_client.book_packet_api(
+        {
+            "destination_city": "Nowhereville",
+            "consignee_name": "Test",
+            "consignee_phone": "03000000000",
+            "consignee_address": "Street 1",
+            "cod_amount": "500",
+        }
+    )
+
+    assert result.get("status") == 0
+    assert "Nowhereville" in result.get("error", "")
+    assert "NOT booked" in result.get("error", "")

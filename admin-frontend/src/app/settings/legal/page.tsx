@@ -16,6 +16,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function UnifiedPoliciesAndPrivacyPage() {
   // Tab Selection State
@@ -49,6 +50,17 @@ export default function UnifiedPoliciesAndPrivacyPage() {
     { key: "contact_information", label: "Contact information", icon: AddressBook },
     { key: "legal_notice", label: "Legal notice", icon: FileCode },
   ]
+
+  const [dataLoaded, setDataLoaded] = useState(false)
+  const { reset } = useFormDirty(
+    {
+      cookieBannerActive,
+      trackingRegion,
+      doNotSellLink,
+      policyData,
+    },
+    dataLoaded
+  )
 
   // Fetch Privacy & Policy Settings from Backend DB on mount
   useEffect(() => {
@@ -88,6 +100,8 @@ export default function UnifiedPoliciesAndPrivacyPage() {
       } catch (err) {
         console.log("Policies API offline, using default text.")
       }
+
+      if (isMounted) setDataLoaded(true)
     }
 
     fetchBackendSettings()
@@ -123,6 +137,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
       toast.success("Customer Privacy settings saved!")
     } finally {
       setSavingPrivacy(false)
+      reset()
     }
   }
 
@@ -154,6 +169,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
       toast.success(`Saved policy content!`)
     } finally {
       setSavingPolicy(false)
+      reset()
     }
   }
 

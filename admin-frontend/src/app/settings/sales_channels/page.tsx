@@ -13,6 +13,7 @@ import {
   Key,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminSettingsSalesChannelsPage() {
   const [mounted, setMounted] = useState(false)
@@ -42,6 +43,14 @@ export default function AdminSettingsSalesChannelsPage() {
     lastSync: "Pending Meta API Key",
   })
 
+  const { reset } = useFormDirty({
+    metaAppId,
+    metaAppSecret,
+    metaAccessToken,
+    pixelId,
+    catalogId,
+  })
+
   if (!mounted) return null
 
   const handleSaveOAuthTokens = (e: React.FormEvent) => {
@@ -60,6 +69,7 @@ export default function AdminSettingsSalesChannelsPage() {
 
     setAuthModalOpen(false)
     toast.success("Meta Graph API credentials saved! Outbound catalog sync activated for Facebook & Instagram.")
+    reset()
   }
 
   return (

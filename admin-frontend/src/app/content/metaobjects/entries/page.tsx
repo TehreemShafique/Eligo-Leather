@@ -48,6 +48,7 @@ interface MetaobjectEntry {
   id: number
   definition_id: number
   display_name: string
+  code: string | null
   handle: string | null
   status: string
   references_count: number
@@ -72,6 +73,7 @@ export default function AdminMetaobjectEntriesPage() {
 
   const [columns, setColumns] = useState({
     definitionName: true,
+    code: true,
     updated: true,
     status: true,
     references: true,
@@ -125,6 +127,7 @@ export default function AdminMetaobjectEntriesPage() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       return entry.display_name.toLowerCase().includes(query) ||
+             entry.code?.toLowerCase().includes(query) ||
              entry.handle?.toLowerCase().includes(query)
     }
     return true
@@ -161,7 +164,7 @@ export default function AdminMetaobjectEntriesPage() {
         icon={<Sliders className="w-5 h-5" />}
         actions={
           <Link
-            href="/content/metaobjects/entries/new"
+            href={`/content/metaobjects/entries/new${selectedDefinitionId ? `?definition_id=${selectedDefinitionId}` : ""}`}
             className="eligo-btn-primary"
           >
             <Plus className="w-4 h-4" />
@@ -284,26 +287,34 @@ export default function AdminMetaobjectEntriesPage() {
           <div className="eligo-table-wrap">
             <table className="eligo-table">
               <thead>
-                <tr>
-                  <th className="eligo-th">Display Name</th>
-                  {columns.definitionName && <th className="eligo-th">Definition Name</th>}
-                  {columns.updated && <th className="eligo-th">Updated</th>}
-                  {columns.status && <th className="eligo-th">Status</th>}
-                  {columns.references && <th className="eligo-th">References</th>}
-                  {columns.addedBy && <th className="eligo-th">Added By</th>}
-                  {columns.handle && <th className="eligo-th">Handle</th>}
-                  <th className="eligo-th text-right">Actions</th>
-                </tr>
+<tr>
+                    <th className="eligo-th">Display Name</th>
+                    {columns.code && <th className="eligo-th">Code</th>}
+                    {columns.definitionName && <th className="eligo-th">Definition Name</th>}
+                    {columns.updated && <th className="eligo-th">Updated</th>}
+                    {columns.status && <th className="eligo-th">Status</th>}
+                    {columns.references && <th className="eligo-th">References</th>}
+                    {columns.addedBy && <th className="eligo-th">Added By</th>}
+                    {columns.handle && <th className="eligo-th">Handle</th>}
+                    <th className="eligo-th text-right">Actions</th>
+                  </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredEntries.map((entry) => (
                   <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-amber-800 hover:underline">
-                      <Link href={`/content/metaobjects/entries/${entry.id}`}>
-                        {entry.display_name}
-                      </Link>
-                    </td>
-                    {columns.definitionName && (
+<td className="px-6 py-4 font-bold text-amber-800 hover:underline">
+                        <Link href={`/content/metaobjects/entries/${entry.id}`}>
+                          {entry.display_name}
+                        </Link>
+                      </td>
+                      {columns.code && (
+                        <td className="px-6 py-4">
+                          <span className="font-mono text-[11px] font-bold bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded">
+                            {entry.code || "—"}
+                          </span>
+                        </td>
+                      )}
+                      {columns.definitionName && (
                       <td className="px-6 py-4 font-semibold text-gray-900">
                         {getDefinitionName(entry.definition_id)}
                       </td>

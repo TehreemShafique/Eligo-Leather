@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { getBlogPostByHandle } from "@/modules/content/api"
 import { sanitizeCmsHtml } from "@/lib/sanitize-html"
 import { truncate } from "@/lib/utils"
-import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
+import { absoluteUrl, buildSeoMetadata, cleanSeoDescription } from "@/lib/seo"
 import { BlogDetailContent, type BlogFaq } from "@/components/blog/blog-detail-content"
 import { fetchStoreSchemas } from "@/modules/store/api"
 
@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: BlogPageProps): Promise<Metad
 
   return buildSeoMetadata({
     title: post.seo_title ?? post.title,
-    description: post.seo_description ?? (post.excerpt ? truncate(post.excerpt, 155) : `Read ${post.title} from Eligo Leather.`),
+    description: (post.seo_description && cleanSeoDescription(post.seo_description)) || (post.excerpt ? truncate(post.excerpt, 155) : `Read ${post.title} from Eligo Leather.`),
     path: `/blog/${post.handle}`,
     canonical: post.seo_canonical_url || undefined,
     image: post.featured_image_url || post.thumbnail_url || undefined,

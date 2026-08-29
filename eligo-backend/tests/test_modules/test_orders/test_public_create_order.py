@@ -366,9 +366,11 @@ async def test_idempotency_key_reuses_existing_order(client, db_session):
     assert variant.inventory_quantity == 3  # deducted exactly once
 
 
-async def test_returning_customer_profile_updates_under_same_email(client, db_session):
-    """A returning customer (same email) may change name, contact and address
-    on the next checkout, and every order stays under the SAME customer row."""
+async def test_returning_customer_keeps_original_profile_under_same_email(client, db_session):
+    """A returning customer (same email) keeps their ORIGINAL profile: a later
+    order's different name / contact / address must never overwrite it. Both
+    orders stay grouped under the SAME customer row/email, and each order
+    independently preserves its own checkout details (name/phone/address)."""
     from app.modules.customers.model import Customer, CustomerAddress
 
     product, variant = await _seed_product(db_session, stock=10)
@@ -406,6 +408,10 @@ async def test_returning_customer_profile_updates_under_same_email(client, db_se
     first_order = await _load_order(db_session, first_order_id)
     customer_id = first_order.customer_id
     assert customer_id is not None
+    # Read the order's own checkout snapshot BEFORE any later expire_all so the
+    # freshly-loaded columns are available synchronously.
+    first_order_name = first_order.customer_name
+    first_order_phone = first_order.customer_phone
 
     customer = await db_session.get(Customer, customer_id)
     assert customer.email == "returning@example.com"
@@ -423,25 +429,28 @@ async def test_returning_customer_profile_updates_under_same_email(client, db_se
     second_order = await _load_order(db_session, second_order_id)
     # History stays grouped under the SAME customer / email.
     assert second_order.customer_id == customer_id
+    second_order_name = second_order.customer_name
+    second_order_phone = second_order.customer_phone
 
+    # Order 1 keeps its own original checkout details -> still Ali / first phone.
+    assert first_order_name == "Ali Raza"
+    assert first_order_phone == "03001234567"
+
+    # Order 2 keeps its own checkout details -> Bilal / new phone.
+    assert second_order_name == "Bilal Khan"
+    assert second_order_phone == "03121234567"
+
+    # The shared customer profile is NOT overwritten by the second order.
     fresh = await db_session.get(Customer, customer_id)
-    assert fresh.first_name == "Bilal"
-    assert fresh.last_name == "Khan"
-    assert fresh.phone == "03121234567"
+    assert fresh.first_name == "Ali"
+    assert fresh.last_name == "Raza"
+    assert fresh.phone == "03001234567"
     assert fresh.email == "returning@example.com"
-    assert fresh.postal_code == "75500"
+    assert fresh.postal_code != "75500"
     assert fresh.total_orders == 2
 
-    # Default shipping address reflects the LATEST checkout.
-    addr_result = await db_session.execute(
-        select(CustomerAddress)
-        .where(CustomerAddress.customer_id == customer_id)
-        .order_by(CustomerAddress.id.desc())
-        .limit(1)
-    )
-    latest_addr = addr_result.scalar_one()
-    assert latest_addr.is_default is True
-    assert latest_addr.address_line1 == "House 9, Phase 4, Karachi, 75500, Pakistan"
-    assert latest_addr.city == "Karachi"
-    assert latest_addr.postal_code == "75500"
-    assert latest_addr.phone == "03121234567"
+    # The customer's default address is NOT rewritten by the later checkout.
+    default_addr = await db_session.get(CustomerAddress, fresh.default_address_id)
+    assert default_addr is not None
+    assert default_addr.address_line1 == "1 Street, Lahore, Pakistan"
+    assert default_addr.phone == "03001234567"

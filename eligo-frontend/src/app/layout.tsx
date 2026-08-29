@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/header"
 import { Footer } from "@/components/layout/footer"
 import { Toaster } from "@/components/common/toast"
 import { CartStoreHydrator } from "@/modules/cart/cart-store-hydrator"
+import WelcomeDiscountProvider from "@/components/welcome/welcome-discount-provider"
 import {
   DEFAULT_DESCRIPTION,
   DEFAULT_KEYWORDS,
@@ -102,6 +103,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd).replace(/</g, "\\u003c") }}
         />
         <CartStoreHydrator />
+        <WelcomeDiscountProvider />
         <div className="flex min-h-screen flex-col">
           <Header />
           <main className="flex-1">{children}</main>

@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
 import { apiFetch } from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 const API_PATH = "/api/v1/settings/checkout"
 
@@ -77,6 +78,31 @@ export default function AdminSettingsCheckoutPage() {
   const [enableCartLimit, setEnableCartLimit] = useState(true)
   const [cartItemLimit, setCartItemLimit] = useState(50)
 
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty(
+    {
+      configName,
+      contactMethod,
+      showOrderTrackingLink,
+      requireLogin,
+      fullNameField,
+      companyNameField,
+      addressLine2Field,
+      shippingPhoneField,
+      emailOptin,
+      smsOptin,
+      showTipping,
+      checkoutLanguage,
+      billingRule,
+      validateShippingAddress,
+      useShippingAsBillingDefault,
+      enableCartLimit,
+      cartItemLimit,
+    },
+    dataLoaded
+  )
+
   const fetchConfig = useCallback(async () => {
     try {
       setLoading(true)
@@ -102,6 +128,7 @@ export default function AdminSettingsCheckoutPage() {
       setUseShippingAsBillingDefault(data.use_shipping_as_billing_default)
       setEnableCartLimit(data.enable_cart_limit)
       setCartItemLimit(data.cart_item_limit)
+      setDataLoaded(true)
     } catch {
       toast.error("Failed to load checkout configuration")
     } finally {
@@ -139,6 +166,7 @@ export default function AdminSettingsCheckoutPage() {
         }),
       })
       toast.success("Checkout configuration saved!")
+      reset()
     } catch {
       toast.error("Failed to save changes")
     } finally {
@@ -157,6 +185,7 @@ export default function AdminSettingsCheckoutPage() {
       setConfigName(tempConfigName)
       setRenameModalOpen(false)
       toast.success(`Configuration renamed to "${tempConfigName}"`)
+      reset()
     } catch {
       toast.error("Failed to rename configuration")
     }
@@ -623,8 +652,7 @@ export default function AdminSettingsCheckoutPage() {
 
             <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
               <button onClick={() => setAddressModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-pointer">Cancel</button>
-              <button onClick={() => { toast.success("Address rules applied! Click Save to persist."); setAddressModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold cursor-pointer">Apply</button>
-            </div>
+              <button onClick={() => { toast.success("Address rules applied! Click Save to persist."); setAddressModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold cursor-pointer">Apply</button>            </div>
           </div>
         </div>
       )}

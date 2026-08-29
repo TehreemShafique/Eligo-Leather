@@ -17,6 +17,7 @@ import {
   Desktop,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminHeaderScriptsPage() {
   const DEFAULT_HEADER_SCRIPTS = `<!-- Microsoft Clarity Tracking Code for Eligo Storefront -->
@@ -43,6 +44,9 @@ export default function AdminHeaderScriptsPage() {
   const [simulationRunning, setSimulationRunning] = useState(false)
   const [detectedTags, setDetectedTags] = useState<Array<{ name: string; type: string; status: string; id: string }>>([])
 
+  const [dataLoaded, setDataLoaded] = useState(false)
+  const { reset } = useFormDirty({ headerScripts }, dataLoaded)
+
   // Load from localStorage or fallback to default
   useEffect(() => {
     try {
@@ -53,6 +57,7 @@ export default function AdminHeaderScriptsPage() {
     } catch (e) {
       // Fallback defaults remain intact
     }
+    setDataLoaded(true)
   }, [])
 
   // Run DOM & Script Execution Simulator
@@ -117,6 +122,7 @@ export default function AdminHeaderScriptsPage() {
       setSaving(false)
       toast.success("Header scripts saved and published live to storefront <head>!")
       runScriptSimulation()
+      reset()
     }, 650)
   }
 

@@ -1,7 +1,6 @@
 "use client"
 
-import { API_BASE } from "@/lib/api"
-
+import { useParams, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
@@ -10,14 +9,15 @@ import {
   Plus,
   Trash,
   Check,
-  CheckCircle,
   DotsSixVertical,
   CaretDown,
   MagnifyingGlass,
   Info,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api"
 import { useFormDirty } from "@/components/unsaved-changes"
+import { CATEGORIZED_FIELD_TYPES } from "../_field-types"
 
 interface MetaobjectFieldRow {
   id: string
@@ -29,67 +29,82 @@ interface MetaobjectFieldRow {
   isTypeOpen?: boolean
 }
 
-import { CATEGORIZED_FIELD_TYPES } from "../_field-types"
+interface MetaobjectDefinitionWithFields {
+  id: number
+  name: string
+  type_key: string
+  handle: string | null
+  description: string | null
+  status: string
+  publish_as_web_pages: boolean
+  available_on_storefront: boolean
+  fields: Array<{
+    id: number
+    label: string
+    field_type: string
+    cardinality: string
+    required: boolean
+    is_display_name: boolean
+    position: number
+  }>
+}
 
-export default function CreateMetaobjectDefinitionPage() {
+export default function EditMetaobjectDefinitionPage() {
+  const router = useRouter()
+  const { id } = useParams<{ id: string }>()
+
+  const [loading, setLoading] = useState(true)
   const [name, setName] = useState("")
   const [typeKey, setTypeKey] = useState("")
   const [handle, setHandle] = useState("")
   const [description, setDescription] = useState("")
   const [showDescription, setShowDescription] = useState(false)
-  const [saving, setSaving] = useState(false)
-
   const [status, setStatus] = useState<"active" | "draft">("active")
   const [publishAsWebPages, setPublishAsWebPages] = useState(false)
   const [availableOnStorefront, setAvailableOnStorefront] = useState(true)
-
-  const [created, setCreated] = useState<{ id: number; name: string; type_key: string } | null>(null)
-
-  const [fields, setFields] = useState<MetaobjectFieldRow[]>([
-    {
-      id: "f-1",
-      label: "",
-      key: "",
-      cardinality: "one",
-      fieldType: "Single line text",
-      isCardinalityOpen: false,
-      isTypeOpen: false,
-    },
-  ])
-
+  const [fields, setFields] = useState<MetaobjectFieldRow[]>([])
   const [fieldTypeSearch, setFieldTypeSearch] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
-  const { reset } = useFormDirty({
-    name,
-    typeKey,
-    handle,
-    description,
-    status,
-    publishAsWebPages,
-    availableOnStorefront,
-    fields: fields.map(({ id, label, key, cardinality, fieldType }) => ({
-      id,
-      label,
-      key,
-      cardinality,
-      fieldType,
-    })),
-  })
+  const { reset, isDirty } = useFormDirty(
+    {
+      name,
+      description,
+      status,
+      publishAsWebPages,
+      availableOnStorefront,
+      fields: fields.map(({ id: fid, label, cardinality, fieldType }) => ({ fid, label, cardinality, fieldType })),
+    },
+    !loading
+  )
 
   useEffect(() => {
-    if (name) {
-      const generated = name
-        .toLowerCase()
-        .replace(/[^a-z0-9\s_]/g, "")
-        .trim()
-        .replace(/\s+/g, "_")
-      setTypeKey(generated)
-      setHandle(generated)
-    } else {
-      setTypeKey("")
-      setHandle("")
-    }
-  }, [name])
+    apiFetch<MetaobjectDefinitionWithFields>(`/api/v1/metaobject-definitions/${id}`)
+      .then((def) => {
+        setName(def.name)
+        setTypeKey(def.type_key)
+        setHandle(def.handle ?? "")
+        setDescription(def.description ?? "")
+        if (def.description) setShowDescription(true)
+        setStatus(def.status === "draft" ? "draft" : "active")
+        setPublishAsWebPages(def.publish_as_web_pages)
+        setAvailableOnStorefront(def.available_on_storefront)
+        setFields(
+          def.fields.map((f) => ({
+            id: `f-${f.id}`,
+            label: f.label,
+            key: "",
+            cardinality: (f.cardinality === "list" ? "list" : "one") as "one" | "list",
+            fieldType: f.field_type,
+            isCardinalityOpen: false,
+            isTypeOpen: false,
+          }))
+        )
+      })
+      .catch(() => toast.error("Failed to load definition"))
+      .finally(() => setLoading(false))
+  }, [id])
 
   const handleAddField = () => {
     setFields([
@@ -106,18 +121,18 @@ export default function CreateMetaobjectDefinitionPage() {
     ])
   }
 
-  const handleRemoveField = (id: string) => {
+  const handleRemoveField = (rowId: string) => {
     if (fields.length === 1) {
       toast.error("A metaobject definition must contain at least one field.")
       return
     }
-    setFields(fields.filter((f) => f.id !== id))
+    setFields(fields.filter((f) => f.id !== rowId))
   }
 
-  const handleUpdateField = (id: string, prop: keyof MetaobjectFieldRow, val: any) => {
+  const handleUpdateField = (rowId: string, prop: keyof MetaobjectFieldRow, val: any) => {
     setFields((prev) =>
       prev.map((f) => {
-        if (f.id === id) {
+        if (f.id === rowId) {
           const updated = { ...f, [prop]: val }
           if (prop === "label") {
             updated.key = val.toLowerCase().replace(/[^a-z0-9_]/g, "").replace(/\s+/g, "_")
@@ -129,7 +144,7 @@ export default function CreateMetaobjectDefinitionPage() {
     )
   }
 
-  const handleSaveMetaobject = async (e: React.FormEvent) => {
+  const handleSaveDefinition = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) {
       toast.error("Please enter a metaobject name.")
@@ -143,12 +158,11 @@ export default function CreateMetaobjectDefinitionPage() {
     }
 
     setSaving(true)
-    const finalTypeKey = typeKey || name.toLowerCase().replace(/\s+/g, "_")
 
     const payload = {
       name: name.trim(),
-      type_key: finalTypeKey,
-      handle: handle || finalTypeKey,
+      type_key: typeKey || name.toLowerCase().replace(/\s+/g, "_"),
+      handle: handle || typeKey || name.toLowerCase().replace(/\s+/g, "_"),
       description: description || null,
       status: status,
       publish_as_web_pages: publishAsWebPages,
@@ -166,26 +180,39 @@ export default function CreateMetaobjectDefinitionPage() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/v1/metaobject-definitions/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      await apiFetch(`/api/v1/metaobject-definitions/${id}`, {
+        method: "PATCH",
         body: JSON.stringify(payload),
       })
-
-      if (res.ok) {
-        const data = await res.json()
-        setCreated({ id: data.id, name: data.name, type_key: data.type_key })
-        reset()
-        toast.success(`Metaobject definition "${name}" created successfully!`)
-      } else {
-        const err = await res.json().catch(() => ({ detail: "Failed to create" }))
-        toast.error(err.detail || "Failed to create definition")
-      }
+      toast.success(`Definition "${name}" updated successfully!`)
+      reset()
+      router.push("/content/metaobjects")
     } catch (err) {
-      toast.error("Network error - please try again")
+      toast.error("Failed to update definition")
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleDeleteDefinition = async () => {
+    if (!window.confirm(`Delete definition "${name}"? Its entries will also be deleted.`)) return
+    setDeleting(true)
+    try {
+      await apiFetch(`/api/v1/metaobject-definitions/${id}`, { method: "DELETE" })
+      toast.success(`Definition "${name}" deleted`)
+      router.push("/content/metaobjects")
+    } catch (err) {
+      toast.error("Failed to delete definition")
+      setDeleting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500 text-sm">Loading definition...</div>
+      </div>
+    )
   }
 
   return (
@@ -195,40 +222,10 @@ export default function CreateMetaobjectDefinitionPage() {
           <Browsers className="w-5 h-5 text-gray-700" />
         </Link>
         <span className="text-gray-400">›</span>
-        <h1 className="text-lg font-bold text-gray-900">Add metaobject definition</h1>
+        <h1 className="text-lg font-bold text-gray-900">Edit metaobject definition</h1>
       </div>
 
-      {created ? (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-12 space-y-6 text-center">
-          <div className="flex items-center justify-center gap-3">
-            <span className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
-              <CheckCircle className="w-6 h-6" />
-            </span>
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-base font-bold text-gray-900">Metaobject definition created</h2>
-            <p className="text-xs text-gray-500">
-              {created.name} <span className="font-mono text-gray-400">({created.type_key})</span> — now add its entries.
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-3 pt-1">
-            <Link
-              href={`/content/metaobjects/entries?definition_id=${created.id}`}
-              className="px-6 py-2.5 bg-[#1a1a1a] hover:bg-black text-white font-bold text-xs rounded-xl shadow-2xs transition-all inline-flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              Add entries
-            </Link>
-            <Link
-              href="/content/metaobjects"
-              className="px-6 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-bold text-xs rounded-xl shadow-2xs"
-            >
-              Manage definitions
-            </Link>
-          </div>
-        </div>
-      ) : (
-      <form onSubmit={handleSaveMetaobject} className="space-y-6 text-xs">
+      <form onSubmit={handleSaveDefinition} className="space-y-6 text-xs">
         {/* Card 1: Name & Type */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-4">
           <div className="space-y-1.5">
@@ -271,7 +268,12 @@ export default function CreateMetaobjectDefinitionPage() {
 
         {/* Card 2: Fields List */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-4">
-          <h2 className="text-sm font-bold text-gray-900">Fields</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-gray-900">Fields</h2>
+            <span className="text-[10px] text-gray-400 font-medium">
+              Updating fields re-creates the stored field structure.
+            </span>
+          </div>
 
           <div className="space-y-3">
             {fields.map((fRow) => (
@@ -485,6 +487,15 @@ export default function CreateMetaobjectDefinitionPage() {
 
         {/* Bottom Save Action Button */}
         <div className="flex items-center justify-end gap-2 pt-4">
+          <button
+            type="button"
+            onClick={handleDeleteDefinition}
+            disabled={deleting}
+            className="px-4 py-2 bg-red-50 border border-red-200 hover:bg-red-100 text-red-700 font-bold text-xs rounded-xl shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {deleting ? "Deleting..." : "Delete definition"}
+          </button>
+          <div className="flex-1" />
           <Link
             href="/content/metaobjects"
             className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-bold text-xs rounded-xl shadow-2xs"
@@ -493,14 +504,13 @@ export default function CreateMetaobjectDefinitionPage() {
           </Link>
           <button
             type="submit"
-            disabled={saving}
-            className="px-6 py-2.5 bg-[#1a1a1a] hover:bg-black text-white font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer"
+            disabled={saving || !isDirty}
+            className="px-6 py-2.5 bg-[#1a1a1a] hover:bg-black text-white font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? "Saving..." : "Save"}
+            {saving ? "Saving..." : "Save changes"}
           </button>
         </div>
       </form>
-      )}
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Browsers, Plus, Gear, ArrowRight, Palette, CheckCircle } from "@phosphor-icons/react"
+import { Browsers, Plus, ArrowRight, CheckCircle, Pencil, Trash } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
 import { apiFetch } from "@/lib/api"
@@ -50,6 +50,28 @@ export default function AdminMetaobjectsPage() {
     }
   }
 
+  const handleDeleteDefinition = async (id: number, name: string) => {
+    if (!window.confirm(`Delete definition "${name}"? Its entries will also be deleted.`)) return
+    try {
+      await apiFetch(`/api/v1/metaobject-definitions/${id}`, { method: "DELETE" })
+      toast.success(`Definition "${name}" deleted`)
+      fetchData()
+    } catch (err) {
+      toast.error("Failed to delete definition")
+    }
+  }
+
+  const handleDeleteEntry = async (id: number, name: string) => {
+    if (!window.confirm(`Delete entry "${name}"?`)) return
+    try {
+      await apiFetch(`/api/v1/metaobject-entries/${id}`, { method: "DELETE" })
+      toast.success(`Entry "${name}" deleted`)
+      fetchData()
+    } catch (err) {
+      toast.error("Failed to delete entry")
+    }
+  }
+
   const activeEntries = entries.filter(e => e.status === "active")
   const draftEntries = entries.filter(e => e.status === "draft")
   const storefrontEntries = entries.filter(e => {
@@ -75,22 +97,13 @@ export default function AdminMetaobjectsPage() {
         title="Metaobjects"
         icon={<Browsers className="w-5 h-5" />}
         actions={
-          <>
-            <Link
-              href="/settings/custom_data/metaobjects"
-              className="eligo-btn-secondary"
-            >
-              <Gear className="w-4 h-4 text-amber-800" />
-              <span>Manage Definitions</span>
-            </Link>
-            <Link
-              href="/content/metaobjects/new"
-              className="eligo-btn-primary"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add definition</span>
-            </Link>
-          </>
+          <Link
+            href="/content/metaobjects/new"
+            className="eligo-btn-primary"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add definition</span>
+          </Link>
         }
       />
 
@@ -151,13 +164,6 @@ export default function AdminMetaobjectsPage() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-base font-bold text-gray-900">Definitions ({definitions.length})</h2>
-          <Link
-            href="/settings/custom_data/metaobjects"
-            className="text-xs font-bold text-amber-800 hover:underline inline-flex items-center gap-1"
-          >
-            <span>Manage all</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
         </div>
 
         {definitions.length === 0 ? (
@@ -206,12 +212,28 @@ export default function AdminMetaobjectsPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link
-                        href={`/content/metaobjects/entries?definition_id=${def.id}`}
-                        className="text-xs font-bold text-amber-800 hover:underline"
-                      >
-                        View entries
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        <Link
+                          href={`/content/metaobjects/entries?definition_id=${def.id}`}
+                          className="text-xs font-bold text-amber-800 hover:underline"
+                        >
+                          View entries
+                        </Link>
+                        <Link
+                          href={`/content/metaobjects/${def.id}`}
+                          className="p-1.5 text-gray-400 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors"
+                          title="Edit definition"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Link>
+                        <button
+                          onClick={() => handleDeleteDefinition(def.id, def.name)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete definition"
+                        >
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -243,6 +265,7 @@ export default function AdminMetaobjectsPage() {
                   <th className="eligo-th">Definition</th>
                   <th className="eligo-th">Status</th>
                   <th className="eligo-th text-right">References</th>
+                  <th className="eligo-th text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -263,6 +286,24 @@ export default function AdminMetaobjectsPage() {
                       </td>
                       <td className="px-6 py-4 text-right font-bold text-gray-900">
                         {entry.references_count} references
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/content/metaobjects/entries/${entry.id}`}
+                            className="p-1.5 text-gray-400 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors"
+                            title="Edit entry"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Link>
+                          <button
+                            onClick={() => handleDeleteEntry(entry.id, entry.display_name)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete entry"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )

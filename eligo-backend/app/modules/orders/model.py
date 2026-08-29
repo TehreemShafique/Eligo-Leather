@@ -179,6 +179,12 @@ class Order(Base):
 
     @property
     def customer_name(self) -> str | None:
+        # Prefer the order's own checkout snapshot (``shipping_name``) so each
+        # order always reports the name it was placed with, even when a shared
+        # customer record is later edited or the same email is reused with a
+        # different name on a later order. Falls back to the linked profile.
+        if self.shipping_name:
+            return self.shipping_name
         if self.customer is None:
             return None
         parts = [self.customer.first_name or "", self.customer.last_name or ""]
@@ -191,6 +197,10 @@ class Order(Base):
 
     @property
     def customer_phone(self) -> str | None:
+        # Prefer the order's own checkout snapshot so each order keeps the
+        # contact number used at purchase time.
+        if self.shipping_phone:
+            return self.shipping_phone
         return self.customer.phone if self.customer else None
 
 

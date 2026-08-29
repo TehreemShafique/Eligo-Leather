@@ -11,7 +11,7 @@ const manrope = Manrope({
 })
 
 export const metadata: Metadata = {
-  title: "Eligo Leather | Shopify Admin Panel",
+  title: "Eligo Leather",
   description: "Shopify-style management admin portal for Eligo Leather store, orders, products, and settings.",
 }
 

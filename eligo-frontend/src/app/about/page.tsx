@@ -3,7 +3,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { getPageByHandle } from "@/modules/content/api"
 import { sanitizeCmsHtml } from "@/lib/sanitize-html"
-import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
+import { absoluteUrl, buildSeoMetadata, cleanSeoDescription } from "@/lib/seo"
 
 export const revalidate = 60
 
@@ -26,7 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return buildSeoMetadata({
     title: page.seo_title || page.title,
-    description: page.seo_description ||
+    description: cleanSeoDescription(page.seo_description) ||
       `Read ${page.title} information from Eligo Leather, Pakistan's online store for handcrafted genuine leather products and accessories.`,
     path: "/about",
     keywords: [page.title],

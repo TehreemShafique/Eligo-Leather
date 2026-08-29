@@ -57,6 +57,29 @@ interface VariantItem {
   isCanonical: boolean
   handleSuffix: string
   imageUrls: string[]
+  metaobjectEntryId: number | null
+}
+
+interface MetaobjectFieldOption {
+  id: number
+  label: string
+  field_type: string
+}
+
+interface MetaobjectDefinitionOption {
+  id: number
+  name: string
+  type_key: string
+  fields: MetaobjectFieldOption[]
+}
+
+interface MetaobjectEntryOption {
+  id: number
+  definition_id: number
+  display_name: string
+  code: string | null
+  status: string
+  field_values: Array<{ field_id: number; value: string | null }>
 }
 
 // Auto-suggested swatch hex values for common leather color names.
@@ -115,6 +138,7 @@ export interface ProductFormData {
     title: string
     color_name: string | null
     color_hex: string | null
+    metaobject_entry_id: number | null
     is_canonical: boolean
     sku: string | null
     price: string | number
@@ -141,7 +165,11 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
   const [previewFullDesc, setPreviewFullDesc] = useState(false)
 
   // Multi-Category Selection State (Product can belong to 2 or more categories)
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(initialData?.category_list ?? [])
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() =>
+    Array.from(
+      new Set((initialData?.category_list ?? []).map((c) => String(c).trim()).filter(Boolean))
+    )
+  )
   const [availableCategories, setAvailableCategories] = useState<string[]>([])
 
   // Custom Editable JSON-LD Schema Code State
@@ -156,8 +184,8 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
         if (res.ok) {
           const cols = await res.json()
           if (Array.isArray(cols) && cols.length > 0) {
-            const names = cols.map((c: any) => c.title)
-            setAvailableCategories(prev => Array.from(new Set([...names, ...prev])))
+            const names = cols.map((c: any) => String(c.title).trim()).filter(Boolean)
+            setAvailableCategories(prev => Array.from(new Set([...prev, ...names])))
           }
         }
       } catch (err) {}
@@ -165,13 +193,65 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
     fetchDBColls()
   }, [])
 
+  useEffect(() => {
+    const fetchMetaobjects = async () => {
+      try {
+        const [defs, entries] = await Promise.all([
+          fetch(`${API_BASE}/api/v1/metaobject-definitions/`),
+          fetch(`${API_BASE}/api/v1/metaobject-entries/?status=active&limit=200`),
+        ])
+        if (!defs.ok || !entries.ok) return
+        const defData = await defs.json()
+        const entryData = await entries.json()
+        if (Array.isArray(defData)) {
+          setMetaobjectDefinitions(
+            defData.map((d: any) => ({
+              id: d.id,
+              name: d.name,
+              type_key: d.type_key,
+              fields: Array.isArray(d.fields)
+                ? d.fields.map((f: any) => ({ id: f.id, label: f.label, field_type: f.field_type }))
+                : [],
+            }))
+          )
+        }
+        if (Array.isArray(entryData)) {
+          setMetaobjectEntries(
+            entryData
+              .filter((e: any) => e.status === "active")
+              .map((e: any) => ({
+                id: e.id,
+                definition_id: e.definition_id,
+                display_name: e.display_name,
+                code: e.code ?? null,
+                status: e.status,
+                field_values: Array.isArray(e.field_values)
+                  ? e.field_values.map((fv: any) => ({ field_id: fv.field_id, value: fv.value }))
+                  : [],
+              }))
+          )
+        }
+      } catch (err) {}
+    }
+    fetchMetaobjects()
+  }, [])
+
   const handleToggleCategory = (cat: string) => {
-    if (selectedCategories.includes(cat)) {
-      setSelectedCategories(prev => prev.filter(c => c !== cat))
+    const normalized = cat.trim()
+    if (selectedCategories.includes(normalized)) {
+      setSelectedCategories(prev => prev.filter(c => c !== normalized))
     } else {
-      setSelectedCategories(prev => [...prev, cat])
+      setSelectedCategories(prev => [...prev, normalized])
     }
   }
+
+  // Always offer the currently selected categories in the picker, even when
+  // they are not yet present in the collections list, so they render marked.
+  useEffect(() => {
+    if (selectedCategories.length > 0) {
+      setAvailableCategories(prev => Array.from(new Set([...prev, ...selectedCategories])))
+    }
+  }, [selectedCategories])
 
   // Form State: Product Details
   const [title, setTitle] = useState(initialData?.title ?? "")
@@ -223,11 +303,19 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
       imageUrls: images
         .filter((img) => img.color_tag === (v.color_name ?? v.title))
         .map((img) => img.url),
+      metaobjectEntryId: v.metaobject_entry_id ?? null,
     }))
   })
 
   const [newColorName, setNewColorName] = useState("")
   const [newColorHex, setNewColorHex] = useState("#000000")
+
+  // Metaobject entry options for building SKU-driven variants from shared
+  // reusable entries (e.g. Color entries whose stable Code feeds variant SKUs).
+  const [metaobjectDefinitions, setMetaobjectDefinitions] = useState<MetaobjectDefinitionOption[]>([])
+  const [metaobjectEntries, setMetaobjectEntries] = useState<MetaobjectEntryOption[]>([])
+  const [selectedMetaDefId, setSelectedMetaDefId] = useState<string>("")
+  const [selectedMetaEntryId, setSelectedMetaEntryId] = useState<string>("")
 
   // Metafields & SEO States
   const [pageTitle, setPageTitle] = useState(initialData?.seo_title ?? "")
@@ -332,11 +420,63 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
       isCanonical: false,
       handleSuffix: `?variant=${generatedId}`,
       imageUrls: [],
+      metaobjectEntryId: null,
     }
 
     setColorVariants([...colorVariants, newVar])
     setNewColorName("")
     toast.success(`Created variant for "${newColorName}" (#${generatedId})`)
+  }
+
+  const entriesForDefinition = (defId: number) =>
+    metaobjectEntries.filter((e) => e.definition_id === defId && e.status === "active")
+
+  const entryHexValue = (entry: MetaobjectEntryOption | undefined) => {
+    if (!entry) return null
+    const def = metaobjectDefinitions.find((d) => d.id === entry.definition_id)
+    if (!def) return null
+    for (const fv of entry.field_values) {
+      const field = def.fields.find((f) => f.id === fv.field_id)
+      if (field && field.field_type === "Color" && fv.value) return fv.value
+    }
+    return null
+  }
+
+  const handleAddMetaobjectVariant = () => {
+    if (!selectedMetaDefId || !selectedMetaEntryId) {
+      toast.error("Select a definition and an entry first.")
+      return
+    }
+
+    const entry = metaobjectEntries.find((e) => String(e.id) === selectedMetaEntryId)
+    if (!entry) return
+
+    const existing = colorVariants.find(
+      (v) => v.colorName.toLowerCase() === entry.display_name.toLowerCase()
+    )
+    if (existing) {
+      toast.error(`A variant for "${entry.display_name}" already exists in the matrix.`)
+      return
+    }
+
+    const generatedId = String(Date.now()).slice(-14)
+    const codeToken = (entry.code ?? "").trim() || entry.display_name.slice(0, 3).toUpperCase()
+    const base = sku.trim()
+    const newVar: VariantItem = {
+      id: generatedId,
+      colorName: entry.display_name,
+      hex: entryHexValue(entry) || COLOR_HEX_MAP[entry.display_name.toLowerCase()] || "#000000",
+      sku: base ? `${base.replace(/-+$/, "")}-${codeToken}` : codeToken,
+      stockQty: "50",
+      isCanonical: false,
+      handleSuffix: `?variant=${generatedId}`,
+      imageUrls: [],
+      metaobjectEntryId: entry.id,
+    }
+
+    setColorVariants([...colorVariants, newVar])
+    setSelectedMetaEntryId("")
+    toast.success(`Variant "${entry.display_name}" added from metaobject entry${entry.code ? ` (SKU code ${entry.code})` : ""}.`)
   }
 
   const handleSetPrimaryCanonical = (id: string) => {
@@ -446,6 +586,7 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
       isCanonical: false,
       handleSuffix: "",
       imageUrls: [],
+      metaobjectEntryId: null,
     }
 
   // Live preview mirrors the actual storefront ProductDetailView (eligo-frontend):
@@ -547,6 +688,7 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
         title: v.colorName,
         color_name: v.colorName,
         color_hex: v.hex,
+        metaobject_entry_id: v.metaobjectEntryId,
         is_canonical: v.isCanonical,
         image_url: v.imageUrls[0] || null,
         sku: v.sku,
@@ -1117,6 +1259,64 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
                     <span>Generate Color Variant</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Add Variant from Shared Metaobject Entry (SKU = BASE-CODE) */}
+              <div className="p-4 bg-amber-50/40 rounded-2xl border border-amber-200 space-y-3">
+                <span className="font-bold text-gray-900 text-xs block">
+                  Add Variant from Metaobject Entry
+                </span>
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <select
+                    value={selectedMetaDefId}
+                    onChange={(e) => {
+                      setSelectedMetaDefId(e.target.value)
+                      setSelectedMetaEntryId("")
+                    }}
+                    className="flex-1 h-10 px-3 rounded-xl bg-white border border-gray-300 text-xs font-bold text-gray-900 focus:outline-hidden"
+                  >
+                    <option value="">Select a definition…</option>
+                    {metaobjectDefinitions
+                      .filter((def) => entriesForDefinition(def.id).length > 0)
+                      .map((def) => (
+                        <option key={def.id} value={def.id}>
+                          {def.name} ({entriesForDefinition(def.id).length} entries)
+                        </option>
+                      ))}
+                  </select>
+
+                  <select
+                    value={selectedMetaEntryId}
+                    onChange={(e) => setSelectedMetaEntryId(e.target.value)}
+                    disabled={!selectedMetaDefId}
+                    className="flex-1 h-10 px-3 rounded-xl bg-white border border-gray-300 text-xs font-bold text-gray-900 focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      {selectedMetaDefId ? "Select an entry…" : "Select a definition first"}
+                    </option>
+                    {selectedMetaDefId &&
+                      entriesForDefinition(Number(selectedMetaDefId)).map((entry) => (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.display_name}{entry.code ? ` — ${entry.code}` : ""}
+                        </option>
+                      ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={handleAddMetaobjectVariant}
+                    className="w-full sm:w-auto px-4 py-2 bg-white border border-amber-800 text-amber-900 hover:bg-amber-800 hover:text-white font-bold text-xs rounded-xl shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add from Entry</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 leading-relaxed">
+                  Reuses the shared metaobject entry across products. The variant SKU is built from the
+                  entry&apos;s stable code (<span className="font-mono">BASE-SKU-CODE</span>, e.g.{" "}
+                  <span className="font-mono">004-RED</span>), so renaming the entry later never changes
+                  existing SKUs.
+                </p>
               </div>
 
               {/* Variants Matrix Table with Per-Color Stock Input */}

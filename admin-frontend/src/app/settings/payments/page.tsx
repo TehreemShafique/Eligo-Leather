@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
 import { CreditCard, Plus, PencilSimple, X, Check, Gift, CurrencyCircleDollar, WarningCircle } from "@phosphor-icons/react"
 import { PageHeader } from "@/components/layout/page-header"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 const PAYMENT_API = `${API_BASE}/api/v1/settings/payment`
 
@@ -52,6 +53,21 @@ export default function AdminSettingsPaymentsPage() {
 
   const [savingMethod, setSavingMethod] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty(
+    {
+      editDetails,
+      editInstructions,
+      newMethodName,
+      newMethodDetails,
+      newMethodInstructions,
+      giftCardNeverExpire,
+      giftCardValidityYears,
+      captureMethod,
+    },
+    dataLoaded
+  )
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -72,6 +88,7 @@ export default function AdminSettingsPaymentsPage() {
       setGiftCardNeverExpire(!settingsData.gift_cards_expire)
       setGiftCardValidityYears(settingsData.gift_card_validity_years)
       setCaptureMethod(settingsData.payment_capture_method)
+      setDataLoaded(true)
     } catch (err) {
       toast.error("Failed to load payment settings. Please try again.")
     } finally {
@@ -108,6 +125,7 @@ export default function AdminSettingsPaymentsPage() {
       setNewMethodName("")
       setNewMethodDetails("")
       setNewMethodInstructions("")
+      reset()
     } catch (err) {
       toast.error("Failed to add payment method. Please try again.")
     } finally {
@@ -125,6 +143,7 @@ export default function AdminSettingsPaymentsPage() {
     )
     setEditCodModalOpen(false)
     toast.error("Cash on Delivery (COD) has been deactivated locally.")
+    reset()
   }
 
   const handleSaveGiftCardSettings = async (e: React.FormEvent) => {
@@ -144,6 +163,7 @@ export default function AdminSettingsPaymentsPage() {
       setSettings(updated)
       toast.success("Gift card expiration settings saved!")
       setGiftCardModalOpen(false)
+      reset()
     } catch (err) {
       toast.error("Failed to save gift card settings. Please try again.")
     } finally {
@@ -165,6 +185,7 @@ export default function AdminSettingsPaymentsPage() {
       setSettings(updated)
       toast.success("Payment capture method updated successfully!")
       setCaptureMethodModalOpen(false)
+      reset()
     } catch (err) {
       toast.error("Failed to save capture method. Please try again.")
     } finally {
@@ -340,6 +361,7 @@ export default function AdminSettingsPaymentsPage() {
                 e.preventDefault()
                 toast.success(`Payment method "${editingMethod.name}" updated locally.`)
                 setEditCodModalOpen(false)
+                reset()
               }}
               className="space-y-4"
             >

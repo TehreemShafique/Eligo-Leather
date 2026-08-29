@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import logging
 import json as json_mod
+import re
 
 import httpx
 
@@ -182,11 +183,32 @@ async def get_all_cities() -> list[dict]:
 
 
 async def get_city_id(city_name: str) -> int | None:
-    """Resolve a city name to its Leopards city ID. Returns None if not found."""
+    """Resolve a city name to its Leopards city ID. Returns None if not found.
+
+    Matching (in order):
+    1. exact (case-insensitive) city name
+    2. word-boundary containment — the customer often sends a locality/sub-area
+       string (e.g. "Bahria Town Lahore") that is not itself in the Leopards
+       city list but contains a real city name ("Lahore"). The longest match
+       wins so "Rawalpindi, Punjab" resolves to Rawalpindi not Punjab.
+    """
     global _city_cache
     if not _city_cache:
         await get_all_cities()
-    return _city_cache.get(city_name.lower().strip())
+    query = city_name.lower().strip()
+    if not query:
+        return None
+    if query in _city_cache:
+        return _city_cache[query]
+
+    best: tuple[int, int] | None = None
+    for known, cid in _city_cache.items():
+        # Word-boundary containment: "bahria town lahore" contains "lahore"
+        # but "isl" must not match "islamabad" via substring.
+        if re.search(rf"(^|[\s,;/])({re.escape(known)})([\s,;/]|$)", query):
+            if best is None or len(known) > best[0]:
+                best = (len(known), cid)
+    return best[1] if best else None
 
 
 async def booked_packet_slip_api(cn_number: str) -> httpx.Response | None:
@@ -287,6 +309,25 @@ async def book_packet_api(payload: dict) -> dict:
             origin_val = str(origin_id)
 
     dest_val = str(destination_city_id) if destination_city_id else "self"
+
+    # Never silently book to the account-default city. If the customer city
+    # cannot be resolved to a Leopards city ID, fail loudly instead of sending
+    # `self` (which Leopards interprets as the merchant's own origin/default
+    # city — e.g. Islamabad) and generating a waybill to the wrong destination.
+    if not destination_city_id:
+        if not re.match(r"^\d+$", str(dest_val)):
+            logger.warning(
+                "bookPacket destination city not resolvable: %r (fallback '%s' refused)",
+                destination_city, dest_val,
+            )
+            return {
+                "status": 0,
+                "error": (
+                    f"Destination city '{destination_city}' was not found on Leopards. "
+                    "Shipment was NOT booked to the wrong destination. "
+                    "Correct the consignee city and try again."
+                ),
+            }
 
     weight = str(payload.get("weight", payload.get("weight_grams", "500")))
     pieces = str(payload.get("pieces", "1"))

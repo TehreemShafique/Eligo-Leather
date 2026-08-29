@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { api } from "@/lib/api-client"
 import { sanitizeCmsHtml } from "@/lib/sanitize-html"
-import { absoluteUrl, buildSeoMetadata } from "@/lib/seo"
+import { absoluteUrl, buildSeoMetadata, cleanSeoDescription } from "@/lib/seo"
 
 interface CmsPageRecord {
   title: string
@@ -45,7 +45,7 @@ async function fetchPage(slug: string): Promise<CmsPageRecord> {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params
   const page = await fetchPage(slug)
-  const description = page.seo_description ||
+  const description = cleanSeoDescription(page.seo_description) ||
     `Read ${page.title} information from Eligo Leather, Pakistan's online store for handcrafted genuine leather products and accessories.`
 
   return buildSeoMetadata({

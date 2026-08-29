@@ -12,6 +12,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { LexicalEditor } from "@/components/ui/lexical-editor"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 function NewMetafieldFormContent() {
   const router = useRouter()
@@ -44,6 +45,15 @@ function NewMetafieldFormContent() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>(["Leather Wallets", "Belts"])
   const [storefrontApiAccess, setStorefrontApiAccess] = useState(true)
 
+  const { reset } = useFormDirty({
+    name,
+    cardinality,
+    selectedType,
+    description,
+    selectedCategories,
+    storefrontApiAccess,
+  })
+
   // Category Modal State
   const [categoryModalOpen, setCategoryModalOpen] = useState(false)
 
@@ -54,6 +64,7 @@ function NewMetafieldFormContent() {
     }
 
     toast.success(`${singularResourceLabel.charAt(0).toUpperCase() + singularResourceLabel.slice(1)} metafield definition "${name}" created successfully!`)
+    reset()
     setTimeout(() => {
       router.push("/settings/custom_data")
     }, 400)

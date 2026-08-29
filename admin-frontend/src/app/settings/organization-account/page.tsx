@@ -8,6 +8,7 @@ import { Users, Plus, DownloadSimple, UploadSimple, ShieldCheck, X, Check, Lock,
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/layout/page-header"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 const API = `${API_BASE}/api/v1/settings`
 
@@ -41,6 +42,15 @@ export default function AdminSettingsUsersPage() {
   const [requireSecureAuth, setRequireSecureAuth] = useState(true)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+
+  const { reset } = useFormDirty({
+    userType,
+    emailInput,
+    fullNameInput,
+    selectedRoleId,
+    passwordInput,
+    requireSecureAuth,
+  })
 
   const [usersList, setUsersList] = useState<UserRecord[]>([])
   const [rolesList, setRolesList] = useState<RoleRecord[]>([])
@@ -95,6 +105,7 @@ export default function AdminSettingsUsersPage() {
       setFullNameInput("")
       setPasswordInput("")
       setSelectedRoleId("")
+      reset()
       fetchData()
     } catch {
       toast.error("Network error while creating user.")
