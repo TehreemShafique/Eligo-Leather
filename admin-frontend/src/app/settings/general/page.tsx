@@ -162,7 +162,7 @@ export default function AdminSettingsGeneralPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-amber-800 uppercase tracking-widest mb-1">
-            <span>Shopify Administrative Settings</span>
+            <span>Administrative Settings</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             General Settings
