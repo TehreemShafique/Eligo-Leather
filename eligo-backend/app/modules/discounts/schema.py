@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.discounts.model import (
     DiscountStatus,
@@ -70,6 +70,11 @@ class DiscountOut(BaseModel):
     updated_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("applies_to_products", "applies_to_variants", mode="before")
+    @classmethod
+    def _coerce_null_lists(cls, value):
+        return value if value is not None else []
 
 
 # ---------------------------------------------------------------------------

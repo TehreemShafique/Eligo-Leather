@@ -25,7 +25,6 @@ dependencies = [
     "python-jose[cryptography]>=3.5.0",
     "python-multipart>=0.0.32",
     "redis>=8.1.0",
-    "resend>=2.35.0",
     "sqlalchemy>=2.0.36",
     "tzdata>=2026.3",
     "uvicorn[standard]>=0.51.0",

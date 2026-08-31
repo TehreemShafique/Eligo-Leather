@@ -71,18 +71,6 @@ APP_DEFINITIONS: list[dict] = [
     #     ],
     #     "config_fields": [],
     # },
-    {
-        "code": "resend_email",
-        "name": "Resend Email",
-        "category": "email",
-        "description": "Simple email API for transactional mail.",
-        "actions": ["send_email"],
-        "credential_fields": [
-            {"name": "api_key", "label": "API Key", "type": "password"},
-            {"name": "from_email", "label": "From Email", "type": "text"},
-        ],
-        "config_fields": [],
-    },
     # ------------------------------------------------------------------
     # Payments
     # ------------------------------------------------------------------

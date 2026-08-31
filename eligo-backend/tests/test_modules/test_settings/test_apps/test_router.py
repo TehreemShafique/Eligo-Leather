@@ -46,13 +46,13 @@ async def test_list_apps_returns_catalog(client, admin_headers):
     body = resp.json()
     assert len(body) > 0
     assert all(app["installed"] is False for app in body)
-    assert any(app["code"] == "resend_email" for app in body)
+    assert any(app["code"] == "leopards_shipping" for app in body)
 
 
 async def test_get_app_returns_definition(client, admin_headers):
-    resp = await client.get("/api/v1/settings/apps/resend_email", headers=admin_headers)
+    resp = await client.get("/api/v1/settings/apps/leopards_shipping", headers=admin_headers)
     assert resp.status_code == 200
-    assert resp.json()["code"] == "resend_email"
+    assert resp.json()["code"] == "leopards_shipping"
 
 
 async def test_get_app_unknown_404(client, admin_headers):
@@ -68,17 +68,17 @@ async def test_get_app_unknown_404(client, admin_headers):
 async def test_install_and_manage_app_flow(client, admin_headers, db_session):
     await _reset_admin_sessions(db_session)
     resp = await client.post(
-        "/api/v1/settings/apps/resend_email/install",
+        "/api/v1/settings/apps/leopards_shipping/install",
         json={
-            "app_code": "resend_email",
-            "api_credentials": {"api_key": "k"},
+            "app_code": "leopards_shipping",
+            "api_credentials": {"username": "u-1"},
             "settings": {"a": 1},
         },
         headers=admin_headers,
     )
     assert resp.status_code == 201
     body = resp.json()
-    assert body["app_code"] == "resend_email"
+    assert body["app_code"] == "leopards_shipping"
     assert body["status"] == "installed"
     assert body["has_credentials"] is True
 
@@ -88,13 +88,13 @@ async def test_install_and_manage_app_flow(client, admin_headers, db_session):
     assert len(installed.json()) == 1
 
     await _reset_admin_sessions(db_session)
-    app = await client.get("/api/v1/settings/apps/resend_email", headers=admin_headers)
+    app = await client.get("/api/v1/settings/apps/leopards_shipping", headers=admin_headers)
     assert app.status_code == 200
     assert app.json()["installed"] is True
 
     await _reset_admin_sessions(db_session)
     updated = await client.patch(
-        "/api/v1/settings/apps/resend_email",
+        "/api/v1/settings/apps/leopards_shipping",
         json={"settings": {"a": 2}},
         headers=admin_headers,
     )
@@ -103,21 +103,21 @@ async def test_install_and_manage_app_flow(client, admin_headers, db_session):
 
     await _reset_admin_sessions(db_session)
     activated = await client.post(
-        "/api/v1/settings/apps/resend_email/activate", headers=admin_headers
+        "/api/v1/settings/apps/leopards_shipping/activate", headers=admin_headers
     )
     assert activated.status_code == 200
     assert activated.json()["status"] == "active"
 
     await _reset_admin_sessions(db_session)
     deactivated = await client.post(
-        "/api/v1/settings/apps/resend_email/deactivate", headers=admin_headers
+        "/api/v1/settings/apps/leopards_shipping/deactivate", headers=admin_headers
     )
     assert deactivated.status_code == 200
     assert deactivated.json()["status"] == "inactive"
 
     await _reset_admin_sessions(db_session)
     removed = await client.post(
-        "/api/v1/settings/apps/resend_email/uninstall", headers=admin_headers
+        "/api/v1/settings/apps/leopards_shipping/uninstall", headers=admin_headers
     )
     assert removed.status_code == 204
 
@@ -138,14 +138,14 @@ async def test_install_unknown_app_404(client, admin_headers):
 
 
 async def test_install_existing_app_keeps_single_row(client, admin_headers, db_session):
-    payload = {"app_code": "resend_email", "settings": {"a": 1}}
+    payload = {"app_code": "leopards_shipping", "settings": {"a": 1}}
     await _reset_admin_sessions(db_session)
     first = await client.post(
-        "/api/v1/settings/apps/resend_email/install", json=payload, headers=admin_headers
+        "/api/v1/settings/apps/leopards_shipping/install", json=payload, headers=admin_headers
     )
     await _reset_admin_sessions(db_session)
     second = await client.post(
-        "/api/v1/settings/apps/resend_email/install", json=payload, headers=admin_headers
+        "/api/v1/settings/apps/leopards_shipping/install", json=payload, headers=admin_headers
     )
     assert first.status_code == 201
     assert second.status_code == 201
@@ -159,7 +159,7 @@ async def test_install_existing_app_keeps_single_row(client, admin_headers, db_s
 
 async def test_update_uninstalled_app_404(client, admin_headers):
     resp = await client.patch(
-        "/api/v1/settings/apps/resend_email",
+        "/api/v1/settings/apps/leopards_shipping",
         json={"settings": {"a": 1}},
         headers=admin_headers,
     )
@@ -169,7 +169,7 @@ async def test_update_uninstalled_app_404(client, admin_headers):
 
 async def test_activate_uninstalled_app_404(client, admin_headers):
     resp = await client.post(
-        "/api/v1/settings/apps/resend_email/activate", headers=admin_headers
+        "/api/v1/settings/apps/leopards_shipping/activate", headers=admin_headers
     )
     assert resp.status_code == 404
     assert resp.json()["detail"] == "App is not installed"
@@ -177,7 +177,7 @@ async def test_activate_uninstalled_app_404(client, admin_headers):
 
 async def test_uninstall_uninstalled_app_404(client, admin_headers):
     resp = await client.post(
-        "/api/v1/settings/apps/resend_email/uninstall", headers=admin_headers
+        "/api/v1/settings/apps/leopards_shipping/uninstall", headers=admin_headers
     )
     assert resp.status_code == 404
     assert resp.json()["detail"] == "App is not installed"
@@ -190,7 +190,7 @@ async def test_uninstall_uninstalled_app_404(client, admin_headers):
 async def test_action_unknown_app_400(client, admin_headers):
     resp = await client.post(
         "/api/v1/settings/apps/no_such_app/action",
-        json={"action": "send_email", "payload": {}},
+        json={"action": "create_shipment", "payload": {}},
         headers=admin_headers,
     )
     assert resp.status_code == 400
@@ -199,15 +199,15 @@ async def test_action_unknown_app_400(client, admin_headers):
 async def test_action_unsupported_action_400(client, admin_headers, db_session):
     await _reset_admin_sessions(db_session)
     installed = await client.post(
-        "/api/v1/settings/apps/resend_email/install",
-        json={"app_code": "resend_email"},
+        "/api/v1/settings/apps/leopards_shipping/install",
+        json={"app_code": "leopards_shipping"},
         headers=admin_headers,
     )
     assert installed.status_code == 201
 
     await _reset_admin_sessions(db_session)
     resp = await client.post(
-        "/api/v1/settings/apps/resend_email/action",
+        "/api/v1/settings/apps/leopards_shipping/action",
         json={"action": "send_sms", "payload": {}},
         headers=admin_headers,
     )
@@ -217,28 +217,28 @@ async def test_action_unsupported_action_400(client, admin_headers, db_session):
 async def test_action_supported_action_dispatches_payload(client, admin_headers, db_session, monkeypatch):
     """The /action endpoint forward the payload to the registered provider
     adapter and returns the adapter result."""
-    async def _fake_send_email(payload: dict) -> dict:
+    async def _fake_create_shipment(payload: dict) -> dict:
         return {"success": True, "id": "fake-id"}
 
     monkeypatch.setitem(
-        adapters.ADAPTERS["resend_email"], "send_email", _fake_send_email
+        adapters.ADAPTERS["leopards_shipping"], "create_shipment", _fake_create_shipment
     )
     await _reset_admin_sessions(db_session)
     installed = await client.post(
-        "/api/v1/settings/apps/resend_email/install",
-        json={"app_code": "resend_email"},
+        "/api/v1/settings/apps/leopards_shipping/install",
+        json={"app_code": "leopards_shipping"},
         headers=admin_headers,
     )
     assert installed.status_code == 201
 
     await _reset_admin_sessions(db_session)
     resp = await client.post(
-        "/api/v1/settings/apps/resend_email/action",
-        json={"action": "send_email", "payload": {"to": "a@b.com"}},
+        "/api/v1/settings/apps/leopards_shipping/action",
+        json={"action": "create_shipment", "payload": {"to": "a@b.com"}},
         headers=admin_headers,
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
-    assert body["action"] == "send_email"
+    assert body["action"] == "create_shipment"
     assert body["data"]["id"] == "fake-id"

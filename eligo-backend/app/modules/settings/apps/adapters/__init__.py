@@ -36,41 +36,6 @@ def _require_env(key: str) -> str:
     return value
 
 
-# ============================ EMAIL (Resend) ===========================
-# Required env: RESEND_API_KEY, RESEND_FROM_EMAIL
-# Get the API key from Resend Dashboard -> API Keys. RESEND_FROM_EMAIL
-# must be an address on a domain you've verified in Resend -> Domains,
-# otherwise sends will fail (or be restricted to their sandbox address).
-
-RESEND_SEND_URL = "https://api.resend.com/emails"
-
-
-async def _resend_send_email(payload: dict) -> dict:
-    """Resend - action: send_email. Payload: {to, subject, html}"""
-    api_key = _require_env("RESEND_API_KEY")
-    from_email = _require_env("RESEND_FROM_EMAIL")
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                RESEND_SEND_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "from": from_email,
-                    "to": [payload["to"]] if isinstance(payload["to"], str) else payload["to"],
-                    "subject": payload["subject"],
-                    "html": payload["html"],
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        return {"success": True, "id": data.get("id")}
-    except httpx.HTTPError as exc:
-        raise AdapterError(f"Resend send_email failed: {exc}")
-
-
 # ============================ SHIPPING / TRACKING ====================
 
 # ---- Leopards Courier ----
@@ -249,7 +214,6 @@ async def _clarity_fetch_insights(payload: dict) -> dict:
 
 
 ADAPTERS: dict[str, dict[str, callable]] = {
-    "resend_email": {"send_email": _resend_send_email},
     "leopards_shipping": {
         "create_shipment": _leopards_create_shipment,
         "track_shipment": _leopards_track_shipment,
