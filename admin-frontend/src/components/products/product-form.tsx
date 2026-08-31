@@ -33,6 +33,7 @@ import { LexicalEditor } from "@/components/ui/lexical-editor"
 import { CharCounter } from "@/components/ui/char-counter"
 import { ImageUploadNote } from "@/components/ui/image-upload-note"
 import { useFormDirty, useUnsavedChanges } from "@/components/unsaved-changes"
+import { uploadImages } from "@/lib/upload"
 
 interface CustomMetafieldDefinition {
   id: string
@@ -160,6 +161,7 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [mounted, setMounted] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploadingImages, setUploadingImages] = useState(false)
   const [viewMode, setViewMode] = useState<"edit" | "live_preview">("edit")
   const [previewQty, setPreviewQty] = useState(1)
   const [previewFullDesc, setPreviewFullDesc] = useState(false)
@@ -383,23 +385,39 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
     setColorVariants(prev => prev.map(v => v.id === id ? { ...v, [field]: val } : v))
   }
 
-  const handleNativeFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNativeFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    const newMediaItems: MediaItem[] = []
-    Array.from(files).forEach((file, index) => {
-      const objUrl = URL.createObjectURL(file)
-      newMediaItems.push({
-        id: Date.now() + index,
-        url: objUrl,
-        colorTag: "Unassigned",
-        altText: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
+    const fileArray = Array.from(files)
+    setUploadingImages(true)
+    try {
+      const urls = await uploadImages(fileArray, "products")
+      const newMediaItems: MediaItem[] = []
+      urls.forEach((url, index) => {
+        if (!url) return
+        const file = fileArray[index]
+        newMediaItems.push({
+          id: Date.now() + index,
+          url,
+          colorTag: "Unassigned",
+          altText: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
+        })
       })
-    })
 
-    setMediaItems(prev => [...prev, ...newMediaItems])
-    toast.success(`${files.length} photo(s) added!`)
+      if (newMediaItems.length > 0) {
+        setMediaItems(prev => [...prev, ...newMediaItems])
+        toast.success(`${newMediaItems.length} photo(s) uploaded to cloud storage!`)
+      }
+      if (newMediaItems.length < fileArray.length) {
+        toast.error(`${fileArray.length - newMediaItems.length} photo(s) failed to upload.`)
+      }
+    } catch {
+      toast.error("Photo upload failed. Please try again.")
+    } finally {
+      setUploadingImages(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
   }
 
   const handleAddColorVariant = () => {
@@ -801,11 +819,11 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
           </Link>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || uploadingImages}
             className="px-5 py-2 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2"
           >
-            {saving && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-            <span>{saving ? "Saving..." : isEdit ? "Update Product" : "Save Product"}</span>
+            {(saving || uploadingImages) && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+            <span>{uploadingImages ? "Uploading..." : saving ? "Saving..." : isEdit ? "Update Product" : "Save Product"}</span>
           </button>
         </div>
       </div>
@@ -1136,10 +1154,11 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="eligo-btn-primary"
+                  disabled={uploadingImages}
+                  className="eligo-btn-primary disabled:opacity-50"
                 >
                   <UploadSimple className="w-4 h-4" />
-                  <span>Add pics</span>
+                  <span>{uploadingImages ? "Uploading..." : "Add pics"}</span>
                 </button>
               </div>
 
@@ -1204,10 +1223,11 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="eligo-btn-primary"
+                    disabled={uploadingImages}
+                    className="eligo-btn-primary disabled:opacity-50"
                   >
                     <UploadSimple className="w-4 h-4" />
-                    <span>Add pics</span>
+                    <span>{uploadingImages ? "Uploading..." : "Add pics"}</span>
                   </button>
                 </div>
               )}

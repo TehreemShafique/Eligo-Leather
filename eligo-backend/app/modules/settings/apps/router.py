@@ -7,7 +7,7 @@ from app.core.dependencies import require_admin
 
 from app.modules.settings.apps import service
 from app.modules.settings.apps.adapters import AdapterError
-from app.modules.content.service import convert_image_to_webp, save_upload_to_disk
+from app.modules.content.service import convert_image_to_webp, save_upload
 from app.modules.settings.apps.reviews import (
     create_review as db_create_review,
     list_reviews as db_list_reviews,
@@ -242,7 +242,7 @@ async def public_upload_review_photos(
             webp_bytes, webp_filename, _ = convert_image_to_webp(
                 content, file.filename or "review.png"
             )
-            urls.append(save_upload_to_disk(webp_bytes, webp_filename))
+            urls.append(save_upload(webp_bytes, webp_filename, folder="reviews"))
         except Exception:
             raise HTTPException(
                 status_code=400,

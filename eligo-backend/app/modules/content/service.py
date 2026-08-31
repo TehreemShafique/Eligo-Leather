@@ -300,6 +300,8 @@ import re
 import uuid
 from pathlib import Path
 
+from app.core.r2 import r2, make_upload_key
+
 # Uploaded media lives next to the backend root and is served by the
 # StaticFiles mount at /static (see app.main).
 UPLOADS_DIR = Path(__file__).resolve().parents[3] / "static" / "uploads"
@@ -313,6 +315,19 @@ def save_upload_to_disk(data: bytes, filename: str) -> str:
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     (UPLOADS_DIR / unique_name).write_bytes(data)
     return f"/static/uploads/{unique_name}"
+
+
+def save_upload_to_r2(data: bytes, filename: str, folder: str = "general") -> str:
+    """Uploads bytes to Cloudflare R2 and returns the public URL."""
+    key = make_upload_key(filename, folder)
+    return r2.upload(data, key, content_type="image/webp")
+
+
+def save_upload(data: bytes, filename: str, folder: str = "general") -> str:
+    """Route to R2 when configured, otherwise fall back to local disk."""
+    if r2.is_configured:
+        return save_upload_to_r2(data, filename, folder)
+    return save_upload_to_disk(data, filename)
 
 
 def convert_image_to_webp(image_bytes: bytes, filename: str) -> tuple[bytes, str, str]:

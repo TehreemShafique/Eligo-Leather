@@ -18,6 +18,13 @@ class Settings:
         "sqlite+aiosqlite:///:memory:",
     )
 
+    # Cloudflare R2 object storage
+    R2_BUCKET: str = os.getenv("R2_BUCKET", "")
+    R2_ENDPOINT: str = os.getenv("R2_ENDPOINT", "")
+    R2_ACCESS_KEY_ID: str = os.getenv("R2_ACCESS_KEY_ID", "")
+    R2_SECRET_ACCESS_KEY: str = os.getenv("R2_SECRET_ACCESS_KEY", "")
+    R2_PUBLIC_URL: str = os.getenv("R2_PUBLIC_URL", "")
+
     SECRET_KEY: str = os.getenv("SECRET_KEY", "changeme")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(

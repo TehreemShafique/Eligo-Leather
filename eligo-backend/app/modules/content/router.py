@@ -245,12 +245,18 @@ async def create_file(
 async def upload_file(
     file: UploadFile = FileParam(...),
     alt_text: str | None = Form(None),
+    folder: str = Query("general"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Upload any image format (PNG, JPG, GIF) - automatically converts to .webp format."""
+    """Upload any image format (PNG, JPG, GIF) - automatically converts to .webp format.
+
+    Use the ``folder`` query parameter to organise uploads in R2
+    (e.g. ``blogs``, ``products``, ``reviews``).  When R2 is not configured
+    the folder parameter is ignored and files are saved to local disk.
+    """
     content = await file.read()
     webp_bytes, webp_filename, mime_type = service.convert_image_to_webp(content, file.filename or "image.png")
-    url_path = service.save_upload_to_disk(webp_bytes, webp_filename)
+    url_path = service.save_upload(webp_bytes, webp_filename, folder=folder)
 
     file_data = FileCreate(
         filename=webp_filename,
