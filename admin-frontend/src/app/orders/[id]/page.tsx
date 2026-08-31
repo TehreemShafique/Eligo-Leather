@@ -79,6 +79,7 @@ interface OrderData {
   shipping_cost: number
   tax: number
   total_price: number
+  discount: number
   paid_amount: number
   payment_status: string
   fulfillment_status: string
@@ -564,6 +565,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
               <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="font-bold text-gray-900">Rs. {Number(order.subtotal).toLocaleString()}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Shipping</span><span className="font-bold text-gray-900">Rs. {Number(order.shipping_cost).toLocaleString()}</span></div>
               {Number(order.tax) > 0 && <div className="flex justify-between"><span className="text-gray-500">Tax</span><span className="font-bold text-gray-900">Rs. {Number(order.tax).toLocaleString()}</span></div>}
+              {Number(order.discount) > 0 && <div className="flex justify-between"><span className="text-gray-500">Discount</span><span className="font-bold text-emerald-800">-Rs. {Number(order.discount).toLocaleString()}</span></div>}
               <div className="flex justify-between pt-2 border-t border-gray-100"><span className="font-bold text-gray-900">Total</span><span className="font-bold text-gray-900">Rs. {Number(order.total_price).toLocaleString()}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Paid by customer</span><span className="font-bold text-emerald-800">Rs. {Number(order.paid_amount).toLocaleString()}</span></div>
               {Number(order.total_price) - Number(order.paid_amount) > 0 && <div className="flex justify-between"><span className="text-gray-500">Balance due</span><span className="font-bold text-amber-800">Rs. {(Number(order.total_price) - Number(order.paid_amount)).toLocaleString()}</span></div>}

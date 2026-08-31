@@ -52,6 +52,7 @@ export interface Order {
   shipping_cost: number
   tax: number
   total: number
+  discount?: number
   paid_amount: number
   balance_due: number
   payment_status: PaymentStatus

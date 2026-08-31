@@ -615,6 +615,7 @@ async def convert_draft_to_order(db: AsyncSession, draft_id: int, order_number: 
         shipping_cost=draft.shipping_cost,
         tax=draft.tax,
         total_price=draft.total_price,
+        discount=draft.discount,
         shipping_address=draft.shipping_address,
         billing_address=draft.billing_address,
         tags=draft.tags,

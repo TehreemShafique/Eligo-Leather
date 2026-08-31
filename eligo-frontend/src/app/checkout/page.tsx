@@ -134,7 +134,7 @@ export default function CheckoutPage() {
   message: string
 }
 
-const handleApplyDiscount = async () => {
+  const handleApplyDiscount = async () => {
   const code = formData.discountCode.trim().toUpperCase()
   if (!code) {
     toast.error("Please enter a discount code.")
@@ -144,9 +144,18 @@ const handleApplyDiscount = async () => {
 
   setDiscountLoading(true)
   try {
-    const result = await api.post<VerifyCouponResponse, { code: string; subtotal: number }>(
+    // Send the actual cart line detail (product/variant/total) so the
+    // preview is consistent with the server-side order-creation pricing:
+    // a discount scoped to specific products/variants is only shown as valid
+    // when it really applies to the items in this cart.
+    const items = cart.map((item) => ({
+      product_id: Number(item.id),
+      variant_id: item.variantId != null ? Number(item.variantId) : undefined,
+      total_price: Number((item.price * item.quantity).toFixed(2)),
+    }))
+    const result = await api.post<VerifyCouponResponse, { code: string; subtotal: number; items: typeof items }>(
       "/discounts/public/verify-coupon",
-      { code, subtotal: cartSubtotal },
+      { code, subtotal: cartSubtotal, items },
       { auth: false },
     )
     if (result.valid) {

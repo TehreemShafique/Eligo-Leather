@@ -125,6 +125,7 @@ class OrderOut(BaseModel):
     shipping_cost: Decimal
     tax: Decimal
     total_price: Decimal
+    discount: Decimal = Decimal("0")
     paid_amount: Decimal
     payment_status: PaymentStatus
     fulfillment_status: FulfillmentStatus
