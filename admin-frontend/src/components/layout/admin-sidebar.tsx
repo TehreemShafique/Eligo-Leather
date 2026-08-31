@@ -61,10 +61,22 @@ function NavItem({
   )
 }
 
-function SubItem({ href, label, active }: { href: string; label: string; active: boolean }) {
+function SubItem({
+  href,
+  label,
+  active,
+  target,
+}: {
+  href: string
+  label: string
+  active: boolean
+  target?: string
+}) {
   return (
     <Link
       href={href}
+      target={target}
+      rel={target ? "noopener noreferrer" : undefined}
       className={clsx(
         "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all duration-200 border-l-2",
         active
@@ -93,16 +105,20 @@ export function AdminSidebar() {
     setMounted(true)
   }, [])
 
+  const [ordersOpen, setOrdersOpen] = useState(false)
   const [productsOpen, setProductsOpen] = useState(false)
   const [customersOpen, setCustomersOpen] = useState(false)
   const [contentOpen, setContentOpen] = useState(false)
   const [onlineStoreOpen, setOnlineStoreOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
+    if (pathname.startsWith("/orders")) setOrdersOpen(true)
     if (pathname.startsWith("/products")) setProductsOpen(true)
     if (pathname.startsWith("/customers")) setCustomersOpen(true)
     if (pathname.startsWith("/content")) setContentOpen(true)
     if (pathname.startsWith("/online-store")) setOnlineStoreOpen(true)
+    if (pathname.startsWith("/settings")) setSettingsOpen(true)
   }, [pathname])
 
   const expandableSections = [
@@ -196,15 +212,40 @@ export function AdminSidebar() {
 
           {/* Orders */}
           <div>
-            <NavItem
-              href="/orders"
-              icon={ShoppingBagOpen}
-              label="Orders"
-              active={pathname === "/orders"}
-            />
-            <div className="mt-0.5 pl-4 space-y-0.5">
-              <SubItem href="/orders/drafts" label="Drafts" active={pathname === "/orders/drafts"} />
-              <SubItem href="/orders/checkouts" label="Abandoned checkouts" active={pathname === "/orders/checkouts"} />
+            <button
+              type="button"
+              onClick={() => setOrdersOpen(!ordersOpen)}
+              className={clsx(
+                "group w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all duration-200 cursor-pointer",
+                pathname.startsWith("/orders")
+                  ? "bg-white text-gray-900 font-bold shadow-sm border border-gray-200/70"
+                  : "text-gray-700 font-semibold hover:bg-white/70 hover:translate-x-0.5 border border-transparent"
+              )}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <ShoppingBagOpen className={clsx("w-4 h-4 shrink-0 transition-colors", pathname.startsWith("/orders") ? "text-amber-800" : "text-gray-500 group-hover:text-amber-800")} />
+                <span className="truncate">Orders</span>
+              </div>
+              <span className={clsx("transition-transform duration-200 shrink-0", ordersOpen ? "rotate-180" : "")}>
+                {ordersOpen ? (
+                  <CaretDown className="w-3.5 h-3.5 text-gray-500" />
+                ) : (
+                  <CaretRight className="w-3.5 h-3.5 text-gray-500" />
+                )}
+              </span>
+            </button>
+
+            <div
+              className={clsx(
+                "grid transition-all duration-200 ease-out overflow-hidden",
+                ordersOpen ? "grid-rows-[1fr] opacity-100 mt-0.5" : "grid-rows-[0fr] opacity-0"
+              )}
+            >
+              <div className="min-h-0 pl-4 space-y-0.5">
+                <SubItem href="/orders" label="All orders" active={pathname === "/orders"} />
+                <SubItem href="/orders/drafts" label="Drafts" active={pathname === "/orders/drafts"} />
+                <SubItem href="/orders/checkouts" label="Abandoned checkouts" active={pathname === "/orders/checkouts"} />
+              </div>
             </div>
           </div>
 
@@ -320,18 +361,48 @@ export function AdminSidebar() {
 
       {/* Bottom Settings & User Account Section */}
       <div className="p-3 border-t border-[#d2d2d2] space-y-2 bg-[#e6e6e6]">
-        <Link
-          href="/settings/general"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 border border-transparent hover:bg-white hover:border-gray-200 hover:shadow-sm"
-        >
-          <div className="flex items-center gap-2.5">
-            <Gear className="w-4 h-4 text-amber-800 group-hover:rotate-45 transition-transform duration-300" />
-            <span className="text-gray-800">Settings</span>
+        <div>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(!settingsOpen)}
+            className="group w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 border border-transparent hover:bg-white hover:border-gray-200 hover:shadow-sm cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <Gear className="w-4 h-4 text-amber-800 group-hover:rotate-45 transition-transform duration-300" />
+              <span className="text-gray-800">Settings</span>
+            </div>
+            <span className={clsx("transition-transform duration-200 shrink-0", settingsOpen ? "rotate-180" : "")}>
+              {settingsOpen ? (
+                <CaretDown className="w-3.5 h-3.5 text-gray-500" />
+              ) : (
+                <CaretRight className="w-3.5 h-3.5 text-gray-500" />
+              )}
+            </span>
+          </button>
+
+          <div
+            className={clsx(
+              "grid transition-all duration-200 ease-out overflow-hidden",
+              settingsOpen ? "grid-rows-[1fr] opacity-100 mt-1" : "grid-rows-[0fr] opacity-0"
+            )}
+          >
+            <div className="min-h-0 pl-4 space-y-0.5 max-h-72 overflow-y-auto">
+              <SubItem href="/settings/general" label="General" active={pathname === "/settings/general"} target="_blank" />
+              <SubItem href="/settings/organization-account" label="Users" active={pathname.startsWith("/settings/organization-account")} target="_blank" />
+              <SubItem href="/settings/payments" label="Payments" active={pathname === "/settings/payments"} target="_blank" />
+              <SubItem href="/settings/checkout" label="Checkout" active={pathname === "/settings/checkout"} target="_blank" />
+              <SubItem href="/settings/customer_accounts" label="Customer accounts" active={pathname === "/settings/customer_accounts"} target="_blank" />
+              <SubItem href="/settings/shipping" label="Shipping and delivery" active={pathname === "/settings/shipping"} target="_blank" />
+              <SubItem href="/settings/locations" label="Locations" active={pathname === "/settings/locations"} target="_blank" />
+              <SubItem href="/settings/apps" label="Apps" active={pathname === "/settings/apps"} target="_blank" />
+              <SubItem href="/settings/sales_channels" label="Sales channels" active={pathname.includes("sales_channels")} target="_blank" />
+              <SubItem href="/settings/customer_events" label="Customer events" active={pathname === "/settings/customer_events"} target="_blank" />
+              <SubItem href="/settings/notifications" label="Notifications" active={pathname === "/settings/notifications"} target="_blank" />
+              <SubItem href="/settings/custom_data" label="Metafields and metaobjects" active={pathname === "/settings/custom_data"} target="_blank" />
+              <SubItem href="/settings/legal" label="Policies & Privacy" active={pathname === "/settings/legal"} target="_blank" />
+            </div>
           </div>
-          <ArrowSquareOut className="w-3.5 h-3.5 text-gray-500" />
-        </Link>
+        </div>
 
         <Link
           href="/settings/account/personal"
