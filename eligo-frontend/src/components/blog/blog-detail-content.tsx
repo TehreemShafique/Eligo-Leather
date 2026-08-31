@@ -55,7 +55,7 @@ export function BlogDetailContent({
         {/* Banner Cover Image (empty frame when no image uploaded) */}
         <div className="relative aspect-[24/13] w-full overflow-hidden rounded-[20px] bg-zinc-100">
           {image ? (
-            <Image src={image} alt={title} fill priority unoptimized className="object-cover" />
+            <Image src={image} alt={title} fill priority className="object-cover" />
           ) : null}
         </div>
 

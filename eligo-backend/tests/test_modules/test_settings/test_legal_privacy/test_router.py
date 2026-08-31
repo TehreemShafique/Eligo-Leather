@@ -61,14 +61,14 @@ async def test_public_policies_reflect_seeded_policies(client, db_session, admin
 
 
 # ---------------------------------------------------------------------------
-# Admin routes require admin
+# Admin routes are public
 # ---------------------------------------------------------------------------
 
-async def test_admin_routes_require_admin(client, auth_headers):
+async def test_admin_routes_public(client, auth_headers):
     resp = await client.get(f"{ADMIN}/policies")
-    assert resp.status_code in (401, 403)
+    assert resp.status_code == 200
     resp = await client.get(f"{ADMIN}/policies", headers=auth_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------

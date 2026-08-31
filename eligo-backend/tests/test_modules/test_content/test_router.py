@@ -42,9 +42,10 @@ async def test_content_overview(client, auth_headers, db_session):
 # Metaobject Definitions
 # ---------------------------------------------------------------------------
 
-async def test_metaobject_definitions_requires_auth(client):
+async def test_metaobject_definitions_accessible_without_auth(client):
     resp = await client.get("/api/v1/metaobject-definitions/")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 async def test_metaobject_definitions_full_crud(client, auth_headers):
@@ -203,7 +204,9 @@ async def test_files_full_crud(client, auth_headers):
     resp = await client.post("/api/v1/files/", json=payload, headers=auth_headers)
     assert resp.status_code == 201
     body = resp.json()
-    assert body["filename"] == "hero.png"
+    assert body["filename"] == "hero.webp"
+    assert body["original_filename"] == "hero.png"
+    assert body["mime_type"] == "image/webp"
     assert body["file_size"] == 0
     file_id = body["id"]
 
@@ -211,12 +214,12 @@ async def test_files_full_crud(client, auth_headers):
     assert resp.status_code == 200
     assert len(resp.json()) == 1
 
-    resp = await client.get("/api/v1/files/", params={"mime_type": "image/png"}, headers=auth_headers)
+    resp = await client.get("/api/v1/files/", params={"mime_type": "image/webp"}, headers=auth_headers)
     assert len(resp.json()) == 1
 
     resp = await client.get(f"/api/v1/files/{file_id}", headers=auth_headers)
     assert resp.status_code == 200
-    assert resp.json()["mime_type"] == "image/png"
+    assert resp.json()["mime_type"] == "image/webp"
 
     resp = await client.patch(f"/api/v1/files/{file_id}", json={"alt_text": "New Hero"}, headers=auth_headers)
     assert resp.status_code == 200
@@ -249,9 +252,10 @@ async def test_files_invalid_body_422(client, auth_headers):
 # Menus & Menu Items
 # ---------------------------------------------------------------------------
 
-async def test_menus_requires_auth(client):
+async def test_menus_accessible_without_auth(client):
     resp = await client.get("/api/v1/menus/")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 async def test_menus_full_crud(client, auth_headers):
@@ -420,9 +424,10 @@ async def test_url_redirects_invalid_body_422(client, auth_headers):
 # Blog Posts
 # ---------------------------------------------------------------------------
 
-async def test_blog_posts_requires_auth(client):
+async def test_blog_posts_accessible_without_auth(client):
     resp = await client.get("/api/v1/blog-posts/")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 async def test_blog_posts_full_crud(client, auth_headers):

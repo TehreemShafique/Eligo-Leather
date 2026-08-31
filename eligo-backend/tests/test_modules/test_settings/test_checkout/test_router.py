@@ -22,7 +22,7 @@ async def test_configs_require_admin(client, auth_headers):
     resp = await client.get(f"{BASE}/configs")
     assert resp.status_code in (401, 403)
     resp = await client.get(f"{BASE}/configs", headers=auth_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------

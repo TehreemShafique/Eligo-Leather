@@ -108,7 +108,8 @@ def test_enum_values():
         "fulfilled", "unfulfilled", "partial", "scheduled",
     }
     assert {e.value for e in DeliveryStatus} == {
-        "pending", "in_transit", "out_for_delivery", "delivered", "failed", "returned",
+        "pending", "booked", "picked_up", "in_transit", "out_for_delivery",
+        "delivered", "failed", "returned",
     }
     assert {e.value for e in DeliveryMethod} == {"standard", "express", "pickup"}
     assert {e.value for e in ReturnStatus} == {

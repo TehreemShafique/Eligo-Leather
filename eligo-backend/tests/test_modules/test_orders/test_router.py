@@ -31,7 +31,14 @@ async def test_orders_require_auth(client):
     assert response.status_code in (401, 403)
 
 
-async def test_create_order(client, auth_headers):
+async def test_create_order(client, auth_headers, monkeypatch):
+    async def _noop_background_dispatch(order_id: int) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.modules.orders.router.background_dispatch_order_confirmation",
+        _noop_background_dispatch,
+    )
     response = await client.post(
         "/api/v1/orders/",
         headers=auth_headers,

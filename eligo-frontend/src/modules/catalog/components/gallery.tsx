@@ -40,7 +40,6 @@ export function Gallery({ images, title, className }: GalleryProps) {
           fill
           sizes="(min-width: 1024px) 50vw, 100vw"
           className="object-cover"
-          unoptimized
         />
       </div>
 
@@ -67,7 +66,6 @@ export function Gallery({ images, title, className }: GalleryProps) {
                 fill
                 sizes="96px"
                 className="object-cover"
-                unoptimized
               />
             </button>
           ))}

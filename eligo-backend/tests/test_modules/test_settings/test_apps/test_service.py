@@ -5,7 +5,7 @@ Tests for app.modules.settings.apps.service
 import pytest
 from sqlalchemy import func, select
 
-from app.modules.settings.apps import service
+from app.modules.settings.apps import service, adapters
 from app.modules.settings.apps.model import AppStatus, StoreIntegration
 from app.modules.settings.apps.schema import AppInstall, AppUpdate
 
@@ -163,10 +163,22 @@ async def test_run_action_unsupported_action_raises(db_session):
         await service.run_action("resend_email", "send_sms", {}, db_session)
 
 
-async def test_run_action_hits_adapter_signature_bug(db_session):
-    """run_action calls adapters.run(app_code, action, credentials, settings,
-    payload) but adapters.run only accepts three arguments, so the happy path
-    raises TypeError (see app/modules/settings/apps/service.py)."""
+async def test_run_action_supported_action_dispatches_payload(db_session, monkeypatch):
+    captured: dict = {}
+
+    async def _fake_send_email(payload: dict) -> dict:
+        captured["payload"] = payload
+        return {"success": True, "id": "fake-id"}
+
+    monkeypatch.setitem(
+        adapters.ADAPTERS["resend_email"], "send_email", _fake_send_email
+    )
     await service.install(AppInstall(app_code="resend_email"), db_session)
-    with pytest.raises(TypeError):
-        await service.run_action("resend_email", "send_email", {}, db_session)
+
+    result = await service.run_action(
+        "resend_email", "send_email", {"to": "a@b.com"}, db_session
+    )
+    assert result["success"] is True
+    assert result["action"] == "send_email"
+    assert result["data"]["id"] == "fake-id"
+    assert captured["payload"] == {"to": "a@b.com"}

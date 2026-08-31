@@ -9,17 +9,15 @@ import {
   Question,
   ShieldCheck,
   ShoppingBag,
+  SpinnerIcon,
   Trash,
   Truck,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import {
-  useCartStore,
-  selectCart,
-  selectCartSubtotal,
-} from "@/modules/cart/store"
+import { useCartStore, selectCart, selectCartSubtotal } from "@/modules/cart/store"
 import { PageBreadcrumb } from "@/components/ui/page-breadcrumb"
 import { api, ApiError, getApiErrorMessage } from "@/lib/api-client"
+import { useNavigationLock } from "@/lib/use-navigation-lock"
 import {
   buildGuestOrderPayload,
   CHECKOUT_FIELD_ORDER,
@@ -38,6 +36,8 @@ const fieldClassName =
 
 const ORDER_CONFIRM_ERROR =
   "We could not confirm your order with the store. Nothing has been charged — your details and cart are unchanged, so you can safely try again."
+
+const LAST_ORDER_KEY = "eligo_last_order"
 
 function resolveSubmitErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -67,8 +67,19 @@ export default function CheckoutPage() {
   const [appliedDiscountCode, setAppliedDiscountCode] = useState("")
   const [discountLoading, setDiscountLoading] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [orderComplete, setOrderComplete] = useState(false)
-  const [completedOrderId, setCompletedOrderId] = useState("")
+  const [completedOrderId, setCompletedOrderId] = useState<string>(() => {
+    // Restore a previously-created order confirmation (e.g. after a refresh)
+    // so an accidental navigation can never lose the confirmation state.
+    if (typeof window === "undefined") return ""
+    try {
+      const saved = window.sessionStorage.getItem(LAST_ORDER_KEY)
+      const { orderNumber } = saved ? (JSON.parse(saved) as { orderNumber?: string }) : {}
+      return orderNumber || ""
+    } catch {
+      return ""
+    }
+  })
+  const [orderComplete, setOrderComplete] = useState(() => Boolean(completedOrderId))
   const [fieldErrors, setFieldErrors] = useState<CheckoutFieldErrors>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
   // Server-authoritative shipping configuration (charge + free threshold).
@@ -77,6 +88,9 @@ export default function CheckoutPage() {
   // Synchronous lock so rapid double clicks cannot fire a second request.
   const pendingRef = useRef(false)
   const inputRefs = useRef<Partial<Record<CheckoutFieldKey, HTMLElement | null>>>({})
+
+  const placeOrderInProgress = loading || orderComplete
+  useNavigationLock(placeOrderInProgress, { warnOnUnload: loading })
 
   useEffect(() => {
     let cancelled = false
@@ -207,6 +221,14 @@ const handleApplyDiscount = async () => {
       }
       setCompletedOrderId(parsed.orderNumber)
       setOrderComplete(true)
+      try {
+        window.sessionStorage.setItem(
+          LAST_ORDER_KEY,
+          JSON.stringify({ orderNumber: parsed.orderNumber, placedAt: Date.now() }),
+        )
+      } catch {
+        // Best-effort persistence; the in-memory confirmation still shows.
+      }
       clearCart()
     } catch (error) {
       setSubmitError(resolveSubmitErrorMessage(error))
@@ -224,7 +246,7 @@ const handleApplyDiscount = async () => {
             <CheckCircle className="h-12 w-12" weight="fill" />
           </span>
           <p className="mt-6 text-sm font-bold uppercase tracking-[0.18em] text-amber-800">
-            Order confirmed
+            ✅ Order placed successfully
           </p>
           <h1 className="mt-3 text-3xl font-bold text-black sm:text-4xl">
             Thank you for your order
@@ -237,6 +259,12 @@ const handleApplyDiscount = async () => {
           </div>
           <Link
             href="/products"
+            data-allow-navigation
+            onClick={() => {
+              try {
+                window.sessionStorage.removeItem(LAST_ORDER_KEY)
+              } catch {}
+            }}
             className="mt-8 inline-flex h-12 items-center justify-center rounded-[10px] bg-amber-800 px-8 text-sm font-semibold text-white transition-colors hover:bg-amber-900"
           >
             Continue shopping
@@ -453,6 +481,19 @@ const handleApplyDiscount = async () => {
           </aside>
         </form>
       </div>
+
+      {loading ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-white/80 backdrop-blur-sm"
+        >
+          <div className="flex flex-col items-center gap-4 rounded-[20px] bg-white px-10 py-8 shadow-xl">
+            <SpinnerIcon className="h-10 w-10 animate-spin text-amber-800" />
+            <p className="text-sm font-semibold text-neutral-700">Placing your order… do not leave this page.</p>
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }

@@ -35,7 +35,6 @@ export function ProductGallery({
           alt={title}
           fill
           priority
-          unoptimized
           className="object-cover object-center transition-opacity duration-300"
         />
       </div>
@@ -58,7 +57,6 @@ export function ProductGallery({
                 src={img}
                 alt={`${title} - Image ${idx + 1}`}
                 fill
-                unoptimized
                 className="object-cover"
               />
             </button>

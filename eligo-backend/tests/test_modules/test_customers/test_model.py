@@ -8,10 +8,10 @@ def test_customer_table_registered():
     assert "customers" in Base.metadata.tables
 
 
-def test_customer_email_unique_and_required():
+def test_customer_email_unique_and_optional():
     column = Customer.__table__.c.email
     assert column.unique is True
-    assert column.nullable is False
+    assert column.nullable is True
 
 
 async def test_customer_defaults(db_session):

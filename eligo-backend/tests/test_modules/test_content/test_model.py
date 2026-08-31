@@ -47,7 +47,10 @@ def test_enum_values():
 
 def test_metaobject_definition_columns():
     table = MetaobjectDefinition.__table__
-    for name in ("id", "name", "type_key", "available_on_storefront", "display_name", "created_at", "updated_at"):
+    for name in (
+        "id", "name", "type_key", "handle", "description", "status",
+        "publish_as_web_pages", "available_on_storefront", "created_at", "updated_at",
+    ):
         assert name in table.columns.keys()
     assert table.c.name.nullable is False
     assert table.c.type_key.nullable is False
@@ -63,7 +66,10 @@ async def test_metaobject_definition_insert_defaults(db_session):
 
     assert definition.id is not None
     assert definition.available_on_storefront is False
-    assert definition.display_name is None
+    assert definition.publish_as_web_pages is False
+    assert definition.handle is None
+    assert definition.description is None
+    assert definition.status == MetaobjectStatus.active
     assert definition.created_at is not None
     assert definition.updated_at is None
 
@@ -80,7 +86,7 @@ async def test_metaobject_definition_type_key_unique(db_session):
 
 def test_metaobject_entry_columns_and_fk():
     table = MetaobjectEntry.__table__
-    for name in ("id", "definition_id", "display_name", "handle", "fields", "status", "tags", "references_count"):
+    for name in ("id", "definition_id", "display_name", "code", "handle", "status", "tags", "references_count"):
         assert name in table.columns.keys()
     assert table.c.definition_id.nullable is False
     fk = list(table.c.definition_id.foreign_keys)[0]

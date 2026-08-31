@@ -73,7 +73,6 @@ export function RelatedProducts({ products = [], currentProductId }: RelatedProd
                         src={imageUrl}
                         alt={item.title}
                         fill
-                        unoptimized
                         className="object-cover group-hover/img:scale-105 transition-all duration-500 ease-in-out"
                       />
                     ) : (

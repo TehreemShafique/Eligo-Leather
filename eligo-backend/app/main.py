@@ -14,6 +14,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.db import models_registry 
 from app.modules.auth.router import router as auth_router
@@ -79,22 +80,27 @@ async def add_performance_and_cache_headers(request: Request, call_next):
     # Server response execution time tracking header
     response.headers["X-Response-Time"] = f"{process_time:.4f}s"
 
-    # API responses must never be cached publicly: the admin panel and
-    # storefront poll live data, and browser-cached JSON caused stale
-    # orders/customers to appear after a refresh.
+    # API responses are dynamic/live data (orders, inventory, admin state)
+    # and must never be cached by browsers or shared caches.
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
-    elif request.method == "GET" and not request.url.path.startswith("/api/v1/auth") and not "/leopard" in request.url.path:
-        # Cache Control Header for GET endpoints (Excluding auth and leopard real-time endpoints)
+    elif request.method == "GET" and request.url.path.startswith("/static/"):
+        # Public media uploads (product images, blog covers) — mutable but
+        # rarely change, so allow browser/CDN caching with revalidation.
+        response.headers["Cache-Control"] = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800"
+    elif request.method == "GET":
+        # Public read-only endpoints (health checks etc.).
         response.headers["Cache-Control"] = "public, max-age=60, s-maxage=3600, stale-while-revalidate=86400"
-    elif "/leopard" in request.url.path:
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-
-    # Explicitly ensure Gzip compression is NOT applied
-    if "Content-Encoding" in response.headers and "gzip" in response.headers["Content-Encoding"]:
-        del response.headers["Content-Encoding"]
+    else:
+        # Mutating or stateful requests — never cache.
+        response.headers["Cache-Control"] = "no-store"
 
     return response
+
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1000,
+)
 
 app.add_middleware(
     CORSMiddleware,

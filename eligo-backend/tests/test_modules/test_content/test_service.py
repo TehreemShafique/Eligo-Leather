@@ -145,11 +145,12 @@ async def test_file_crud_and_filters(db_session):
 
     fetched = await service.get_file(db_session, file_obj.id)
     assert fetched is not None
-    assert fetched.filename == "hero.png"
+    assert fetched.filename == "hero.webp"
+    assert fetched.mime_type == "image/webp"
     assert await service.get_file(db_session, 99999) is None
 
     assert len(await service.list_files(db_session, search="hero")) == 1
-    assert len(await service.list_files(db_session, mime_type="image/png")) == 1
+    assert len(await service.list_files(db_session, mime_type="image/webp")) == 1
     assert len(await service.list_files(db_session, mime_type="application/pdf")) == 0
 
     updated = await service.update_file(db_session, file_obj.id, FileUpdate(alt_text="New alt"))

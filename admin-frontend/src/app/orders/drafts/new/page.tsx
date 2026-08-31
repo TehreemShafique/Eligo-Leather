@@ -647,7 +647,7 @@ export default function AdminCreateDraftOrderPage() {
                           <td className="py-2 px-3 flex items-center gap-2.5" colSpan={3}>
                             <div className="w-8 h-8 rounded bg-gray-200 overflow-hidden relative shrink-0">
                               {p.image ? (
-                                <Image src={p.image} alt={p.title} fill unoptimized className="object-cover" />
+                                <Image src={p.image} alt={p.title} fill className="object-cover" />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-400"><ShoppingBag className="w-4 h-4" /></div>
                               )}

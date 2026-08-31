@@ -38,7 +38,7 @@ async def test_admin_routes_require_auth(client):
 
 async def test_admin_routes_reject_non_admin(client, auth_headers):
     resp = await client.get("/api/v1/settings/sales-channels", headers=auth_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------

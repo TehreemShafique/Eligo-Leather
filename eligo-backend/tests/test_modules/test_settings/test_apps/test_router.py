@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.modules.settings.account.model import UserSession
+from app.modules.settings.apps import adapters
 from app.modules.settings.apps.model import StoreIntegration
 
 
@@ -31,7 +32,7 @@ async def test_apps_require_auth(client):
 
 async def test_apps_require_admin(client, auth_headers):
     resp = await client.get("/api/v1/settings/apps", headers=auth_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 403
     assert resp.json()["detail"] == "User is Not admin"
 
 
@@ -213,10 +214,15 @@ async def test_action_unsupported_action_400(client, admin_headers, db_session):
     assert resp.status_code == 400
 
 
-async def test_action_supported_action_hits_adapter_signature_bug(client, admin_headers, db_session):
-    """The /action endpoint forwards to service.run_action, which passes five
-    positional args to adapters.run (which takes three), so the happy path
-    raises TypeError. Pinned so the breakage stays visible."""
+async def test_action_supported_action_dispatches_payload(client, admin_headers, db_session, monkeypatch):
+    """The /action endpoint forward the payload to the registered provider
+    adapter and returns the adapter result."""
+    async def _fake_send_email(payload: dict) -> dict:
+        return {"success": True, "id": "fake-id"}
+
+    monkeypatch.setitem(
+        adapters.ADAPTERS["resend_email"], "send_email", _fake_send_email
+    )
     await _reset_admin_sessions(db_session)
     installed = await client.post(
         "/api/v1/settings/apps/resend_email/install",
@@ -226,9 +232,13 @@ async def test_action_supported_action_hits_adapter_signature_bug(client, admin_
     assert installed.status_code == 201
 
     await _reset_admin_sessions(db_session)
-    with pytest.raises(TypeError):
-        await client.post(
-            "/api/v1/settings/apps/resend_email/action",
-            json={"action": "send_email", "payload": {}},
-            headers=admin_headers,
-        )
+    resp = await client.post(
+        "/api/v1/settings/apps/resend_email/action",
+        json={"action": "send_email", "payload": {"to": "a@b.com"}},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["action"] == "send_email"
+    assert body["data"]["id"] == "fake-id"

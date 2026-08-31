@@ -1,0 +1,2105 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: E:\eligo-leather\eligo-backend
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.14.2, Faker-40.36.0, asyncio-1.4.0, cov-7.1.0, env-1.7.0, mock-3.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1157 items
+
+tests\test_core\test_dependencies.py ..........                          [  0%]
+tests\test_core\test_root.py F                                           [  0%]
+tests\test_core\test_security.py .......                                 [  1%]
+tests\test_core\test_utils.py ...                                        [  1%]
+tests\test_db\test_database.py .......                                   [  2%]
+tests\test_modules\test_auth\test_model.py .......                       [  3%]
+tests\test_modules\test_auth\test_router.py .......F..                   [  3%]
+tests\test_modules\test_auth\test_service.py .......                     [  4%]
+tests\test_modules\test_catalog\test_model.py .......................... [  6%]
+...                                                                      [  7%]
+tests\test_modules\test_catalog\test_router.py ......................... [  9%]
+.......                                                                  [  9%]
+tests\test_modules\test_catalog\test_service.py ........................ [ 11%]
+........                                                                 [ 12%]
+tests\test_modules\test_channels\test_router.py ..                       [ 12%]
+tests\test_modules\test_channels\test_service.py .                       [ 12%]
+tests\test_modules\test_companies\test_model.py .........                [ 13%]
+tests\test_modules\test_companies\test_router.py ..................      [ 15%]
+tests\test_modules\test_companies\test_service.py .............          [ 16%]
+tests\test_modules\test_content\test_model.py ..FF.F.............        [ 17%]
+tests\test_modules\test_content\test_router.py ..F.........F..F......... [ 20%]
+.F...                                                                    [ 20%]
+tests\test_modules\test_content\test_service.py ..F.....                 [ 21%]
+tests\test_modules\test_customers\test_model.py .F.....                  [ 21%]
+tests\test_modules\test_customers\test_router.py F..F................... [ 23%]
+.....                                                                    [ 24%]
+tests\test_modules\test_customers\test_service.py ...................... [ 26%]
+                                                                         [ 26%]
+tests\test_modules\test_discounts\test_model.py ........                 [ 26%]
+tests\test_modules\test_discounts\test_router.py ......................  [ 28%]
+tests\test_modules\test_discounts\test_service.py .................      [ 30%]
+tests\test_modules\test_orders\test_leopard_load_sheet.py .......        [ 30%]
+tests\test_modules\test_orders\test_model.py ......F......               [ 31%]
+tests\test_modules\test_orders\test_public_create_order.py ............. [ 33%]
+...                                                                      [ 33%]
+tests\test_modules\test_orders\test_router.py .F........................ [ 35%]
+..................                                                       [ 37%]
+tests\test_modules\test_orders\test_service.py ......................... [ 39%]
+...........                                                              [ 40%]
+tests\test_modules\test_segments\test_model.py .....                     [ 40%]
+tests\test_modules\test_segments\test_router.py F...........             [ 41%]
+tests\test_modules\test_segments\test_service.py .......                 [ 42%]
+tests\test_modules\test_settings\test_account\test_router.py .F.....F... [ 43%]
+............................F.                                           [ 45%]
+tests\test_modules\test_settings\test_account\test_service.py .......... [ 46%]
+.............................                                            [ 49%]
+tests\test_modules\test_settings\test_apps\test_adapters.py ........     [ 49%]
+tests\test_modules\test_settings\test_apps\test_reviews.py ..........    [ 50%]
+tests\test_modules\test_settings\test_apps\test_router.py .F...........F [ 51%]
+                                                                         [ 51%]
+tests\test_modules\test_settings\test_apps\test_service.py ............. [ 53%]
+.F                                                                       [ 53%]
+tests\test_modules\test_settings\test_checkout\test_router.py F......... [ 54%]
+...                                                                      [ 54%]
+tests\test_modules\test_settings\test_checkout\test_service.py ......... [ 55%]
+............                                                             [ 56%]
+tests\test_modules\test_settings\test_customer_accounts\test_router.py . [ 56%]
+F......                                                                  [ 56%]
+tests\test_modules\test_settings\test_customer_accounts\test_service.py . [ 56%]
+...                                                                      [ 57%]
+tests\test_modules\test_settings\test_customer_events\test_router.py .F. [ 57%]
+............                                                             [ 58%]
+tests\test_modules\test_settings\test_customer_events\test_service.py .. [ 58%]
+..............                                                           [ 59%]
+tests\test_modules\test_settings\test_general\test_router.py ........... [ 60%]
+.                                                                        [ 60%]
+tests\test_modules\test_settings\test_general\test_service.py .......... [ 61%]
+                                                                         [ 61%]
+tests\test_modules\test_settings\test_languages\test_router.py FFFFFFFFF [ 62%]
+FFFFFFFFFF                                                               [ 63%]
+tests\test_modules\test_settings\test_languages\test_service.py ........ [ 64%]
+...........                                                              [ 65%]
+tests\test_modules\test_settings\test_legal_privacy\test_router.py ....F [ 65%]
+..........                                                               [ 66%]
+tests\test_modules\test_settings\test_legal_privacy\test_service.py .... [ 66%]
+...............                                                          [ 68%]
+tests\test_modules\test_settings\test_locations\test_router.py ......... [ 68%]
+.......                                                                  [ 69%]
+tests\test_modules\test_settings\test_locations\test_service.py ........ [ 70%]
+.......                                                                  [ 70%]
+tests\test_modules\test_settings\test_metafields_and_metaobjects\test_router.py . [ 70%]
+F...........................                                             [ 73%]
+tests\test_modules\test_settings\test_metafields_and_metaobjects\test_service.py . [ 73%]
+...................                                                      [ 74%]
+tests\test_modules\test_settings\test_notifications\test_router.py FF... [ 75%]
+..................                                                       [ 76%]
+tests\test_modules\test_settings\test_notifications\test_service.py .... [ 77%]
+................................                                         [ 80%]
+tests\test_modules\test_settings\test_payment\test_router.py F.......... [ 80%]
+..                                                                       [ 81%]
+tests\test_modules\test_settings\test_payment\test_service.py .......... [ 82%]
+.....                                                                    [ 82%]
+tests\test_modules\test_settings\test_roles\test_router.py ...F....      [ 83%]
+tests\test_modules\test_settings\test_roles\test_service.py ..FF..       [ 83%]
+tests\test_modules\test_settings\test_sales_channels\test_router.py .F.. [ 84%]
+...........................                                              [ 86%]
+tests\test_modules\test_settings\test_sales_channels\test_service.py ... [ 86%]
+..........................                                               [ 88%]
+tests\test_modules\test_settings\test_security\test_router.py ......     [ 89%]
+tests\test_modules\test_settings\test_security\test_service.py ......    [ 89%]
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py . [ 89%]
+F...FF.FFF.FF..FF..FF.FF..F                                              [ 92%]
+tests\test_modules\test_settings\test_shipping_and_delivery\test_service.py . [ 92%]
+...............................................                          [ 96%]
+tests\test_modules\test_settings\test_users\test_router.py .F........... [ 97%]
+                                                                         [ 97%]
+tests\test_modules\test_settings\test_users\test_service.py ...........  [ 98%]
+tests\test_modules\test_store\test_model.py ...                          [ 98%]
+tests\test_modules\test_store\test_router.py .......                     [ 99%]
+tests\test_modules\test_store\test_service.py .......                    [100%]
+
+================================== FAILURES ===================================
+__________________________________ test_root __________________________________
+tests\test_core\test_root.py:11: in test_root
+    assert response.json() == {
+E   AssertionError: assert {'message': '...e': 'enabled'} == {'message': 'hello'}
+E     
+E     Differing items:
+E     {'message': 'Eligo Backend API Engine Running'} != {'message': 'hello'}
+E     Left contains 1 more item:
+E     {'cache': 'enabled'}
+E     Use -v to get more diff
+___________________ test_me_with_invalid_token_returns_404 ____________________
+tests\test_modules\test_auth\test_router.py:96: in test_me_with_invalid_token_returns_404
+    assert response.status_code == 404
+E   assert 401 == 404
+E    +  where 401 = <Response [401 Unauthorized]>.status_code
+_____________________ test_metaobject_definition_columns ______________________
+tests\test_modules\test_content\test_model.py:51: in test_metaobject_definition_columns
+    assert name in table.columns.keys()
+E   AssertionError: assert 'display_name' in ['id', 'name', 'type_key', 'handle', 'description', 'status', ...]
+E    +  where ['id', 'name', 'type_key', 'handle', 'description', 'status', ...] = keys()
+E    +    where keys = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x000001F040B5DD50>.keys
+E    +      where <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x000001F040B5DD50> = Table('metaobject_definitions', MetaData(), Column('id', Integer(), table=<metaobject_definitions>, primary_key=True, ..._definitions>, onupdate=ColumnElementColumnDefault(<sqlalchemy.sql.functions.now at 0x1f040b34ec0; now>)), schema=None).columns
+_________________ test_metaobject_definition_insert_defaults __________________
+tests\test_modules\test_content\test_model.py:66: in test_metaobject_definition_insert_defaults
+    assert definition.display_name is None
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'MetaobjectDefinition' object has no attribute 'display_name'
+____________________ test_metaobject_entry_columns_and_fk _____________________
+tests\test_modules\test_content\test_model.py:84: in test_metaobject_entry_columns_and_fk
+    assert name in table.columns.keys()
+E   AssertionError: assert 'fields' in ['id', 'definition_id', 'display_name', 'code', 'handle', 'status', ...]
+E    +  where ['id', 'definition_id', 'display_name', 'code', 'handle', 'status', ...] = keys()
+E    +    where keys = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x000001F040B5F0B0>.keys
+E    +      where <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x000001F040B5F0B0> = Table('metaobject_entries', MetaData(), Column('id', Integer(), table=<metaobject_entries>, primary_key=True, nullable...ject_entries>, onupdate=ColumnElementColumnDefault(<sqlalchemy.sql.functions.now at 0x1f040b35010; now>)), schema=None).columns
+__________________ test_metaobject_definitions_requires_auth __________________
+tests\test_modules\test_content\test_router.py:47: in test_metaobject_definitions_requires_auth
+    assert resp.status_code == 401
+E   assert 200 == 401
+E    +  where 200 = <Response [200 OK]>.status_code
+____________________________ test_files_full_crud _____________________________
+tests\test_modules\test_content\test_router.py:206: in test_files_full_crud
+    assert body["filename"] == "hero.png"
+E   AssertionError: assert 'hero.webp' == 'hero.png'
+E     
+E     - hero.png
+E     + hero.webp
+__________________________ test_menus_requires_auth ___________________________
+tests\test_modules\test_content\test_router.py:254: in test_menus_requires_auth
+    assert resp.status_code == 401
+E   assert 200 == 401
+E    +  where 200 = <Response [200 OK]>.status_code
+________________________ test_blog_posts_requires_auth ________________________
+tests\test_modules\test_content\test_router.py:425: in test_blog_posts_requires_auth
+    assert resp.status_code == 401
+E   assert 200 == 401
+E    +  where 200 = <Response [200 OK]>.status_code
+_________________________ test_file_crud_and_filters __________________________
+tests\test_modules\test_content\test_service.py:148: in test_file_crud_and_filters
+    assert fetched.filename == "hero.png"
+E   AssertionError: assert 'hero.webp' == 'hero.png'
+E     
+E     - hero.png
+E     + hero.webp
+___________________ test_customer_email_unique_and_required ___________________
+tests\test_modules\test_customers\test_model.py:14: in test_customer_email_unique_and_required
+    assert column.nullable is False
+E   AssertionError: assert True is False
+E    +  where True = Column('email', String(), table=<customers>).nullable
+_____________________________ test_requires_auth ______________________________
+tests\test_modules\test_customers\test_router.py:20: in test_requires_auth
+    assert (await client.get("/api/v1/customers/")).status_code == 401
+E   assert 200 == 401
+E    +  where 200 = <Response [200 OK]>.status_code
+______________________ test_create_customer_invalid_body ______________________
+tests\test_modules\test_customers\test_router.py:55: in test_create_customer_invalid_body
+    assert resp.status_code == 422
+E   assert 201 == 422
+E    +  where 201 = <Response [201 Created]>.status_code
+______________________________ test_enum_values _______________________________
+tests\test_modules\test_orders\test_model.py:110: in test_enum_values
+    assert {e.value for e in DeliveryStatus} == {
+E   AssertionError: assert {'booked', 'd...pending', ...} == {'delivered',...', 'returned'}
+E     
+E     Extra items in the left set:
+E     'booked'
+E     'picked_up'
+E     Use -v to get more diff
+______________________________ test_create_order ______________________________
+tests\test_modules\test_orders\test_router.py:35: in test_create_order
+    response = await client.post(
+.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:198: in __call__
+    raise app_exc
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:143: in app
+    await response(scope, receive, send)
+.venv\Lib\site-packages\starlette\responses.py:170: in __call__
+    await self.background()
+.venv\Lib\site-packages\starlette\background.py:36: in __call__
+    await task()
+.venv\Lib\site-packages\starlette\background.py:21: in __call__
+    await self.func(*self.args, **self.kwargs)
+app\modules\settings\notifications\service.py:776: in background_dispatch_order_confirmation
+    result = await db.execute(
+.venv\Lib\site-packages\sqlalchemy\ext\asyncio\session.py:448: in execute
+    result = await greenlet_spawn(
+.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py:201: in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:2373: in execute
+    return self._execute_internal(
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:2261: in _execute_internal
+    conn = self._connection_for_bind(bind)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:2113: in _connection_for_bind
+    return trans._connection_for_bind(engine, execution_options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in _connection_for_bind
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:1191: in _connection_for_bind
+    conn = bind.connect()
+           ^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:3295: in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:144: in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:3319: in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\pool\base.py:448: in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\pool\base.py:1272: in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\pool\base.py:712: in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\pool\impl.py:178: in _do_get
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\pool\impl.py:176: in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\pool\base.py:389: in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\pool\base.py:674: in __init__
+    self.__connect()
+.venv\Lib\site-packages\sqlalchemy\pool\base.py:900: in __connect
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\pool\base.py:896: in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\create.py:667: in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:630: in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py:955: in connect
+    await_only(creator_fn(*arg, **kw)),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py:132: in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py:196: in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+.venv\Lib\site-packages\asyncpg\connection.py:2443: in connect
+    return await connect_utils._connect(
+.venv\Lib\site-packages\asyncpg\connect_utils.py:1249: in _connect
+    raise last_error or exceptions.TargetServerAttributeNotMatched(
+.venv\Lib\site-packages\asyncpg\connect_utils.py:1218: in _connect
+    conn = await _connect_addr(
+.venv\Lib\site-packages\asyncpg\connect_utils.py:1054: in _connect_addr
+    return await __connect_addr(params, True, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\asyncpg\connect_utils.py:1099: in __connect_addr
+    tr, pr = await connector
+             ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\asyncpg\connect_utils.py:969: in _create_ssl_connection
+    tr, pr = await loop.create_connection(
+C:\Users\C-Zone\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py:1176: in create_connection
+    raise exceptions[0]
+C:\Users\C-Zone\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py:1146: in create_connection
+    sock = await self._connect_sock(
+C:\Users\C-Zone\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py:1045: in _connect_sock
+    await self.sock_connect(sock, address)
+C:\Users\C-Zone\AppData\Local\Programs\Python\Python313\Lib\asyncio\proactor_events.py:728: in sock_connect
+    return await self._proactor.connect(sock, address)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\C-Zone\AppData\Local\Programs\Python\Python313\Lib\asyncio\windows_events.py:807: in _poll
+    value = callback(transferred, key, ov)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\C-Zone\AppData\Local\Programs\Python\Python313\Lib\asyncio\windows_events.py:600: in finish_connect
+    ov.getresult()
+E   ConnectionRefusedError: [WinError 1225] The remote computer refused the network connection
+_____________________________ test_requires_auth ______________________________
+tests\test_modules\test_segments\test_router.py:20: in test_requires_auth
+    assert resp.status_code == 401
+E   assert 200 == 401
+E    +  where 200 = <Response [200 OK]>.status_code
+_________________________ test_account_requires_admin _________________________
+tests\test_modules\test_settings\test_account\test_router.py:57: in test_account_requires_admin
+    assert resp.status_code == 404
+E   assert 403 == 404
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+_____________________________ test_list_languages _____________________________
+tests\test_modules\test_settings\test_account\test_router.py:130: in test_list_languages
+    assert len(body) > 10
+E   AssertionError: assert 1 > 10
+E    +  where 1 = len([{'code': 'en-US', 'name': 'English', 'native_name': 'English'}])
+________________ test_revoke_current_session_invalidates_token ________________
+tests\test_modules\test_settings\test_account\test_router.py:479: in test_revoke_current_session_invalidates_token
+    assert resp.status_code == 404
+E   assert 401 == 404
+E    +  where 401 = <Response [401 Unauthorized]>.status_code
+___________________________ test_apps_require_admin ___________________________
+tests\test_modules\test_settings\test_apps\test_router.py:34: in test_apps_require_admin
+    assert resp.status_code == 404
+E   assert 403 == 404
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+___________ test_action_supported_action_hits_adapter_signature_bug ___________
+tests\test_modules\test_settings\test_apps\test_router.py:230: in test_action_supported_action_hits_adapter_signature_bug
+    await client.post(
+.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:698: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:350: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\modules\settings\apps\router.py:101: in run_app_action
+    return await service.run_action(app_code, data.action, data.payload, db)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\modules\settings\apps\service.py:310: in run_action
+    result = await adapters.run(app_code, action, payload)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\modules\settings\apps\adapters\__init__.py:280: in run
+    return await adapter(payload)
+           ^^^^^^^^^^^^^^^^^^^^^^
+app\modules\settings\apps\adapters\__init__.py:62: in _resend_send_email
+    "to": [payload["to"]] if isinstance(payload["to"], str) else payload["to"],
+                                        ^^^^^^^^^^^^^
+E   KeyError: 'to'
+_________________ test_run_action_hits_adapter_signature_bug __________________
+tests\test_modules\test_settings\test_apps\test_service.py:172: in test_run_action_hits_adapter_signature_bug
+    await service.run_action("resend_email", "send_email", {}, db_session)
+app\modules\settings\apps\service.py:310: in run_action
+    result = await adapters.run(app_code, action, payload)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\modules\settings\apps\adapters\__init__.py:280: in run
+    return await adapter(payload)
+           ^^^^^^^^^^^^^^^^^^^^^^
+app\modules\settings\apps\adapters\__init__.py:62: in _resend_send_email
+    "to": [payload["to"]] if isinstance(payload["to"], str) else payload["to"],
+                                        ^^^^^^^^^^^^^
+E   KeyError: 'to'
+_________________________ test_configs_require_admin __________________________
+tests\test_modules\test_settings\test_checkout\test_router.py:25: in test_configs_require_admin
+    assert resp.status_code == 404
+E   assert 403 == 404
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+__________________________ test_routes_require_admin __________________________
+tests\test_modules\test_settings\test_customer_accounts\test_router.py:14: in test_routes_require_admin
+    assert resp.status_code == 404
+E   assert 403 == 404
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+_______________________ test_admin_routes_require_admin _______________________
+tests\test_modules\test_settings\test_customer_events\test_router.py:39: in test_admin_routes_require_admin
+    assert resp.status_code == 404
+E   assert 403 == 404
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+__________________________ test_routes_require_auth ___________________________
+tests\test_modules\test_settings\test_languages\test_router.py:18: in test_routes_require_auth
+    assert (await client.get(f"{BASE}")).status_code == 401
+E   assert 404 == 401
+E    +  where 404 = <Response [404 Not Found]>.status_code
+__________________________ test_routes_require_admin __________________________
+tests\test_modules\test_settings\test_languages\test_router.py:27: in test_routes_require_admin
+    assert resp.json()["detail"] == "User is Not admin"
+E   AssertionError: assert 'Not Found' == 'User is Not admin'
+E     
+E     - User is Not admin
+E     + Not Found
+_____________________________ test_seed_languages _____________________________
+tests\test_modules\test_settings\test_languages\test_router.py:32: in test_seed_languages
+    assert resp.status_code == 204
+E   assert 404 == 204
+E    +  where 404 = <Response [404 Not Found]>.status_code
+________________________ test_list_available_languages ________________________
+tests\test_modules\test_settings\test_languages\test_router.py:45: in test_list_available_languages
+    assert resp.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+______________________________ test_add_language ______________________________
+tests\test_modules\test_settings\test_languages\test_router.py:55: in test_add_language
+    assert resp.status_code == 201
+E   assert 404 == 201
+E    +  where 404 = <Response [404 Not Found]>.status_code
+_____________________ test_add_language_invalid_code_400 ______________________
+tests\test_modules\test_settings\test_languages\test_router.py:67: in test_add_language_invalid_code_400
+    assert resp.status_code == 400
+E   assert 404 == 400
+E    +  where 404 = <Response [404 Not Found]>.status_code
+_______________________ test_add_language_duplicate_400 _______________________
+tests\test_modules\test_settings\test_languages\test_router.py:76: in test_add_language_duplicate_400
+    assert resp.status_code == 400
+E   assert 404 == 400
+E    +  where 404 = <Response [404 Not Found]>.status_code
+_____________________ test_add_language_invalid_body_422 ______________________
+tests\test_modules\test_settings\test_languages\test_router.py:84: in test_add_language_invalid_body_422
+    assert resp.status_code == 422
+E   assert 404 == 422
+E    +  where 404 = <Response [404 Not Found]>.status_code
+______________________________ test_get_language ______________________________
+tests\test_modules\test_settings\test_languages\test_router.py:89: in test_get_language
+    lang_id = (await client.get(f"{BASE}", headers=await _admin_headers(db_session, admin))).json()[0]["id"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 0
+________________________ test_get_language_missing_404 ________________________
+tests\test_modules\test_settings\test_languages\test_router.py:99: in test_get_language_missing_404
+    assert resp.json()["detail"] == "Language not found"
+E   AssertionError: assert 'Not Found' == 'Language not found'
+E     
+E     - Language not found
+E     + Not Found
+____________________________ test_update_language _____________________________
+tests\test_modules\test_settings\test_languages\test_router.py:104: in test_update_language
+    lang_id = (await client.get(f"{BASE}", headers=await _admin_headers(db_session, admin))).json()[0]["id"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 0
+______________________ test_update_language_missing_404 _______________________
+tests\test_modules\test_settings\test_languages\test_router.py:120: in test_update_language_missing_404
+    assert resp.json()["detail"] == "Language not found"
+E   AssertionError: assert 'Not Found' == 'Language not found'
+E     
+E     - Language not found
+E     + Not Found
+__________________________ test_set_default_language __________________________
+tests\test_modules\test_settings\test_languages\test_router.py:127: in test_set_default_language
+    urdu_id = next(lang["id"] for lang in body if lang["language_code"] == "ur")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_modules\test_settings\test_languages\test_router.py:127: in <genexpr>
+    urdu_id = next(lang["id"] for lang in body if lang["language_code"] == "ur")
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: string indices must be integers, not 'str'
+____________________ test_set_default_language_missing_404 ____________________
+tests\test_modules\test_settings\test_languages\test_router.py:140: in test_set_default_language_missing_404
+    assert resp.json()["detail"] == "Language not found"
+E   AssertionError: assert 'Not Found' == 'Language not found'
+E     
+E     - Language not found
+E     + Not Found
+_____________________ test_publish_and_unpublish_language _____________________
+tests\test_modules\test_settings\test_languages\test_router.py:146: in test_publish_and_unpublish_language
+    urdu_id = next(lang["id"] for lang in body if lang["language_code"] == "ur")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_modules\test_settings\test_languages\test_router.py:146: in <genexpr>
+    urdu_id = next(lang["id"] for lang in body if lang["language_code"] == "ur")
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: string indices must be integers, not 'str'
+_____________________ test_unpublish_default_language_400 _____________________
+tests\test_modules\test_settings\test_languages\test_router.py:159: in test_unpublish_default_language_400
+    en_id = (await client.get(f"{BASE}", headers=await _admin_headers(db_session, admin))).json()[0]["id"]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 0
+____________________________ test_delete_language _____________________________
+tests\test_modules\test_settings\test_languages\test_router.py:169: in test_delete_language
+    urdu_id = next(lang["id"] for lang in body if lang["language_code"] == "ur")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_modules\test_settings\test_languages\test_router.py:169: in <genexpr>
+    urdu_id = next(lang["id"] for lang in body if lang["language_code"] == "ur")
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: string indices must be integers, not 'str'
+______________________ test_delete_default_language_400 _______________________
+tests\test_modules\test_settings\test_languages\test_router.py:180: in test_delete_default_language_400
+    en_id = (await client.get(f"{BASE}", headers=await _admin_headers(db_session, admin))).json()[0]["id"]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 0
+______________________ test_delete_language_missing_404 _______________________
+tests\test_modules\test_settings\test_languages\test_router.py:190: in test_delete_language_missing_404
+    assert resp.json()["detail"] == "Language not found"
+E   AssertionError: assert 'Not Found' == 'Language not found'
+E     
+E     - Language not found
+E     + Not Found
+_______________________ test_admin_routes_require_admin _______________________
+tests\test_modules\test_settings\test_legal_privacy\test_router.py:69: in test_admin_routes_require_admin
+    assert resp.status_code in (401, 403)
+E   assert 200 in (401, 403)
+E    +  where 200 = <Response [200 OK]>.status_code
+_____________________ test_admin_routes_reject_non_admin ______________________
+tests\test_modules\test_settings\test_metafields_and_metaobjects\test_router.py:29: in test_admin_routes_reject_non_admin
+    assert resp.status_code == 404
+E   assert 403 == 404
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+_______________________ test_admin_routes_require_auth ________________________
+tests\test_modules\test_settings\test_notifications\test_router.py:42: in test_admin_routes_require_auth
+    assert resp.status_code in (401, 403)
+E   assert 200 in (401, 403)
+E    +  where 200 = <Response [200 OK]>.status_code
+_____________________ test_admin_routes_reject_non_admin ______________________
+tests\test_modules\test_settings\test_notifications\test_router.py:47: in test_admin_routes_reject_non_admin
+    assert resp.status_code == 404
+E   assert 200 == 404
+E    +  where 200 = <Response [200 OK]>.status_code
+__________________________ test_routes_require_admin __________________________
+tests\test_modules\test_settings\test_payment\test_router.py:25: in test_routes_require_admin
+    assert resp.status_code == 404
+E   assert 403 == 404
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+_____________________ test_list_roles_hits_user_count_bug _____________________
+tests\test_modules\test_settings\test_roles\test_router.py:51: in test_list_roles_hits_user_count_bug
+    with pytest.raises(AttributeError):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE AttributeError
+_____________________ test_list_roles_empty_returns_none ______________________
+tests\test_modules\test_settings\test_roles\test_service.py:37: in test_list_roles_empty_returns_none
+    assert await services.list_roles(db_session) is None
+E   assert [] is None
+___________________ test_list_roles_raises_attribute_error ____________________
+tests\test_modules\test_settings\test_roles\test_service.py:47: in test_list_roles_raises_attribute_error
+    with pytest.raises(AttributeError):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE AttributeError
+_____________________ test_admin_routes_reject_non_admin ______________________
+tests\test_modules\test_settings\test_sales_channels\test_router.py:41: in test_admin_routes_reject_non_admin
+    assert resp.status_code == 404
+E   assert 403 == 404
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+_____________________ test_admin_routes_reject_non_admin ______________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:36: in test_admin_routes_reject_non_admin
+    assert resp.status_code == 404
+E   assert 403 == 404
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+_____________________________ test_seed_defaults ______________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:81: in test_seed_defaults
+    resp = await client.get("/api/v1/settings/shipping-and-delivery/carriers", headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1768: in get
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+___________________________ test_carriers_full_crud ___________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:103: in test_carriers_full_crud
+    resp = await client.get("/api/v1/settings/shipping-and-delivery/carriers", headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1768: in get
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+__________________________ test_carriers_missing_404 __________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:133: in test_carriers_missing_404
+    resp = await client.patch("/api/v1/settings/shipping-and-delivery/carriers/99999", json={"name": "x"}, headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1933: in patch
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+_____________________ test_carriers_list_filters_inactive _____________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:147: in test_carriers_list_filters_inactive
+    await client.patch(
+.venv\Lib\site-packages\httpx\_client.py:1933: in patch
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+___________________________ test_profiles_full_crud ___________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:182: in test_profiles_full_crud
+    resp = await client.get("/api/v1/settings/shipping-and-delivery/profiles", headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1768: in get
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+__________________________ test_profiles_missing_404 __________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:212: in test_profiles_missing_404
+    resp = await client.patch("/api/v1/settings/shipping-and-delivery/profiles/99999", json={"name": "x"}, headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1933: in patch
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+____________________________ test_zones_full_crud _____________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:231: in test_zones_full_crud
+    resp = await client.post(
+.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+___________________________ test_zones_missing_404 ____________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:283: in test_zones_missing_404
+    resp = await client.patch("/api/v1/settings/shipping-and-delivery/zones/99999", json={"name": "x"}, headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1933: in patch
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+____________________________ test_rates_full_crud _____________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:301: in test_rates_full_crud
+    zone = await client.post(
+.venv\Lib\site-packages\httpx\_client.py:1859: in post
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+___________________________ test_rates_missing_404 ____________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:360: in test_rates_missing_404
+    resp = await client.patch("/api/v1/settings/shipping-and-delivery/rates/99999", json={"amount": 10}, headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1933: in patch
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+__________________________ test_locations_full_crud ___________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:384: in test_locations_full_crud
+    resp = await client.get("/api/v1/settings/shipping-and-delivery/locations", headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1768: in get
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+_________________________ test_locations_missing_404 __________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:414: in test_locations_missing_404
+    resp = await client.patch("/api/v1/settings/shipping-and-delivery/locations/99999", json={"name": "x"}, headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1933: in patch
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+___________________________ test_packages_full_crud ___________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:437: in test_packages_full_crud
+    resp = await client.get("/api/v1/settings/shipping-and-delivery/packages", headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1768: in get
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+__________________________ test_packages_missing_404 __________________________
+tests\test_modules\test_settings\test_shipping_and_delivery\test_router.py:477: in test_packages_missing_404
+    resp = await client.patch("/api/v1/settings/shipping-and-delivery/packages/99999", json={"name": "x"}, headers=admin_headers)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1933: in patch
+    return await self.request(
+.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_transports\asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:90: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\cors.py:88: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\base.py:193: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\main.py:76: in add_performance_and_cache_headers
+    response: Response = await call_next(request)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:168: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:144: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:660: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2692: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1784: in _handle_selected
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1773: in handle
+    await self.original_router.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2747: in handle
+    await included_router._handle_selected(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1793: in _handle_selected
+    await original_route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1272: in handle
+    await app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:156: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:142: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:479: in app
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:680: in solve_dependencies
+    solved_result = await solve_dependencies(
+.venv\Lib\site-packages\fastapi\dependencies\utils.py:714: in solve_dependencies
+    solved = await call(**solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app\core\dependencies.py:64: in get_current_user
+    if last_seen is None or (now - last_seen) > SESSION_TOUCH_INTERVAL:
+                             ^^^^^^^^^^^^^^^
+E   TypeError: can't subtract offset-naive and offset-aware datetimes
+__________________________ test_users_require_admin ___________________________
+tests\test_modules\test_settings\test_users\test_router.py:39: in test_users_require_admin
+    assert resp.status_code == 404
+E   assert 403 == 404
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+============================== warnings summary ===============================
+app\modules\store\schema.py:25
+  E:\eligo-leather\eligo-backend\app\modules\store\schema.py:25: UserWarning: Field name "schema_json" in "StoreSchemaCreate" shadows an attribute in parent "BaseModel"
+    class StoreSchemaCreate(BaseModel):
+
+app\modules\store\schema.py:34
+  E:\eligo-leather\eligo-backend\app\modules\store\schema.py:34: UserWarning: Field name "schema_json" in "StoreSchemaUpdate" shadows an attribute in parent "BaseModel"
+    class StoreSchemaUpdate(BaseModel):
+
+app\modules\store\schema.py:43
+  E:\eligo-leather\eligo-backend\app\modules\store\schema.py:43: UserWarning: Field name "schema_json" in "StoreSchemaOut" shadows an attribute in parent "BaseModel"
+    class StoreSchemaOut(BaseModel):
+
+app\modules\store\schema.py:56
+  E:\eligo-leather\eligo-backend\app\modules\store\schema.py:56: UserWarning: Field name "schema_json" in "PublicStoreSchemaOut" shadows an attribute in parent "BaseModel"
+    class PublicStoreSchemaOut(BaseModel):
+
+app\main.py:64
+  E:\eligo-leather\eligo-backend\app\main.py:64: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+.venv\Lib\site-packages\fastapi\applications.py:4675
+  E:\eligo-leather\eligo-backend\.venv\Lib\site-packages\fastapi\applications.py:4675: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_core/test_dependencies.py: 10 warnings
+tests/test_core/test_root.py: 1 warning
+tests/test_core/test_security.py: 7 warnings
+tests/test_core/test_utils.py: 3 warnings
+tests/test_db/test_database.py: 7 warnings
+tests/test_modules/test_auth/test_model.py: 7 warnings
+tests/test_modules/test_auth/test_router.py: 10 warnings
+tests/test_modules/test_auth/test_service.py: 7 warnings
+tests/test_modules/test_catalog/test_model.py: 29 warnings
+tests/test_modules/test_catalog/test_router.py: 32 warnings
+tests/test_modules/test_catalog/test_service.py: 32 warnings
+tests/test_modules/test_channels/test_router.py: 2 warnings
+tests/test_modules/test_channels/test_service.py: 1 warning
+tests/test_modules/test_companies/test_model.py: 9 warnings
+tests/test_modules/test_companies/test_router.py: 18 warnings
+tests/test_modules/test_companies/test_service.py: 13 warnings
+tests/test_modules/test_content/test_model.py: 19 warnings
+tests/test_modules/test_content/test_router.py: 30 warnings
+tests/test_modules/test_content/test_service.py: 8 warnings
+tests/test_modules/test_customers/test_model.py: 7 warnings
+tests/test_modules/test_customers/test_router.py: 28 warnings
+tests/test_modules/test_customers/test_service.py: 22 warnings
+tests/test_modules/test_discounts/test_model.py: 8 warnings
+tests/test_modules/test_discounts/test_router.py: 22 warnings
+tests/test_modules/test_discounts/test_service.py: 17 warnings
+tests/test_modules/test_orders/test_leopard_load_sheet.py: 7 warnings
+tests/test_modules/test_orders/test_model.py: 13 warnings
+tests/test_modules/test_orders/test_public_create_order.py: 16 warnings
+tests/test_modules/test_orders/test_router.py: 44 warnings
+tests/test_modules/test_orders/test_service.py: 36 warnings
+tests/test_modules/test_segments/test_model.py: 5 warnings
+tests/test_modules/test_segments/test_router.py: 12 warnings
+tests/test_modules/test_segments/test_service.py: 7 warnings
+tests/test_modules/test_settings/test_account/test_router.py: 41 warnings
+tests/test_modules/test_settings/test_account/test_service.py: 39 warnings
+tests/test_modules/test_settings/test_apps/test_adapters.py: 8 warnings
+tests/test_modules/test_settings/test_apps/test_reviews.py: 10 warnings
+tests/test_modules/test_settings/test_apps/test_router.py: 14 warnings
+tests/test_modules/test_settings/test_apps/test_service.py: 15 warnings
+tests/test_modules/test_settings/test_checkout/test_router.py: 13 warnings
+tests/test_modules/test_settings/test_checkout/test_service.py: 21 warnings
+tests/test_modules/test_settings/test_customer_accounts/test_router.py: 8 warnings
+tests/test_modules/test_settings/test_customer_accounts/test_service.py: 4 warnings
+tests/test_modules/test_settings/test_customer_events/test_router.py: 15 warnings
+tests/test_modules/test_settings/test_customer_events/test_service.py: 16 warnings
+tests/test_modules/test_settings/test_general/test_router.py: 12 warnings
+tests/test_modules/test_settings/test_general/test_service.py: 10 warnings
+tests/test_modules/test_settings/test_languages/test_router.py: 19 warnings
+tests/test_modules/test_settings/test_languages/test_service.py: 19 warnings
+tests/test_modules/test_settings/test_legal_privacy/test_router.py: 15 warnings
+tests/test_modules/test_settings/test_legal_privacy/test_service.py: 19 warnings
+tests/test_modules/test_settings/test_locations/test_router.py: 16 warnings
+tests/test_modules/test_settings/test_locations/test_service.py: 15 warnings
+tests/test_modules/test_settings/test_metafields_and_metaobjects/test_router.py: 29 warnings
+tests/test_modules/test_settings/test_metafields_and_metaobjects/test_service.py: 20 warnings
+tests/test_modules/test_settings/test_notifications/test_router.py: 23 warnings
+tests/test_modules/test_settings/test_notifications/test_service.py: 36 warnings
+tests/test_modules/test_settings/test_payment/test_router.py: 13 warnings
+tests/test_modules/test_settings/test_payment/test_service.py: 15 warnings
+tests/test_modules/test_settings/test_roles/test_router.py: 8 warnings
+tests/test_modules/test_settings/test_roles/test_service.py: 6 warnings
+tests/test_modules/test_settings/test_sales_channels/test_router.py: 31 warnings
+tests/test_modules/test_settings/test_sales_channels/test_service.py: 29 warnings
+tests/test_modules/test_settings/test_security/test_router.py: 6 warnings
+tests/test_modules/test_settings/test_security/test_service.py: 6 warnings
+tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py: 28 warnings
+tests/test_modules/test_settings/test_shipping_and_delivery/test_service.py: 48 warnings
+tests/test_modules/test_settings/test_users/test_router.py: 13 warnings
+tests/test_modules/test_settings/test_users/test_service.py: 11 warnings
+tests/test_modules/test_store/test_model.py: 3 warnings
+tests/test_modules/test_store/test_router.py: 7 warnings
+tests/test_modules/test_store/test_service.py: 7 warnings
+  <sys>:0: SAWarning: Can't sort tables for DROP; an unresolvable foreign key dependency exists between tables: customer_addresses, customers; and backend does not support ALTER.  To restore at least a partial sort, apply use_alter=True to ForeignKey and ForeignKeyConstraint objects involved in the cycle to mark these as known cycles that will be ignored.
+
+tests/test_modules/test_discounts/test_router.py::test_public_verify_coupon_applies_admin_promo_discount
+tests/test_modules/test_discounts/test_router.py::test_public_verify_coupon_applies_admin_promo_discount
+tests/test_modules/test_discounts/test_router.py::test_public_verify_coupon_rejects_expired_and_disabled_promos
+tests/test_modules/test_orders/test_public_create_order.py::test_create_order_applies_valid_promo_discount_server_side
+  E:\eligo-leather\eligo-backend\app\modules\discounts\service.py:303: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow()
+
+tests/test_modules/test_settings/test_sales_channels/test_service.py::test_receive_webhook_marks_failed_event
+  E:\eligo-leather\eligo-backend\app\modules\settings\sales_channels\service.py:453: RuntimeWarning: coroutine 'AsyncSession.execute' was never awaited
+    event.error = str(exc)[:2000]
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_core/test_root.py::test_root - AssertionError: assert {'mes...
+FAILED tests/test_modules/test_auth/test_router.py::test_me_with_invalid_token_returns_404
+FAILED tests/test_modules/test_content/test_model.py::test_metaobject_definition_columns
+FAILED tests/test_modules/test_content/test_model.py::test_metaobject_definition_insert_defaults
+FAILED tests/test_modules/test_content/test_model.py::test_metaobject_entry_columns_and_fk
+FAILED tests/test_modules/test_content/test_router.py::test_metaobject_definitions_requires_auth
+FAILED tests/test_modules/test_content/test_router.py::test_files_full_crud
+FAILED tests/test_modules/test_content/test_router.py::test_menus_requires_auth
+FAILED tests/test_modules/test_content/test_router.py::test_blog_posts_requires_auth
+FAILED tests/test_modules/test_content/test_service.py::test_file_crud_and_filters
+FAILED tests/test_modules/test_customers/test_model.py::test_customer_email_unique_and_required
+FAILED tests/test_modules/test_customers/test_router.py::test_requires_auth
+FAILED tests/test_modules/test_customers/test_router.py::test_create_customer_invalid_body
+FAILED tests/test_modules/test_orders/test_model.py::test_enum_values - Asser...
+FAILED tests/test_modules/test_orders/test_router.py::test_create_order - Con...
+FAILED tests/test_modules/test_segments/test_router.py::test_requires_auth - ...
+FAILED tests/test_modules/test_settings/test_account/test_router.py::test_account_requires_admin
+FAILED tests/test_modules/test_settings/test_account/test_router.py::test_list_languages
+FAILED tests/test_modules/test_settings/test_account/test_router.py::test_revoke_current_session_invalidates_token
+FAILED tests/test_modules/test_settings/test_apps/test_router.py::test_apps_require_admin
+FAILED tests/test_modules/test_settings/test_apps/test_router.py::test_action_supported_action_hits_adapter_signature_bug
+FAILED tests/test_modules/test_settings/test_apps/test_service.py::test_run_action_hits_adapter_signature_bug
+FAILED tests/test_modules/test_settings/test_checkout/test_router.py::test_configs_require_admin
+FAILED tests/test_modules/test_settings/test_customer_accounts/test_router.py::test_routes_require_admin
+FAILED tests/test_modules/test_settings/test_customer_events/test_router.py::test_admin_routes_require_admin
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_routes_require_auth
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_routes_require_admin
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_seed_languages
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_list_available_languages
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_add_language
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_add_language_invalid_code_400
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_add_language_duplicate_400
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_add_language_invalid_body_422
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_get_language
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_get_language_missing_404
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_update_language
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_update_language_missing_404
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_set_default_language
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_set_default_language_missing_404
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_publish_and_unpublish_language
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_unpublish_default_language_400
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_delete_language
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_delete_default_language_400
+FAILED tests/test_modules/test_settings/test_languages/test_router.py::test_delete_language_missing_404
+FAILED tests/test_modules/test_settings/test_legal_privacy/test_router.py::test_admin_routes_require_admin
+FAILED tests/test_modules/test_settings/test_metafields_and_metaobjects/test_router.py::test_admin_routes_reject_non_admin
+FAILED tests/test_modules/test_settings/test_notifications/test_router.py::test_admin_routes_require_auth
+FAILED tests/test_modules/test_settings/test_notifications/test_router.py::test_admin_routes_reject_non_admin
+FAILED tests/test_modules/test_settings/test_payment/test_router.py::test_routes_require_admin
+FAILED tests/test_modules/test_settings/test_roles/test_router.py::test_list_roles_hits_user_count_bug
+FAILED tests/test_modules/test_settings/test_roles/test_service.py::test_list_roles_empty_returns_none
+FAILED tests/test_modules/test_settings/test_roles/test_service.py::test_list_roles_raises_attribute_error
+FAILED tests/test_modules/test_settings/test_sales_channels/test_router.py::test_admin_routes_reject_non_admin
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_admin_routes_reject_non_admin
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_seed_defaults
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_carriers_full_crud
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_carriers_missing_404
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_carriers_list_filters_inactive
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_profiles_full_crud
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_profiles_missing_404
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_zones_full_crud
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_zones_missing_404
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_rates_full_crud
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_rates_missing_404
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_locations_full_crud
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_locations_missing_404
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_packages_full_crud
+FAILED tests/test_modules/test_settings/test_shipping_and_delivery/test_router.py::test_packages_missing_404
+FAILED tests/test_modules/test_settings/test_users/test_router.py::test_users_require_admin
+========= 69 failed, 1088 passed, 1168 warnings in 4144.17s (1:09:04) =========

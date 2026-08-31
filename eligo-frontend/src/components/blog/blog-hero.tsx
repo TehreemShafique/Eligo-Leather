@@ -42,7 +42,6 @@ export function BlogHero({ post = DEFAULT_FEATURED_POST }: BlogHeroProps) {
                 alt={post.title}
                 fill
                 priority
-                unoptimized
                 sizes="(min-width: 1024px) 62.5vw, 100vw"
                 className="object-cover"
               />

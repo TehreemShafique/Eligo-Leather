@@ -85,7 +85,6 @@ function ProductCard({
           src={item.image}
           alt={item.title}
           fill
-          unoptimized
           sizes="(min-width: 1920px) 320px, (min-width: 1024px) 16.667vw, (min-width: 640px) 50vw, 100vw"
           className="object-cover opacity-100 transition-all duration-500 ease-in-out group-hover/image:scale-105 group-hover/image:opacity-0"
         />
@@ -93,7 +92,6 @@ function ProductCard({
           src={secondaryImage}
           alt={`${item.title} alternate view`}
           fill
-          unoptimized
           sizes="(min-width: 1920px) 320px, (min-width: 1024px) 16.667vw, (min-width: 640px) 50vw, 100vw"
           className="object-cover opacity-0 transition-all duration-500 ease-in-out group-hover/image:scale-105 group-hover/image:opacity-100"
         />
@@ -307,7 +305,6 @@ export function CategoryContent({
                   src={product.image}
                   alt={product.title}
                   fill
-                  unoptimized
                   sizes="192px"
                   className="object-cover transition-transform duration-500 group-hover:scale-105"
                 />

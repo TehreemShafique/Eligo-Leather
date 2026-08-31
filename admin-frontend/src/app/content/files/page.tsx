@@ -210,7 +210,7 @@ export default function AdminFilesPage() {
                 >
                   <td className="eligo-td">
                     <div className="w-12 h-12 rounded-xl bg-gray-100 relative overflow-hidden border border-gray-200">
-                      <Image src={file.src} alt={file.alt} fill unoptimized className="object-cover" />
+                      <Image src={file.src} alt={file.alt} fill className="object-cover" />
                     </div>
                   </td>
                   <td className="eligo-td">
@@ -260,7 +260,7 @@ export default function AdminFilesPage() {
                   onClick={handleImageClick}
                   className="relative max-w-full max-h-[450px] aspect-video rounded-xl overflow-hidden cursor-crosshair group shadow-xl"
                 >
-                  <Image src={selectedFile.src} alt={selectedFile.name} fill unoptimized className="object-contain" />
+                  <Image src={selectedFile.src} alt={selectedFile.name} fill className="object-contain" />
                   <div
                     className="absolute w-6 h-6 border-2 border-white rounded-full bg-amber-800/60 shadow-lg -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-all"
                     style={{ left: `${focalPoint.x}%`, top: `${focalPoint.y}%` }}

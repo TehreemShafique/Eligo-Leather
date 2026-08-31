@@ -90,6 +90,7 @@ function getPlaceOrderButton(): HTMLButtonElement {
 
 afterEach(() => {
   cleanup()
+  window.sessionStorage.clear()
   vi.clearAllMocks()
 })
 
@@ -161,6 +162,20 @@ describe("CheckoutPage guest order submission", () => {
     const shippingAddress = String(typedPayload.shipping_address)
     expect(shippingAddress).not.toContain("Ali")
     expect(shippingAddress).not.toContain("0300")
+  })
+
+  it("restores a previously placed order confirmation so it is never lost after navigation", async () => {
+    postMock.mockResolvedValueOnce(SHIPPING_CALC)
+    window.sessionStorage.setItem(
+      "eligo_last_order",
+      JSON.stringify({ orderNumber: "#2048", placedAt: Date.now() }),
+    )
+    render(<CheckoutPage />)
+
+    expect(await screen.findByText(/order placed successfully/i)).toBeInTheDocument()
+    expect(screen.getByText("#2048")).toBeInTheDocument()
+    const orderCalls = postMock.mock.calls.filter(([path]) => path === ORDER_PATH)
+    expect(orderCalls).toHaveLength(0)
   })
 
   it("applies a valid admin promo code to the subtotal and forwards it with the order", async () => {

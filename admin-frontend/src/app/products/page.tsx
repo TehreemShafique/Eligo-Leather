@@ -2,7 +2,7 @@
 
 import { API_BASE } from "@/lib/api"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -24,6 +24,14 @@ import { toast } from "sonner"
 import { resolveProductImage } from "@/lib/media-resolver"
 import { PageHeader } from "@/components/layout/page-header"
 
+interface ProductVariant {
+  id: number
+  title: string
+  price: string | number
+  inventory_quantity: number
+  is_active?: boolean
+}
+
 interface ProductItem {
   id: number
   title: string
@@ -37,6 +45,7 @@ interface ProductItem {
   url_handle: string | null
   uploadedImage: string | null
   defaultImage: string
+  variants?: ProductVariant[]
 }
 
 export default function AdminProductsPage() {
@@ -79,6 +88,7 @@ export default function AdminProductsPage() {
               url_handle: p.url_handle || null,
               uploadedImage: p.image_url || null,
               defaultImage: p.image_url || "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&q=80&w=200",
+              variants: Array.isArray(p.variants) ? p.variants : [],
             }))
             setProducts(mapped)
           }
@@ -101,6 +111,23 @@ export default function AdminProductsPage() {
       p.status.toLowerCase().includes(q)
     )
   })
+
+  const stockValuation = useMemo(() => {
+    return products.reduce((sum, p) => {
+      const variants = p.variants?.length ? p.variants : []
+      if (variants.length === 0) return sum
+      const active = variants.filter((v) => v.is_active !== false)
+      const list = active.length > 0 ? active : variants
+      return (
+        sum +
+        list.reduce((s, v) => {
+          const price = typeof v.price === "string" ? parseFloat(v.price) || 0 : Number(v.price) || 0
+          const qty = parseInt(String(v.inventory_quantity), 10) || 0
+          return s + price * qty
+        }, 0)
+      )
+    }, 0)
+  }, [products])
 
   const handleDeleteProduct = async (product: ProductItem) => {
     if (
@@ -213,6 +240,7 @@ export default function AdminProductsPage() {
               url_handle: null,
               uploadedImage: null,
               defaultImage: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=200",
+              variants: [],
             })
           }
         }
@@ -310,7 +338,9 @@ export default function AdminProductsPage() {
             <div className="h-8 w-px bg-amber-700" />
             <div>
               <span className="text-[11px] text-amber-200 uppercase font-bold tracking-wider">Stock Valuation</span>
-              <div className="text-xl font-bold">Rs. 485,000</div>
+              <div className="text-xl font-bold">
+                Rs. {Math.round(stockValuation).toLocaleString("en-IN")}
+              </div>
             </div>
           </div>
           <button

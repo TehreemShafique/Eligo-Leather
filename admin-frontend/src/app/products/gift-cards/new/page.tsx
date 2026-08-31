@@ -364,7 +364,6 @@ export default function AdminNewGiftCardProductPage() {
                         src={item.url}
                         alt={item.altText || "Product photo"}
                         fill
-                        unoptimized
                         className="object-cover"
                       />
                       <button
@@ -437,7 +436,6 @@ export default function AdminNewGiftCardProductPage() {
                             alt={product.title}
                             width={40}
                             height={40}
-                            unoptimized
                             className="w-full h-full object-cover"
                           />
                         ) : (

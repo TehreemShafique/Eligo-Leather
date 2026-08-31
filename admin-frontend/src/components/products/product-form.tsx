@@ -843,7 +843,6 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
                     src={previewGalleryImages[0] || "https://images.unsplash.com/photo-1627123424574-724758594e93?w=600"}
                     alt={title}
                     fill
-                    unoptimized
                     className="object-cover object-center transition-opacity duration-300"
                   />
                 </div>
@@ -858,7 +857,7 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
                           idx === 0 ? "border-amber-800 ring-2 ring-amber-800/30" : "border-gray-200 opacity-60 hover:opacity-100"
                         }`}
                       >
-                        <Image src={img} alt={`${title} - Image ${idx + 1}`} fill unoptimized className="object-cover" />
+                        <Image src={img} alt={`${title} - Image ${idx + 1}`} fill className="object-cover" />
                       </div>
                     ))}
                   </div>
@@ -1156,7 +1155,6 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
                           src={item.url}
                           alt={item.altText || "Product photo"}
                           fill
-                          unoptimized
                           className="object-cover"
                         />
                         <button
@@ -1344,7 +1342,7 @@ export default function ProductForm({ initialData }: { initialData?: ProductForm
                                   className="relative w-10 h-10 rounded-lg overflow-hidden border border-gray-300 bg-gray-100 shrink-0"
                                   title={idx === 0 ? "Main pic" : "Hover pic (second view)"}
                                 >
-                                  <Image src={url} alt={`${v.colorName} view ${idx + 1}`} fill unoptimized className="object-cover" />
+                                  <Image src={url} alt={`${v.colorName} view ${idx + 1}`} fill className="object-cover" />
                                   <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[7px] font-bold text-center leading-3">
                                     {idx === 0 ? "MAIN" : "HOVER"}
                                   </span>

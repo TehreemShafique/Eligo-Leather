@@ -33,19 +33,22 @@ async def test_seed_system_roles_idempotent(db_session):
 # List / get
 # ---------------------------------------------------------------------------
 
-async def test_list_roles_empty_returns_none(db_session):
-    assert await services.list_roles(db_session) is None
+async def test_list_roles_empty(db_session):
+    assert await services.list_roles(db_session) == []
 
 
-async def test_list_roles_raises_attribute_error(db_session):
-    """list_roles always raises AttributeError once any role exists: it builds
-    ``select(func.count(User.id).where(...))``, but ``func.count`` has no
-    ``where`` method (see app/modules/settings/roles/services.py). This pins
-    the current behavior so the failure is visible instead of silently
-    passing."""
-    await services.create_role(db_session, RoleCreate(name="Custom", domain=RoleDomain.store))
-    with pytest.raises(AttributeError):
-        await services.list_roles(db_session)
+async def test_list_roles_builds_output_dicts(db_session):
+    role = await services.create_role(
+        db_session, RoleCreate(name="Manager", domain=RoleDomain.store)
+    )
+
+    roles = await services.list_roles(db_session)
+    assert len(roles) == 1
+    assert roles[0]["id"] == role.id
+    assert roles[0]["name"] == "Manager"
+    assert roles[0]["domain"] == RoleDomain.store
+    assert roles[0]["is_system"] is False
+    assert roles[0]["user_count"] == 0
 
 
 async def test_get_role_missing_returns_none(db_session):

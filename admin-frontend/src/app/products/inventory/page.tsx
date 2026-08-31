@@ -216,7 +216,7 @@ export default function AdminInventoryPage() {
                     <td className="eligo-td">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-gray-100 relative overflow-hidden border border-gray-200 shrink-0">
-                          <Image src={inv.img} alt={inv.title} fill unoptimized className="object-cover" />
+                          <Image src={inv.img} alt={inv.title} fill className="object-cover" />
                         </div>
                         <div className="min-w-0">
                           <div className="font-bold text-gray-900 truncate">{inv.title}</div>
