@@ -40,12 +40,12 @@ export default function AdminSettingsRolesPage() {
       setLoading(true)
       const res = await fetch(API)
       if (!res.ok) {
-        toast.error("Failed to load roles from backend.")
+        toast.error("Failed to load roles from database.")
         return
       }
       setRolesList(await res.json())
     } catch {
-      toast.error("Network error while loading roles.")
+      toast.error("Failed to load roles from database.")
     } finally {
       setLoading(false)
     }
