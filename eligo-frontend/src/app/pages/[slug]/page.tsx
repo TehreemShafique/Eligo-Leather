@@ -1,50 +1,44 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { api } from "@/lib/api-client"
+import { notFound } from "next/navigation"
+import { cache } from "react"
 import { sanitizeCmsHtml } from "@/lib/sanitize-html"
 import { absoluteUrl, buildSeoMetadata, cleanSeoDescription } from "@/lib/seo"
-
-interface CmsPageRecord {
-  title: string
-  handle: string
-  content: string
-  visibility: "Visible" | "Hidden" | string
-  updated_at?: string
-  seo_title?: string | null
-  seo_description?: string | null
-}
+import { resolvePageState } from "@/modules/content/api"
+import { StorefrontUnavailable } from "@/components/storefront-unavailable"
 
 type PageProps = {
   params: Promise<{ slug: string }>
 }
 
-async function fetchPage(slug: string): Promise<CmsPageRecord> {
-  try {
-    return await api.get<CmsPageRecord>(`/pages/${slug}`, {
-      auth: false,
-      cache: "no-store",
-    })
-  } catch {
-    console.log("Pages API offline, using fallback content.")
-  }
-
-  const titleFormatted = slug
-    .replace(/avada-sitemap-/g, "HTML Sitemap for ")
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
-
-  return {
-    title: titleFormatted,
-    handle: slug,
-    content: `<p>Welcome to <strong>Eligo Leather Official ${titleFormatted}</strong> page.</p><p>For inquiries or assistance regarding your orders, contact us at <a href="mailto:eligoleather9@gmail.com">eligoleather9@gmail.com</a> or phone +92 334 5399470.</p>`,
-    visibility: "Visible",
-    updated_at: new Date().toISOString(),
-  }
-}
+// Per-request memoization of the shared CMS page state resolver so
+// generateMetadata and the page body agree on the outcome and share the same
+// no-store fetch within one request, while each new request still fetches fresh.
+const resolvePageStateCached = cache(resolvePageState)
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params
-  const page = await fetchPage(slug)
+  const state = await resolvePageStateCached(slug)
+
+  if (state.kind === "hidden" || state.kind === "missing") {
+    return buildSeoMetadata({
+      title: "Page Not Found",
+      description: "The requested Eligo Leather page could not be found. Browse our handcrafted leather products and accessories.",
+      path: `/pages/${slug}`,
+      noIndex: true,
+    })
+  }
+
+  if (state.kind === "unavailable") {
+    return buildSeoMetadata({
+      title: "Page Temporarily Unavailable",
+      description: "This Eligo Leather page is temporarily unavailable. Please try again shortly.",
+      path: `/pages/${slug}`,
+      noIndex: true,
+    })
+  }
+
+  const { page } = state
   const description = cleanSeoDescription(page.seo_description) ||
     `Read ${page.title} information from Eligo Leather, Pakistan's online store for handcrafted genuine leather products and accessories.`
 
@@ -52,14 +46,23 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: page.seo_title || page.title,
     description,
     path: `/pages/${page.handle || slug}`,
-    noIndex: page.visibility === "Hidden",
     keywords: [page.title],
   })
 }
 
 export default async function CustomerStorefrontPage({ params }: PageProps) {
   const { slug } = await params
-  const page = await fetchPage(slug)
+  const state = await resolvePageStateCached(slug)
+
+  if (state.kind === "missing" || state.kind === "hidden") {
+    notFound()
+  }
+
+  if (state.kind === "unavailable") {
+    return <StorefrontUnavailable />
+  }
+
+  const { page } = state
   const pageUrl = absoluteUrl(`/pages/${page.handle || slug}`)
   const webPageJsonLd = {
     "@context": "https://schema.org",
@@ -87,7 +90,7 @@ export default async function CustomerStorefrontPage({ params }: PageProps) {
         </h1>
         <article
           className="prose prose-neutral max-w-none prose-headings:font-semibold prose-a:text-amber-800"
-          dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(page.content) }}
+          dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(page.content ?? "") }}
         />
         <div className="border-t border-gray-100 pt-8 text-sm text-gray-500">
           Last updated: {page.updated_at ? new Date(page.updated_at).toLocaleDateString() : "Recently"}

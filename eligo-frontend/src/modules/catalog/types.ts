@@ -39,5 +39,5 @@ export function getProductSlug(product: { id: number; url_handle?: string | null
 }
 
 export function isCategorySlug(value: string): boolean {
-  return PRODUCT_CATEGORIES.some((c) => c.value === value) || value.includes("wallet") || value.includes("belt") || value.includes("case") || value.includes("key")
+  return PRODUCT_CATEGORIES.some((c) => c.value === value)
 }

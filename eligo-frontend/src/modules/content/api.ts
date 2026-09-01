@@ -1,4 +1,4 @@
-import { api } from "@/lib/api-client"
+import { api, ApiError } from "@/lib/api-client"
 import {
   BlogPostOutSchema,
   CmsPageOutSchema,
@@ -77,6 +77,62 @@ export async function getPageByHandle(handle: string): Promise<CmsPageOut | null
   } catch (error) {
     console.warn(`Backend API /pages/${handle} error or unreachable:`, error)
     return null
+  }
+}
+
+// Throwing per-page blog fetch (accepts skip/limit) for sitemap pagination.
+// Rethrows on API failure so sitemap generation fails closed instead of
+// silently producing a partial sitemap.
+export async function fetchBlogPostsThrowing(skip: number, limit: number): Promise<BlogPostOut[]> {
+  const query = buildQueryString({ visibility: "Visible", skip, limit })
+  const data = await api.get(`/blog-posts${query}`, { auth: false, ...BLOG_CACHE })
+  // Fail closed: malformed success responses throw rather than returning [].
+  return BlogPostOutSchema.array().parse(data)
+}
+
+// Error-preserving CMS page fetch for /pages/[slug]. Distinguishes a genuine
+// backend 404 ("page not found" -> resolves to null, i.e. missing) from a
+// backend/network outage (rethrown so upstream can render a non-indexable
+// "temporarily unavailable" state instead of fabricated SEO content).
+// Uses `no-store` to preserve the CMS page's previous always-fresh behavior
+// (it was fetched with cache:"no-store" before this SEO work) rather than the
+// shared PAGES_CACHE revalidation, which other callers/policies may rely on.
+export async function fetchPageByHandle(handle: string): Promise<CmsPageOut | null> {
+  const data = await api.get<CmsPageOut>(`/pages/${encodeURIComponent(handle)}`, {
+    auth: false,
+    cache: "no-store",
+  })
+  return CmsPageOutSchema.parse(data)
+}
+
+// Helper used by /pages/[slug] to classify an ApiError: true means the page is
+// genuinely missing (404), false means an outage/unavailable condition.
+export function isPageNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404
+}
+
+// Classification used by /pages/[slug]. Kept in the content module (rather than
+// the route component) so it is unit-testable without Next page plumbing.
+// - visible: existing public page -> render + index.
+// - hidden: page exists but is non-public -> notFound() + noindex.
+// - missing: backend 404 -> notFound() + noindex.
+// - unavailable: backend/network outage -> distinct non-indexable page (not a
+//   404, and never fabricated SEO content).
+export type PageState =
+  | { kind: "visible"; page: CmsPageOut }
+  | { kind: "missing" }
+  | { kind: "hidden" }
+  | { kind: "unavailable" }
+
+export async function resolvePageState(slug: string): Promise<PageState> {
+  try {
+    const page = await fetchPageByHandle(slug)
+    if (!page) return { kind: "missing" }
+    if (page.visibility === "Hidden") return { kind: "hidden" }
+    return { kind: "visible", page }
+  } catch (error) {
+    if (isPageNotFound(error)) return { kind: "missing" }
+    return { kind: "unavailable" }
   }
 }
 
