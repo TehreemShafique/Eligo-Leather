@@ -127,6 +127,10 @@ class WelcomeDiscountLog(Base):
     Identity is the persistent ``eligo_visitor_id`` cookie. Email/IP are kept
     only for backward compatibility with legacy claim rows and are never the
     primary identification mechanism.
+
+    Each visitor receives a unique, server-generated ``coupon_code`` that is
+    persisted here so the same code is returned on every subsequent visit and
+    can be validated at checkout.
     """
 
     __tablename__ = "welcome_discount_logs"
@@ -140,6 +144,16 @@ class WelcomeDiscountLog(Base):
     visitor_id: Mapped[str | None] = mapped_column(String, nullable=True)
     user_email: Mapped[str | None] = mapped_column(String, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Unique server-generated promo code for this visitor (e.g. "7K4P-X9M2").
+    coupon_code: Mapped[str | None] = mapped_column(
+        String, nullable=True, unique=True, index=True,
+    )
     claimed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
+    )
+    # Set when the visitor actually uses the welcome code at checkout. The
+    # one-time rule is: a visitor may redeem the code only until it has been
+    # redeemed once (``claimed_at`` alone just marks that the popup was shown).
+    redeemed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
     )

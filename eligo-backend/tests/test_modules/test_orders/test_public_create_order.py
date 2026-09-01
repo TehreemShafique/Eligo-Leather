@@ -6,14 +6,17 @@
   - reject empty carts, unknown/inactive products & variants, invalid
     quantities and out-of-stock lines;
   - deduct variant stock at order time (and restore it on restock);
-  - prevent duplicate orders within a short window;
+  - prevent duplicate orders within a 24-hour window (same customer/visitor and
+    identical cart, total, shipping and payment — while never blocking different
+    variants, quantities, products, shipping details, or failed/cancelled orders);
   - force Cash on Delivery (a browser can never self-declare "paid").
 """
 
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.modules.catalog.model import Product, ProductVariant, ProductStatus
@@ -49,6 +52,7 @@ async def _seed_product(
     tracked: bool = True,
     continue_selling: bool = False,
     variant_title: str = "Tan",
+    sku: str = "LW-TAN",
 ) -> tuple[Product, ProductVariant]:
     product = Product(title="Leather Wallet", status=ProductStatus.active)
     db_session.add(product)
@@ -56,7 +60,7 @@ async def _seed_product(
     variant = ProductVariant(
         product_id=product.id,
         title=variant_title,
-        sku="LW-TAN",
+        sku=sku,
         price=price,
         inventory_quantity=stock,
         inventory_tracked=tracked,
@@ -72,6 +76,12 @@ async def _seed_product(
 def _payload(product, variant, quantity=1, **overrides) -> dict:
     """Browser-style payload with tampered prices/totals/tax embedded on
     purpose — every amount here must be ignored by the server."""
+    return _payload_ids(int(product.id), int(variant.id), quantity=quantity, **overrides)
+
+
+def _payload_ids(product_id, variant_id, quantity=1, **overrides) -> dict:
+    """Same as :func:`_payload` but takes raw ids, usable after the ORM
+    objects have been expired by a ``_load_order`` call."""
     payload = {
         "channel": "Online Store",
         "currency": "PKR",
@@ -95,8 +105,8 @@ def _payload(product, variant, quantity=1, **overrides) -> dict:
         "delivery_status": "pending",
         "items": [
             {
-                "product_id": product.id,
-                "variant_id": variant.id,
+                "product_id": product_id,
+                "variant_id": variant_id,
                 "product_name": "Tampered Name",
                 "variant_title": "Tampered",
                 "quantity": quantity,
@@ -256,6 +266,25 @@ async def test_duplicate_order_rejected_within_window(client, db_session):
     assert first.status_code == 200
     duplicate = await client.post("/api/v1/orders/create-order", json=payload)
     assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == (
+        "This order has already been placed within the last 24 hours. "
+        "You can place the same order again after 24 hours."
+    )
+
+
+async def test_duplicate_order_allowed_after_24_hours(client, db_session):
+    product, variant = await _seed_product(db_session, stock=5)
+    payload = _payload(product, variant)
+    first = await client.post("/api/v1/orders/create-order", json=payload)
+    assert first.status_code == 200
+
+    # Age the placed order past the 24-hour window (server-side created_at).
+    order = await _load_order(db_session, first.json()["order_id"])
+    order.created_at = datetime.now(timezone.utc) - timedelta(hours=25)
+    await db_session.commit()
+
+    retry = await client.post("/api/v1/orders/create-order", json=payload)
+    assert retry.status_code == 200
 
 
 async def test_different_cart_is_not_duplicate(client, db_session):
@@ -268,6 +297,142 @@ async def test_different_cart_is_not_duplicate(client, db_session):
         "/api/v1/orders/create-order", json=_payload(product, variant, quantity=2)
     )
     assert different.status_code == 200
+
+
+async def test_same_product_different_variant_not_duplicate(client, db_session):
+    product, variant_a = await _seed_product(db_session)
+    variant_b = ProductVariant(
+        product_id=product.id,
+        title="Black",
+        sku="LW-BLK",
+        price=PRICE,
+        inventory_quantity=10,
+        inventory_tracked=True,
+        continue_selling_out_of_stock=False,
+        is_active=True,
+        is_canonical=True,
+    )
+    db_session.add(variant_b)
+    await db_session.commit()
+
+    product_id = int(product.id)
+    first = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload_ids(product_id, int(variant_a.id)),
+    )
+    assert first.status_code == 200
+    second = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload_ids(product_id, int(variant_b.id)),
+    )
+    assert second.status_code == 200
+
+
+async def test_different_product_not_duplicate(client, db_session):
+    product_a, variant_a = await _seed_product(db_session)
+    product_b, variant_b = await _seed_product(db_session, variant_title="Black", sku="LW-BLACK")
+
+    first = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload_ids(int(product_a.id), int(variant_a.id)),
+    )
+    assert first.status_code == 200
+    second = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload_ids(int(product_b.id), int(variant_b.id)),
+    )
+    assert second.status_code == 200
+
+
+async def test_different_shipping_details_not_duplicate(client, db_session):
+    product, variant = await _seed_product(db_session)
+    first = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(product, variant, destination="Lahore"),
+    )
+    assert first.status_code == 200
+
+    second = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            city="Islamabad",
+            destination="Islamabad",
+            shipping_address="Bilal Khan | Phone: 03001234567 | 2 Avenue, Islamabad, Pakistan",
+        ),
+    )
+    assert second.status_code == 200
+
+
+async def test_failed_or_cancelled_order_does_not_block_reorder(client, db_session):
+    product, variant = await _seed_product(db_session, stock=10)
+    payload = _payload(product, variant)
+
+    first = await client.post("/api/v1/orders/create-order", json=payload)
+    assert first.status_code == 200
+    order = await _load_order(db_session, first.json()["order_id"])
+    order.delivery_status = DeliveryStatus.failed
+    await db_session.commit()
+
+    # The identical order again must NOT be blocked by the failed one.
+    retry = await client.post("/api/v1/orders/create-order", json=payload)
+    assert retry.status_code == 200
+    second_order = await _load_order(db_session, retry.json()["order_id"])
+
+    # A cancelled order must equally not block a re-order.
+    second_order.cancelled_at = datetime.now(timezone.utc)
+    await db_session.commit()
+    retry2 = await client.post("/api/v1/orders/create-order", json=payload)
+    assert retry2.status_code == 200
+
+
+async def test_concurrent_identical_checkouts_enforced_by_db_unique_index(client, db_session):
+    """DB-level backstop for two *simultaneous* identical checkouts (both can
+    legitimately pass the in-transaction 24-hour heuristic before either has
+    committed): the unique index on ``orders.idempotency_key`` makes it
+    impossible for a second order to carry the same checkout-request key, so
+    exactly one order row can exist. On PostgreSQL the customer-row lock in
+    the endpoint serializes the pair anyway (loser -> 409); this asserts the
+    database guarantee that collapses the race if the heuristic is bypassed.
+
+    (The SQLite test harness shares a single connection, so real concurrent
+    PostgreSQL transactions cannot be simulated here — instead we prove the
+    index physically rejects the duplicate row.)
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    product, variant = await _seed_product(db_session, stock=5)
+    variant_pk = int(variant.id)
+    payload = _payload(product, variant, idempotency_key="race-key-1")
+
+    first = await client.post("/api/v1/orders/create-order", json=payload)
+    assert first.status_code == 200
+    first_order = await _load_order(db_session, first.json()["order_id"])
+
+    # Simulate the losing simultaneous request that slipped past the heuristic
+    # before the winner committed: a second order row carrying the same checkout
+    # key is rejected by the database itself.
+    duplicate_key = Order(
+        order_number="#999990",
+        customer_id=first_order.customer_id,
+        idempotency_key="race-key-1",
+        subtotal=first_order.subtotal,
+        total_price=first_order.total_price,
+    )
+    db_session.add(duplicate_key)
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await db_session.rollback()
+
+    count = (
+        await db_session.execute(select(func.count()).select_from(Order))
+    ).scalar_one()
+    assert count == 1
+
+    fresh_variant = await db_session.get(ProductVariant, variant_pk)
+    await db_session.refresh(fresh_variant)
+    assert fresh_variant.inventory_quantity == 4  # stock deducted exactly once
 
 
 async def test_create_order_stores_address_only_in_shipping_address(client, db_session):
@@ -332,6 +497,53 @@ async def test_create_order_ignores_unusable_promo_code(client, db_session):
     assert body["total_price"] == 2750.0 + 250.0
     order = await _load_order(db_session, body["order_id"])
     assert Decimal(str(order.discount)) == Decimal("0.00")
+
+
+async def test_create_order_applies_one_time_welcome_discount(client, db_session):
+    """Welcome discount is applied server-side on the first order and never
+    on a second checkout of the same visitor."""
+    from app.modules.discounts.model import WelcomeDiscountSettings
+
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
+    await db_session.commit()
+
+    # Each eligible visitor receives a unique code via welcome-check.
+    check = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-od-1"},
+    )
+    unique_code = check.json()["coupon_code"]
+    assert unique_code is not None
+
+    product, variant = await _seed_product(db_session)
+    product_id = int(product.id)
+    variant_id = int(variant.id)
+    first = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload_ids(product_id, variant_id, discount_code=unique_code, visitor_id="visitor-od-1"),
+    )
+    assert first.status_code == 200
+    first_body = first.json()
+    # 2750 - 275 welcome discount + 250 shipping = 2725.
+    assert first_body["total_price"] == 2725.0
+    first_order = await _load_order(db_session, first_body["order_id"])
+    assert Decimal(str(first_order.discount)) == Decimal("275.00")
+
+    # The same visitor places a second (different-basket) order with the same
+    # welcome code: the one-time offer was already redeemed and must not apply.
+    second = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload_ids(
+            product_id, variant_id, quantity=2,
+            discount_code=unique_code, visitor_id="visitor-od-1",
+        ),
+    )
+    assert second.status_code == 200
+    second_body = second.json()
+    # 5500 - 0 welcome discount + free shipping (over threshold) = 5500.
+    assert second_body["total_price"] == 5500.0
+    second_order = await _load_order(db_session, second_body["order_id"])
+    assert Decimal(str(second_order.discount)) == Decimal("0.00")
 
 
 async def test_idempotency_key_reuses_existing_order(client, db_session):

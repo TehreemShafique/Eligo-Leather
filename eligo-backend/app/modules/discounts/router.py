@@ -146,6 +146,18 @@ public_discounts_router = APIRouter(
 )
 
 
+def _build_welcome_invalid(code: str, message: str, subtotal: float) -> dict:
+    return {
+        "valid": False,
+        "code": code,
+        "discount_type": None,
+        "discount_percentage": None,
+        "discount_amount": 0,
+        "discounted_subtotal": subtotal,
+        "message": message,
+    }
+
+
 @public_discounts_router.post("/welcome-check")
 async def check_welcome_discount(
     payload: dict,
@@ -156,7 +168,8 @@ async def check_welcome_discount(
 
     The visitor is identified by the persistent ``eligo_visitor_id`` cookie
     (never by IP/email). A visitor is eligible at most once, and only while
-    the admin campaign is active. Any failure to identify the visitor or to
+    the admin campaign is active. Each eligible visitor receives a unique,
+    server-generated promo code. Any failure to identify the visitor or to
     reach the settings/config results in ``eligibility: false``.
     """
     visitor_id = (payload.get("visitor_id") or "").strip() or None
@@ -178,12 +191,11 @@ async def check_welcome_discount(
         visitor_id=visitor_id,
     )
     settings = await service.get_welcome_settings(db)
-    pct = int(float(settings.discount_percentage))
 
     return {
         "eligible": bool(res.show_welcome_discount),
         "discount_percentage": float(settings.discount_percentage),
-        "coupon_code": f"WELCOME{pct}",
+        "coupon_code": res.coupon_code,
         "is_active": bool(settings.is_active),
     }
 
@@ -198,8 +210,8 @@ async def verify_coupon(
 
     Two families of codes are supported:
     - the admin-created store promos (rows in the ``discounts`` table), and
-    - the welcome scratch-and-win code (``WELCOME<n>`` backed by the global
-      welcome settings).
+    - the per-visitor welcome scratch-and-win codes (rows in the
+      ``welcome_discount_logs`` table).
     """
     code = (payload.get("code") or "").strip().upper()
     subtotal = float(payload.get("subtotal") or 0)
@@ -208,10 +220,28 @@ async def verify_coupon(
     line_items = payload.get("items") if isinstance(payload.get("items"), list) else None
 
     settings = await service.get_welcome_settings(db)
-    pct = int(float(settings.discount_percentage))
-    welcome_code = f"WELCOME{pct}"
 
-    if code.startswith("WELCOME") or code == "WELCOME":
+    # Check if this code is a unique welcome code stored in the DB.
+    welcome_log = await service._find_welcome_log_by_code(db, code)
+    if welcome_log is not None:
+        # The code is a welcome code — verify it belongs to the requesting
+        # visitor and hasn't been redeemed yet.
+        visitor_id = (payload.get("visitor_id") or "").strip() or None
+        email = (payload.get("email") or "").strip() or None
+        ip_address = (payload.get("ip_address") or "").strip() or None
+        can_redeem = await service.can_redeem_welcome_discount(
+            db,
+            visitor_id=visitor_id,
+            user_email=email,
+            ip_address=ip_address,
+            coupon_code=code,
+        )
+        if not can_redeem:
+            return _build_welcome_invalid(
+                code,
+                "The welcome discount has already been applied in a previous checkout.",
+                subtotal,
+            )
         discount_pct = float(settings.discount_percentage or 5)
         discount_amount = round((subtotal * discount_pct) / 100.0, 2)
         discounted_subtotal = round(subtotal - discount_amount, 2)

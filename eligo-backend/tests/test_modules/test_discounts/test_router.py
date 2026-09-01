@@ -229,15 +229,132 @@ async def test_public_verify_coupon_supports_welcome_code(client, db_session):
     db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
     await db_session.commit()
 
+    # Each eligible visitor receives a unique code via welcome-check.
+    check = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-w1"},
+    )
+    unique_code = check.json()["coupon_code"]
+    assert unique_code is not None
+
     response = await client.post(
         "/api/v1/discounts/public/verify-coupon",
-        json={"code": "WELCOME10", "subtotal": 2500},
+        json={"code": unique_code, "subtotal": 2500, "visitor_id": "visitor-w1"},
     )
     assert response.status_code == 200
     body = response.json()
     assert body["valid"] is True
     assert body["discount_type"] == "welcome_discount"
     assert body["discount_amount"] == 250.0
+
+
+@pytest.mark.asyncio
+async def test_public_verify_coupon_rejects_foreign_welcome_code(client, db_session):
+    """A visitor may only use their own unique welcome code."""
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
+    await db_session.commit()
+
+    check_a = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-a"},
+    )
+    code_a = check_a.json()["coupon_code"]
+
+    # Visitor B tries to use visitor A's code -> invalid.
+    response = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": code_a, "subtotal": 2500, "visitor_id": "visitor-b"},
+    )
+    body = response.json()
+    assert body["valid"] is False
+    assert body["discount_amount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_public_verify_coupon_welcome_rejected_after_redemption(client, db_session):
+    """The welcome code must only work on the first checkout: after the code
+    has been redeemed (an order was placed with it) the preview is refused."""
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
+    await db_session.commit()
+
+    check = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-w2"},
+    )
+    code = check.json()["coupon_code"]
+
+    first = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": code, "subtotal": 2500, "visitor_id": "visitor-w2"},
+    )
+    assert first.json()["valid"] is True
+
+    # Simulate the order having been placed with the welcome code: the
+    # redemption is now recorded against the visitor.
+    from app.modules.discounts import service
+
+    await service.redeem_welcome_discount(
+        db_session, visitor_id="visitor-w2", coupon_code=code,
+    )
+
+    returning = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": code, "subtotal": 2500, "visitor_id": "visitor-w2"},
+    )
+    assert returning.json()["valid"] is False
+    assert "already been applied" in returning.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_public_verify_coupon_welcome_rejected_when_campaign_inactive(
+    client, db_session
+):
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=False))
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": "WELCOME10", "subtotal": 2500, "visitor_id": "visitor-w3"},
+    )
+    body = response.json()
+    assert body["valid"] is False
+    assert body["discount_amount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_public_verify_coupon_welcome_differs_per_visitor(client, db_session):
+    """Each visitor gets a distinct code, and one visitor's redemption never
+    blocks another visitor."""
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
+    await db_session.commit()
+
+    check_a = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-a"},
+    )
+    code_a = check_a.json()["coupon_code"]
+    check_b = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-b"},
+    )
+    code_b = check_b.json()["coupon_code"]
+
+    # The two visitors must never receive the same code.
+    assert code_a != code_b
+
+    await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": code_a, "subtotal": 1000, "visitor_id": "visitor-a"},
+    )
+    from app.modules.discounts import service
+
+    await service.redeem_welcome_discount(db_session, visitor_id="visitor-a", coupon_code=code_a)
+
+    other = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={"code": code_b, "subtotal": 1000, "visitor_id": "visitor-b"},
+    )
+    assert other.json()["valid"] is True
 
 
 # ------------------------------------------------------------------------
@@ -258,7 +375,10 @@ async def test_welcome_check_visitor_eligible_when_active(client, db_session):
     body = response.json()
     assert body["eligible"] is True
     assert body["discount_percentage"] == 10.0
-    assert body["coupon_code"] == "WELCOME10"
+    # A unique, server-generated code is returned (format: XXXX-XXXX).
+    assert body["coupon_code"] is not None
+    assert len(body["coupon_code"]) == 9
+    assert body["coupon_code"][4] == "-"
     assert body["is_active"] is True
 
 
@@ -318,4 +438,29 @@ async def test_welcome_check_does_not_require_email(client, db_session):
         json={"visitor_id": "visitor-b", "email": "", "ip_address": ""},
     )
     assert response.json()["eligible"] is True
-    assert response.json()["coupon_code"] == "WELCOME15"
+    assert response.json()["coupon_code"] is not None
+
+
+@pytest.mark.asyncio
+async def test_welcome_check_returning_visitor_reuses_same_code(client, db_session):
+    """A returning visitor keeps receiving their originally assigned code —
+    a fresh code is never generated on subsequent page loads."""
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
+    await db_session.commit()
+
+    first = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-persist"},
+    )
+    assert first.json()["eligible"] is True
+    first_code = first.json()["coupon_code"]
+
+    # The visitor is no longer eligible to see the popup, but the coupon code
+    # returned remains the originally assigned code (it has already been
+    # claimed, so evaluate returns the stored code).
+    returning = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-persist"},
+    )
+    assert returning.json()["eligible"] is False
+    assert returning.json()["coupon_code"] == first_code

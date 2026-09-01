@@ -107,6 +107,10 @@ class Order(Base):
     # Client-supplied, DB-unique checkout/order request identifier used to
     # make order creation idempotent (see POST /api/v1/orders/create-order).
     idempotency_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Storefront visitor cookie (``eligo_visitor_id``) captured at checkout so
+    # anonymous visitors can be matched for duplicate-order detection and the
+    # one-time welcome discount can be tied to the order that redeemed it.
+    visitor_id: Mapped[str | None] = mapped_column(String, nullable=True)
     # location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
 
     # Timestamps

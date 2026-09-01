@@ -40,7 +40,7 @@ export default function WelcomeDiscountProvider() {
   const [visitorId, setVisitorId] = useState<string | null>(null)
   const [eligibility, setEligibility] = useState<boolean | null>(null)
   const [discountPercentage, setDiscountPercentage] = useState(5)
-  const [couponCode, setCouponCode] = useState("WELCOME5")
+  const [couponCode, setCouponCode] = useState("")
   const [popupOpen, setPopupOpen] = useState(false)
 
   useEffect(() => {
@@ -62,8 +62,10 @@ export default function WelcomeDiscountProvider() {
           { auth: false },
         )
         setDiscountPercentage(res.discount_percentage ?? 5)
-        setCouponCode(res.coupon_code || `WELCOME${res.discount_percentage ?? 5}`)
-        setEligibility(res.eligible === true)
+        // The code is always generated server-side for eligible visitors and
+        // never fabricated in the browser.
+        setCouponCode(res.coupon_code || "")
+        setEligibility(res.eligible === true && Boolean(res.coupon_code))
         if (res.eligible) {
           // Delay the open so the popup never flashes in mid-render.
           setTimeout(() => setPopupOpen(true), 400)

@@ -98,3 +98,4 @@ class WelcomeDiscountUpdate(BaseModel):
 class WelcomeDiscountResult(BaseModel):
     show_welcome_discount: bool = False
     discount_percentage: float | None = None
+    coupon_code: str | None = None

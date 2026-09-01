@@ -13,7 +13,7 @@ interface ScratchWelcomePopupProps {
 
 export default function ScratchWelcomePopup({
   discountPercentage = 5,
-  couponCode = "WELCOME5",
+  couponCode = "",
   isOpen = true,
   onClose,
   onApplyCoupon,

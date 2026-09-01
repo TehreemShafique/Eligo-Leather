@@ -151,8 +151,6 @@ export default function AdminDiscountsPage() {
     const payload = {
       is_active: welcomeActive,
       discount_percentage: pctNum,
-      headline: `Welcome! Get ${pctNum}% OFF your 1st order!`,
-      coupon_code: `WELCOME${pctNum}`,
     }
 
     // Save to DB
@@ -164,17 +162,16 @@ export default function AdminDiscountsPage() {
       })
 
       if (res.ok) {
-        toast.success(`Welcome Discount saved to database! Code: WELCOME${pctNum} (${pctNum}% OFF).`)
+        toast.success(`Welcome Discount saved to database! ${pctNum}% OFF, unique code per visitor.`)
       } else {
-        toast.success(`Welcome Discount saved! Code: WELCOME${pctNum} (${pctNum}% OFF).`)
+        toast.success(`Welcome Discount saved! ${pctNum}% OFF, unique code per visitor.`)
       }
     } catch (err) {
-      toast.success(`Welcome Discount saved! Code: WELCOME${pctNum} (${pctNum}% OFF).`)
+      toast.success(`Welcome Discount saved! ${pctNum}% OFF, unique code per visitor.`)
     } finally {
       localStorage.setItem("eligo_welcome_discount_settings", JSON.stringify({
         welcomeActive,
         welcomePct: pctNum,
-        couponCode: `WELCOME${pctNum}`,
         updatedAt: new Date().toISOString(),
       }))
       setSavingWelcome(false)
@@ -311,7 +308,7 @@ export default function AdminDiscountsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
           <h2 className="text-sm font-bold text-gray-900">Welcome Discount Settings</h2>
           <span className="px-3 py-1 bg-amber-50 text-amber-900 font-extrabold text-xs rounded-full border border-amber-300 self-start sm:self-auto font-mono">
-            Code: WELCOME{welcomePct} ({welcomePct}% OFF)
+            Unique code per visitor ({welcomePct}% OFF)
           </span>
         </div>
 
@@ -389,7 +386,7 @@ export default function AdminDiscountsPage() {
                     </span>
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="font-bold text-emerald-800 font-mono text-xs block">WELCOME{welcomePct}</span>
+                    <span className="font-bold text-emerald-800 font-mono text-xs block">{log.coupon_code || `WELCOME${welcomePct}`}</span>
                     <span className="text-gray-400 text-[10px]">
                       {log.claimed_at ? new Date(log.claimed_at).toLocaleString() : ""}
                     </span>

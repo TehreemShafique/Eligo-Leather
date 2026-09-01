@@ -39,6 +39,14 @@ const ORDER_CONFIRM_ERROR =
 
 const LAST_ORDER_KEY = "eligo_last_order"
 
+const VISITOR_COOKIE = "eligo_visitor_id"
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null
+  const match = document.cookie.split("; ").find((row) => row.startsWith(`${name}=`))
+  return match ? decodeURIComponent(match.split("=").slice(1).join("=")) : null
+}
+
 function resolveSubmitErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     return getApiErrorMessage(error)
@@ -134,7 +142,7 @@ export default function CheckoutPage() {
   message: string
 }
 
-  const handleApplyDiscount = async () => {
+const handleApplyDiscount = async () => {
   const code = formData.discountCode.trim().toUpperCase()
   if (!code) {
     toast.error("Please enter a discount code.")
@@ -153,9 +161,10 @@ export default function CheckoutPage() {
       variant_id: item.variantId != null ? Number(item.variantId) : undefined,
       total_price: Number((item.price * item.quantity).toFixed(2)),
     }))
-    const result = await api.post<VerifyCouponResponse, { code: string; subtotal: number; items: typeof items }>(
+    const visitorId = readCookie(VISITOR_COOKIE) || undefined
+    const result = await api.post<VerifyCouponResponse, { code: string; subtotal: number; items: typeof items; visitor_id?: string }>(
       "/discounts/public/verify-coupon",
-      { code, subtotal: cartSubtotal, items },
+      { code, subtotal: cartSubtotal, items, ...(visitorId ? { visitor_id: visitorId } : {}) },
       { auth: false },
     )
     if (result.valid) {
@@ -214,7 +223,13 @@ export default function CheckoutPage() {
     setLoading(true)
     pendingRef.current = true
 
-    const payload = buildGuestOrderPayload(formData, cart, totals, appliedDiscountCode)
+    const payload = buildGuestOrderPayload(
+      formData,
+      cart,
+      totals,
+      appliedDiscountCode,
+      readCookie(VISITOR_COOKIE) || "",
+    )
 
     try {
       const response = await api.post<unknown, GuestOrderPayload>(

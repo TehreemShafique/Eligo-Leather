@@ -778,7 +778,7 @@ async def _auto_book_leopards(db: AsyncSession, order: Order, shipping_settings)
 
 
 MAX_ORDER_LINE_QUANTITY = 99
-DUPLICATE_ORDER_WINDOW_MINUTES = 10
+DUPLICATE_ORDER_WINDOW_HOURS = 24
 
 
 async def _resolve_and_price_order_items(
@@ -949,48 +949,100 @@ async def _resolve_and_price_order_items(
 
 async def _is_duplicate_order(
     db: AsyncSession,
+    *,
+    customer_id: int | None,
     phone: str | None,
     email: str | None,
+    visitor_id: str | None,
     items: list[dict],
     subtotal: Decimal,
+    total: Decimal,
+    payment_method: str | None,
+    shipping_address: str | None,
+    shipping_city: str | None,
+    shipping_country: str | None,
+    destination: str | None,
 ) -> bool:
-    """Return True when the same customer already placed an order with the
-    exact same line items and subtotal within a short window.
+    """Return True when the same customer/visitor already placed an order with
+    the exact same order fingerprint within the last 24 hours.
 
     Catches the classic double-click / retry-after-timeout duplication without
-    requiring a server-side cart token. Matching is per-customer (by phone or
-    email) and content-identical, so legitimate repeat purchases still work.
+    requiring a server-side cart token. The window is measured against the
+    server-side ``Order.created_at`` (never browser clocks).
+
+    Identity is scoped to the current customer (matched by email/visitor/phone,
+    or by the resolved customer row): ``(created_at >= window) AND identity``,
+    so an identical basket from a *different* customer is never treated as a
+    duplicate. Fingerprint comparison is deterministic regardless of item order
+    (line items are sorted) and covers products, variants, quantities, number of
+    lines, order total plus the shipping/payment details that distinguish an
+    order. Cancelled / voided / delivery-failed orders are ignored so a genuine
+    re-order after a failed or cancelled attempt is never blocked.
     """
-    if not phone and not email:
+    identity_conditions = []
+    if customer_id:
+        identity_conditions.append(Order.customer_id == customer_id)
+    if visitor_id:
+        identity_conditions.append(Order.visitor_id == visitor_id)
+    if phone:
+        identity_conditions.append(Customer.phone == phone)
+    if email:
+        identity_conditions.append(Customer.email == email)
+    if not identity_conditions:
+        # Nothing to identify the shopper with -> cannot prove it is a duplicate.
         return False
 
-    window_start = datetime.now() - timedelta(minutes=DUPLICATE_ORDER_WINDOW_MINUTES)
-    conditions = [Order.created_at >= window_start]
-    if phone:
-        conditions.append(Customer.phone == phone)
-    if email:
-        conditions.append(Customer.email == email)
-
-    result = await db.execute(
+    window_start = datetime.now() - timedelta(hours=DUPLICATE_ORDER_WINDOW_HOURS)
+    recent = await db.execute(
         select(Order)
         .options(selectinload(Order.items))
-        .join(Customer, Order.customer_id == Customer.id)
-        .where(or_(*conditions))
+        .outerjoin(Customer, Order.customer_id == Customer.id)
+        .where(
+            Order.created_at >= window_start,
+            or_(*identity_conditions),
+        )
     )
-    recent_orders = result.scalars().all()
+    recent_orders = recent.scalars().all()
 
-    incoming = sorted(
-        (int(i["product_id"] or 0), int(i["variant_id"] or 0), i["quantity"])
+    incoming_lines = sorted(
+        (int(i["product_id"] or 0), int(i["variant_id"] or 0), int(i["quantity"] or 0))
         for i in items
     )
+    incoming = (
+        Decimal(str(subtotal)),
+        Decimal(str(total)),
+        str(payment_method or "").strip().lower(),
+        (shipping_address or "").strip().lower(),
+        (shipping_city or "").strip().lower(),
+        (shipping_country or "").strip().lower(),
+        (destination or "").strip().lower(),
+    )
+
     for order in recent_orders:
-        if Decimal(str(order.subtotal)) != subtotal:
+        # A cancelled, voided or delivery-failed order must never block the
+        # customer from placing the same order again.
+        if order.cancelled_at is not None:
             continue
-        theirs = sorted(
-            (int(i.product_id or 0), int(i.variant_id or 0), i.quantity)
+        if order.payment_status == PaymentStatus.voided:
+            continue
+        if order.delivery_status == DeliveryStatus.failed:
+            continue
+        theirs_lines = sorted(
+            (int(i.product_id or 0), int(i.variant_id or 0), int(i.quantity or 0))
             for i in order.items
         )
-        if theirs and theirs == incoming:
+        if theirs_lines != incoming_lines:
+            continue
+        theirs = (
+            Decimal(str(order.subtotal or 0)),
+            Decimal(str(order.total_price or 0)),
+            str(order.payment_method or "").strip().lower(),
+            (order.shipping_address or "").strip().lower(),
+            (order.shipping_city or "").strip().lower(),
+            (order.shipping_country or "").strip().lower(),
+            (order.destination or "").strip().lower(),
+        )
+        if theirs == incoming:
             return True
     return False
 
@@ -1042,6 +1094,7 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
     city = (data.get("city") or "").strip()
     postal_code = (data.get("postal_code") or "").strip()
     country = (data.get("country") or "Pakistan").strip()
+    visitor_id = (data.get("visitor_id") or "").strip() or None
 
     shipping_address_str = (data.get("shipping_address") or "").strip()
     address_body = shipping_address_str
@@ -1155,19 +1208,50 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
     # clients can never invent their own discount value.
     discount_code_input = (data.get("discount_code") or "").strip()
     discount_amount = Decimal("0.00")
+    welcome_redemption_pending = False
     if discount_code_input:
-        from app.modules.discounts.service import validate_promo_code
-        # Pass the resolved (server-authoritative) line items so a discount
-        # scoped to specific products/variants only applies to those lines.
-        promo = await validate_promo_code(
-            db,
-            discount_code_input,
-            subtotal,
-            line_items=resolved_items,
+        from app.modules.discounts.service import (
+            validate_promo_code,
+            can_redeem_welcome_discount,
+            get_welcome_settings,
+            _find_welcome_log_by_code,
         )
-        if promo.get("valid"):
-            discount_amount = Decimal(str(promo["discount_amount"]))
-            discount_amount = min(discount_amount, subtotal)
+
+        normalized = discount_code_input.upper()
+        welcome_log = await _find_welcome_log_by_code(db, normalized)
+        if welcome_log is not None:
+            # One-time unique welcome code — only the visitor it was issued to
+            # may use it, and only while it hasn't been redeemed yet. The
+            # preview (verify-coupon) is read-only; the permanent redemption is
+            # recorded right before the order is persisted (see below).
+            settings = await get_welcome_settings(db)
+            can_redeem = await can_redeem_welcome_discount(
+                db,
+                visitor_id=visitor_id,
+                user_email=email,
+                ip_address=None,
+                coupon_code=normalized,
+            )
+            if can_redeem:
+                welcome_pct = Decimal(str(settings.discount_percentage or 0))
+                if welcome_pct > 0:
+                    discount_amount = (subtotal * welcome_pct / Decimal("100"))
+                    discount_amount = discount_amount.quantize(Decimal("0.01"))
+                    discount_amount = min(discount_amount, subtotal)
+                    welcome_redemption_pending = True
+        else:
+            # Not a unique welcome code — validate as an admin-created promo.
+            # Pass the resolved (server-authoritative) line items so a discount
+            # scoped to specific products/variants only applies to those lines.
+            promo = await validate_promo_code(
+                db,
+                discount_code_input,
+                subtotal,
+                line_items=resolved_items,
+            )
+            if promo.get("valid"):
+                discount_amount = Decimal(str(promo["discount_amount"]))
+                discount_amount = min(discount_amount, subtotal)
 
     total = subtotal - discount_amount + tax + shipping
 
@@ -1201,19 +1285,60 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
             return _order_success_response(existing)
 
     # ---- Duplicate-order protection ----
-    # An identical basket from the same customer within a short window is a
+    # An identical basket from the same customer/visitor within 24 hours is a
     # double-submit: reject it instead of creating a duplicate order (and
-    # double-committing stock).
-    if await _is_duplicate_order(db, phone, email, resolved_items, subtotal):
+    # double-committing stock). The customer row is locked first (SELECT ...
+    # FOR UPDATE on PostgreSQL, a no-op on SQLite) so two *simultaneous*
+    # identical checkouts serialize: the loser is still blocked on the lock when
+    # the winner commits, then the check below sees the committed order inside
+    # the window and gets 409 instead of creating a twin.
+    await db.execute(
+        select(Customer.id).where(Customer.id == customer.id).with_for_update()
+    )
+    if await _is_duplicate_order(
+        db,
+        customer_id=customer.id,
+        phone=phone,
+        email=email,
+        visitor_id=visitor_id,
+        items=resolved_items,
+        subtotal=subtotal,
+        total=total,
+        payment_method=payment_method,
+        shipping_address=clean_location or None,
+        shipping_city=city or None,
+        shipping_country=country or None,
+        destination=data.get("destination") or country or None,
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This order looks like it was already placed. Please check your order history before trying again.",
+            detail=(
+                "This order has already been placed within the last 24 hours. "
+                "You can place the same order again after 24 hours."
+            ),
+        )
+
+    # Welcome discount is a one-time offer: record the redemption only now,
+    # after idempotency/duplicate checks the order is known to be brand new,
+    # so a rejected/duplicate attempt can never burn the visitor's code. It is
+    # committed atomically with the order by the ``commit()`` below.
+    if welcome_redemption_pending:
+        from app.modules.discounts.service import redeem_welcome_discount
+
+        await redeem_welcome_discount(
+            db,
+            visitor_id=visitor_id,
+            user_email=email,
+            ip_address=None,
+            coupon_code=normalized if welcome_log is not None else None,
+            commit=False,
         )
 
     new_order = Order(
         order_number=order_number,
         customer_id=customer.id,
         idempotency_key=idempotency_key,
+        visitor_id=visitor_id,
         channel=data.get("channel", "Online Store"),
         currency=data.get("currency", "PKR"),
         subtotal=subtotal,
