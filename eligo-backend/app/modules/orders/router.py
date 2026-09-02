@@ -7,7 +7,7 @@ import re
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse, Response
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, update, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +19,7 @@ from app.modules.orders import leopard_service
 from app.modules.orders import leopard_client
 from decimal import Decimal
 from app.modules.orders.model import (
-    Order, OrderItem, OrderAuditLog, OrderStatus,
+    Order, OrderItem, OrderAuditLog,
     PaymentStatus, FulfillmentStatus, DeliveryStatus, LeopardShipment,
 )
 from app.modules.customers.model import Customer, CustomerAddress
@@ -31,11 +31,12 @@ from app.modules.orders.schema import (
     DraftOrderCreate, DraftOrderUpdate, DraftOrderOut, DraftOrderItemCreate, DraftOrderItemOut,
     AbandonedCheckoutCreate, AbandonedCheckoutUpdate, AbandonedCheckoutOut, AbandonedCheckoutListOut,
     SendRecoveryEmailRequest, SendRecoveryEmailResponse,
+    ConfirmOrderResponse, OrderConfirmationEmailStatus,
     ExportOrdersRequest, OrdersAnalyticsSummary,
 )
 from app.modules.settings.notifications.service import (
-    background_dispatch_order_confirmation,
     background_dispatch_order_placed,
+    dispatch_order_confirmation_email,
 )
 
 router = APIRouter(prefix="/orders", tags=["Orders"], dependencies=[Depends(get_current_user)])
@@ -677,16 +678,23 @@ async def get_products_catalog_api(db: AsyncSession = Depends(get_db)):
 
 
 async def _auto_book_leopards(db: AsyncSession, order: Order, shipping_settings) -> None:
-    """Best-effort Leopards Courier booking right after order creation.
+    """Best-effort Leopards Courier booking after an order is confirmed.
 
     Uses the admin shipper configuration (Settings -> Shipping) as the parcel
     origin and the customer's delivery-address snapshot as the destination.
     On success the CN is stored against the order and delivery moves to
-    `booked`. Any failure is logged but never raised: checkout must succeed
-    even when the courier API is down. Manual CN generation remains available
-    from the admin panel.
+    `booked`. Any failure is logged but never raised. Guarded so an order that
+    already has a tracking number (already booked) is never booked twice.
+    Manual CN generation remains available from the admin panel.
     """
     logger = logging.getLogger(__name__)
+
+    # Idempotency guard: an order that already carries a CN has already been
+    # booked; do not create a second shipment.
+    if order.tracking_number:
+        logger.info("Skipping auto Leopards booking for %s: already booked (CN %s)",
+                    order.order_number, order.tracking_number)
+        return
 
     consignee_name = order.shipping_name or "Customer"
     consignee_phone = order.shipping_phone or ""
@@ -1446,12 +1454,12 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
                 f"Cash on Delivery (COD)."
             ),
         ))
-    confirmation_code = secrets.token_urlsafe(6).upper().replace("-", "").replace("_", "")[:10]
+    order_reference = secrets.token_urlsafe(6).upper().replace("-", "").replace("_", "")[:10]
     db.add(OrderAuditLog(
         order_id=new_order.id,
         event_type="status_changed",
-        description=f"Confirmation #{confirmation_code} was generated for this order.",
-        metadata_json=json.dumps({"confirmation_number": confirmation_code}),
+        description=f"An order reference {order_reference} was generated for this order.",
+        metadata_json=json.dumps({"order_reference": order_reference}),
     ))
 
     try:
@@ -1478,21 +1486,17 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         ) from exc
     await db.refresh(new_order)
 
-    # ---- "Order Placed" acknowledgment email (background; never breaks order) ----
+    # ---- Order Placed email (background; must never break checkout) ----
+    # The order is NOT yet customer-confirmed at this point and does NOT reach
+    # the courier. Only the order_placed notification fires now; the
+    # order_confirmation email and Leopards booking happen only after an admin
+    # manually confirms the order by phone.
     try:
         import asyncio
         asyncio.create_task(background_dispatch_order_placed(new_order.id))
-    except Exception as placed_exc:
+    except Exception as notif_exc:
         logging.getLogger(__name__).warning(
-            "Order placed notification failed for %s: %s", order_number, placed_exc
-        )
-
-    # ---- Auto-book with Leopards (best effort; must never break checkout) ----
-    try:
-        await _auto_book_leopards(db, new_order, shipping_settings)
-    except Exception as booking_exc:
-        logging.getLogger(__name__).warning(
-            "Leopards auto-booking failed for %s: %s", order_number, booking_exc
+            "Order placed notification failed for %s: %s", order_number, notif_exc
         )
 
     return {
@@ -1500,7 +1504,7 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         "message": f"Order {order_number} created successfully in database!",
         "order_id": new_order.id,
         "order_number": order_number,
-        "confirmation_number": confirmation_code,
+        "confirmation_number": order_reference,
         "customer_id": customer.id,
         # Server-authoritative amounts actually stored on the order.
         "subtotal": float(subtotal),
@@ -1839,9 +1843,9 @@ async def create_order(
     db: AsyncSession = Depends(get_db),
 ):
     order = await service.create_order(db, data)
-    # Fire the "Order Placed" acknowledgment email in the background. The
-    # order *confirmation* email is NOT sent here - it only goes out after the
-    # admin manually calls the customer and confirms the order.
+    # Orders are not customer-confirmed when created; fire the order_placed
+    # notification (if the customer has an email) and let the manual
+    # confirmation flow handle the confirmation email + courier later.
     background_tasks.add_task(background_dispatch_order_placed, order.id)
     return order
 
@@ -2028,70 +2032,129 @@ async def update_order(order_id: int, data: OrderUpdate, db: AsyncSession = Depe
     return order
 
 
-@router.post("/{order_id}/confirm", response_model=OrderOut)
-async def confirm_order(order_id: int, db: AsyncSession = Depends(get_db)):
-    """Confirm a placed order after the admin manually calls the customer.
-
-    One-time, backend/Database enforced: once the order is confirmed, the
-    ``confirmation_email_sent`` flag blocks any further confirmation action, so
-    repeated clicks can never dispatch a duplicate confirmation email.
-
-    Flow: set ``order_status = confirmed`` -> dispatch the existing Jinja2
-    order-confirmation email via the existing email service -> mark the email
-    as sent only if it was actually dispatched (failures are logged to
-    ``notification_logs`` and leave the flag unset so it can be retried).
-    """
-    result = await db.execute(
-        select(Order)
-        .options(selectinload(Order.items), selectinload(Order.customer))
-        .where(Order.id == order_id)
-    )
-    order = result.scalar_one_or_none()
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-
-    # Already confirmed (one-time guard) - idempotent no-op, no resend.
-    if order.confirmation_email_sent:
-        return order
-
-    order.order_status = OrderStatus.confirmed
-    await db.commit()
-    await db.refresh(order)
-
-    # Dispatch the existing confirmation email now (not from the frontend).
-    # Returns True only when the email was successfully dispatched.
-    dispatched_ok = await background_dispatch_order_confirmation(order.id)
-
-    # Re-check the once-only flag: a concurrent confirm may have won the race
-    # and already sent the email. Only mark sent when we actually dispatched it
-    # and no other confirmation completed in the meantime.
-    if dispatched_ok and not order.confirmation_email_sent:
-        order.confirmation_email_sent = True
-    # If dispatch failed, leave confirmation_email_sent unset so the admin can
-    # retry; the failure was recorded in notification_logs (existing pattern).
-    await db.commit()
-    await db.refresh(order)
-
-    db.add(OrderAuditLog(
-        order_id=order.id,
-        event_type="status_changed",
-        description=(
-            f"Order confirmed after manual customer call; "
-            f"confirmation email {'sent' if dispatched_ok else 'send failed - logged'}."
-        ),
-        actor_name="Admin",
-    ))
-    await db.commit()
-
-    return order
-
-
 @router.post("/{order_id}/archive", response_model=OrderOut)
 async def archive_order(order_id: int, db: AsyncSession = Depends(get_db)):
     order = await service.archive_order(db, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
+
+
+# ================================================================
+# Customer Confirmation (manual, one-time)
+# ================================================================
+
+@router.post("/{order_id}/confirm", response_model=ConfirmOrderResponse)
+async def confirm_order(order_id: int, db: AsyncSession = Depends(get_db)):
+    """Manually confirm an order with the customer (one-time / idempotent).
+
+    Only after the admin has spoken with the customer by phone does this:
+      1. persist ``confirmed_at`` (DB-level, guarded so only the first
+         confirmation performs side effects);
+      2. record a customer_confirmed audit entry;
+      3. AWAIT the ``order_confirmation`` email dispatch and report the REAL
+         outcome (sent / failed / unavailable / skipped). The confirmation
+         state is already committed and NEVER depends on email success;
+      4. book Leopards automatically (best effort; failure logs but does
+         not revert the confirmation).
+    Retries / concurrent requests after the first confirmation are no-ops.
+    """
+    from app.modules.settings.shipping_and_delivery.service import (
+        get_settings as get_shipping_settings,
+    )
+
+    # Load the order (for the 404).
+    order = await service.get_order(db, order_id)
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    # Atomic claim: only a request that flips confirmed_at from NULL to a
+    # timestamp wins the confirmation and may perform side effects. Concurrent
+    # or repeated requests see rowcount == 0 and become idempotent no-ops.
+    now = func.now()
+    result = await db.execute(
+        update(Order)
+        .where(Order.id == order.id, Order.confirmed_at.is_(None))
+        .values(confirmed_at=now)
+    )
+    if result.rowcount == 0:
+        # Already confirmed (or an in-flight concurrent request won). Refresh
+        # the confirmation timestamp and return an idempotent success without
+        # re-sending emails, re-booking courier, or duplicating audit entries.
+        await db.refresh(order)
+        return ConfirmOrderResponse(
+            order_id=order.id,
+            order_number=order.order_number,
+            confirmed_at=order.confirmed_at,
+            already_confirmed=True,
+            email_status=OrderConfirmationEmailStatus.skipped,
+            email_message="No email sent - order was already confirmed.",
+            courier_booked=False,
+        )
+
+    await db.refresh(order)
+
+    # One timeline entry for the confirmation (also serves as the
+    # "won the confirmation" marker; retries never reach here).
+    db.add(OrderAuditLog(
+        order_id=order.id,
+        event_type="customer_confirmed",
+        description="Admin confirmed this order after customer verification.",
+        actor_name="Admin",
+        metadata_json=json.dumps({"confirmed_at": order.confirmed_at.isoformat() if order.confirmed_at else None}),
+    ))
+    await db.commit()
+
+    # Confirmation email is dispatched SYNCHRONOUSLY and its REAL result is
+    # reported to the admin. confirmed_at is already committed, so an SMTP
+    # failure cannot roll the confirmation back; the failure lands in
+    # notification_logs and is surfaced as email_status=failed.
+    email_status = OrderConfirmationEmailStatus.skipped
+    email_message: str | None = None
+    try:
+        email_result = await dispatch_order_confirmation_email(db, order.id)
+        email_status = OrderConfirmationEmailStatus(email_result)
+        if email_result == "sent":
+            email_message = "Confirmation email sent."
+        elif email_result == "failed":
+            email_message = "Confirmation email failed to send."
+        elif email_result == "unavailable":
+            email_message = "Customer has no email address."
+        else:
+            email_message = "Confirmation email was not sent (notifications currently unavailable/disabled)."
+    except Exception as email_exc:  # noqa: BLE001 - never let email break the confirmation
+        email_status = OrderConfirmationEmailStatus.failed
+        email_message = "Confirmation email failed to send."
+        logging.getLogger(__name__).warning(
+            "Confirmation email dispatch raised for order %s: %s",
+            order.order_number, email_exc,
+        )
+
+    # Courier auto-booking (best effort; a courier outage must NOT revert the
+    # confirmation). Load the current shipping settings and book.
+    courier_booked = False
+    courier_error: str | None = None
+    try:
+        shipping_settings = await get_shipping_settings(db)
+        await _auto_book_leopards(db, order, shipping_settings)
+        courier_booked = bool(order.tracking_number)
+    except Exception as booking_exc:
+        courier_error = str(booking_exc)
+        logging.getLogger(__name__).warning(
+            "Leopards auto-booking after confirmation failed for %s: %s",
+            order.order_number, booking_exc,
+        )
+
+    return ConfirmOrderResponse(
+        order_id=order.id,
+        order_number=order.order_number,
+        confirmed_at=order.confirmed_at,
+        already_confirmed=False,
+        email_status=email_status,
+        email_message=email_message,
+        courier_booked=courier_booked,
+        courier_error=courier_error,
+    )
 
 
 # ================================================================

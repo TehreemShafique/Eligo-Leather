@@ -1,10 +1,11 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
+from enum import Enum
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.modules.orders.model import (
-    OrderStatus,
     PaymentStatus, FulfillmentStatus, DeliveryStatus, DeliveryMethod,
     ReturnStatus, LabelStatus, DraftOrderStatus, RecoveryStatus,
     AuditEventType,
@@ -120,6 +121,7 @@ class OrderOut(BaseModel):
     fulfill_by: datetime | None
     cancelled_at: datetime | None
     closed_at: datetime | None
+    confirmed_at: datetime | None = None
     channel: str
     currency: str
     subtotal: Decimal
@@ -134,8 +136,6 @@ class OrderOut(BaseModel):
     delivery_method: DeliveryMethod
     return_status: ReturnStatus
     label_status: LabelStatus
-    order_status: OrderStatus
-    confirmation_email_sent: bool
     tracking_company: str | None
     tracking_number: str | None
     shipping_address: str | None
@@ -158,6 +158,7 @@ class OrderListOut(BaseModel):
     customer_id: int | None
     customer_name: str | None = None
     fulfill_by: datetime | None
+    confirmed_at: datetime | None = None
     channel: str
     total_price: Decimal
     payment_status: PaymentStatus
@@ -168,6 +169,26 @@ class OrderListOut(BaseModel):
     created_at: datetime
     items: list[OrderItemOut] = []
     model_config = ConfigDict(from_attributes=True)
+
+
+# ========== Order Confirmation ==========
+
+class OrderConfirmationEmailStatus(str, Enum):
+    sent = "sent"                 # customer has an email and the dispatch succeeded
+    failed = "failed"             # customer has an email, send was attempted, SMTP failed
+    unavailable = "unavailable"   # customer has no email address
+    skipped = "skipped"           # email exists but intentionally not sent (disabled/missing)
+
+
+class ConfirmOrderResponse(BaseModel):
+    order_id: int
+    order_number: str
+    confirmed_at: datetime | None
+    already_confirmed: bool
+    email_status: OrderConfirmationEmailStatus = OrderConfirmationEmailStatus.skipped
+    email_message: str | None = None
+    courier_booked: bool
+    courier_error: str | None = None
 
 
 # ========== Export ==========

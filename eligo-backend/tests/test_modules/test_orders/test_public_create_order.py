@@ -33,13 +33,21 @@ PRICE = Decimal("2750.00")
 @pytest.fixture(autouse=True)
 def _no_leopards_auto_booking(monkeypatch):
     """Prevent the create-order happy path from calling the real Leopards
-    Courier API during tests."""
+    Courier API or the production notification SMTP/DB session during tests."""
 
     async def _noop(db, order, shipping_settings):
         return None
 
     monkeypatch.setattr(
         "app.modules.orders.router._auto_book_leopards", _noop
+    )
+
+    async def _noop_dispatch(order_id: int) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.modules.orders.router.background_dispatch_order_placed",
+        _noop_dispatch,
     )
 
 

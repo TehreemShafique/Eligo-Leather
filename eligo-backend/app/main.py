@@ -53,7 +53,6 @@ from app.db.session import AsyncSessionLocal
 from app.modules.settings.notifications.service import seed_defaults
 from app.modules.settings.checkout.service import seed_default_config
 from app.modules.settings.shipping_and_delivery.service import seed_defaults as seed_shipping_defaults
-from app.modules.settings.roles.services import seed_system_roles
 
 app = FastAPI(title="Eligo Backend")
 
@@ -69,8 +68,7 @@ async def _seed_defaults():
         await seed_defaults(db)
         await seed_default_config(db)
         await seed_shipping_defaults(db)
-        await seed_system_roles(db)
-    print("[startup] Defaults seeded (notifications, checkout, shipping, roles)")
+    print("[startup] Defaults seeded (notifications, checkout, shipping)")
 
 # High Performance Timing & HTTP Cache-Control Middleware (< 0.6s TTFB guarantee)
 @app.middleware("http")

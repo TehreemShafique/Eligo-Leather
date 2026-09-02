@@ -55,12 +55,37 @@ DEFAULT_SENDER = {
 
 BUILT_IN_TEMPLATES = [
     {
+        "code": "order_placed",
+        "name": "Order Placed",
+        "subject": "Order {{ order_number }} placed - {{ store_name }}",
+        "html_body": (
+            "<p>Hi {{ customer_name }},</p>"
+            "<p>We've received your order <strong>{{ order_number }}</strong>.</p>"
+            "<p>Your order is not yet confirmed. Our team will call you shortly to "
+            "confirm it before we begin processing.</p>"
+            "<h3>Order {{ order_number }}</h3>"
+            "<table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" "
+            "style=\"border-collapse:collapse;width:100%\">"
+            "<tr><th>Item</th><th>Qty</th><th>Price</th></tr>"
+            "{% for item in items %}"
+            "<tr><td>{{ item.product_name }}</td><td>{{ item.quantity }}</td>"
+            "<td>{{ item.total_price }} {{ currency }}</td></tr>"
+            "{% endfor %}"
+            "</table>"
+            "<p><strong>Total:</strong> {{ total_price }} {{ currency }}</p>"
+            "<p>Thank you for shopping with {{ store_name }}.</p>"
+        ),
+    },
+    {
         "code": "order_confirmation",
         "name": "Order Confirmation",
         "subject": "Order {{ order_number }} confirmed - {{ store_name }}",
         "html_body": (
             "<p>Hi {{ customer_name }},</p>"
-            "<p>Thank you for your order. We're getting it ready.</p>"
+            "<p>Good news! We've spoken with you and your order "
+            "<strong>{{ order_number }}</strong> is now confirmed.</p>"
+            "<p>We're moving your order forward for processing and shipment."
+            "</p>"
             "<h3>Order {{ order_number }}</h3>"
             "<table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" "
             "style=\"border-collapse:collapse;width:100%\">"
@@ -74,31 +99,6 @@ BUILT_IN_TEMPLATES = [
             "{% if tracking_number %}"
             "<p>Tracking: {{ tracking_number }} ({{ tracking_company }})</p>"
             "{% endif %}"
-            "<p>Thank you for shopping with {{ store_name }}.</p>"
-        ),
-    },
-    {
-        "code": "order_placed",
-        "name": "Order Placed",
-        "subject": "Your Eligo Leather Order Has Been Placed",
-        "html_body": (
-            "<p>Hi {{ customer_name }},</p>"
-            "<p>Your order has been placed successfully! We have received your "
-            "order and will contact you shortly to confirm it.</p>"
-            "<h3>Order {{ order_number }}</h3>"
-            "<table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" "
-            "style=\"border-collapse:collapse;width:100%\">"
-            "<tr><th>Item</th><th>Qty</th><th>Price</th></tr>"
-            "{% for item in items %}"
-            "<tr><td>{{ item.product_name }}{% if item.variant_title %}"
-            " - {{ item.variant_title }}{% endif %}</td>"
-            "<td>{{ item.quantity }}</td>"
-            "<td>{{ item.total_price }} {{ currency }}</td></tr>"
-            "{% endfor %}"
-            "</table>"
-            "<p><strong>Total:</strong> {{ total_price }} {{ currency }}</p>"
-            "<p>We have received your order and will contact you shortly to "
-            "confirm it.</p>"
             "<p>Thank you for shopping with {{ store_name }}.</p>"
         ),
     },
@@ -173,19 +173,20 @@ BUILT_IN_TEMPLATES = [
 ]
 
 DEFAULT_RULES = [
-    # Customer gets a confirmation email on order placement.
-    {
-        "event_type": "order_confirmation",
-        "channel": "email",
-        "recipient": "customer",
-        "template_code": "order_confirmation",
-    },
-    # Customer gets an "Order Placed" acknowledgement email on order placement.
+    # Customer gets an email immediately when they place an order, before
+    # phone confirmation.
     {
         "event_type": "order_placed",
         "channel": "email",
         "recipient": "customer",
         "template_code": "order_placed",
+    },
+    # Customer gets a confirmation email only after admin phones them.
+    {
+        "event_type": "order_confirmation",
+        "channel": "email",
+        "recipient": "customer",
+        "template_code": "order_confirmation",
     },
     {
         "event_type": "order_shipped",
@@ -625,6 +626,15 @@ async def update_notification_setting(
     return setting
 
 
+# Dispatch outcome marker used by the order-confirmation flow. A mail dispatch
+# is truthfully either sent, failed, unavailable (no recipient) or skipped
+# (intentionally not sent: notification/sender disabled, template inactive).
+_EMAIL_OUTCOME_SENT = "sent"
+_EMAIL_OUTCOME_FAILED = "failed"
+_EMAIL_OUTCOME_UNAVAILABLE = "unavailable"
+_EMAIL_OUTCOME_SKIPPED = "skipped"
+
+
 async def _dispatch_email(
     db: AsyncSession,
     event_type: str,
@@ -632,11 +642,22 @@ async def _dispatch_email(
     payload: dict,
     customer_id: int | None = None,
     order_id: int | None = None,
-) -> None:
+) -> str:
+    """Dispatch one email rule and return a truthful outcome marker.
+
+    Returns one of ``sent``, ``failed``, ``unavailable``, ``skipped`` so the
+    caller can distinguish an actual send failure from any intentional
+    no-send state (no recipient, sender disabled, template missing/inactive).
+    ``dispatch_event`` keeps its historical aggregated DispatchResponse by
+    ignoring this return value; the marker is consumed by the
+    order-confirmation path.
+    """
     config = await get_sender_config(db)
     recipient = _resolve_recipient(rule, payload, config)
-    if not recipient or not config.is_enabled:
-        return
+    if not recipient:
+        return _EMAIL_OUTCOME_UNAVAILABLE
+    if not config.is_enabled:
+        return _EMAIL_OUTCOME_SKIPPED
 
     template = None
     if rule.template_id:
@@ -644,7 +665,7 @@ async def _dispatch_email(
     if template is None:
         template = await get_template_by_code(event_type, db)
     if template is None or not template.is_active:
-        return
+        return _EMAIL_OUTCOME_SKIPPED
 
     context = {**payload, "store_name": config.from_name, "support_email": config.admin_email}
     subject = render_template(template.subject, context)
@@ -661,6 +682,7 @@ async def _dispatch_email(
             customer_id=customer_id,
             order_id=order_id,
         )
+        return _EMAIL_OUTCOME_SENT
     except Exception as exc:  # noqa: BLE001 - a failed dispatch must not break the request
         await _log(
             db,
@@ -674,6 +696,7 @@ async def _dispatch_email(
             customer_id=customer_id,
             order_id=order_id,
         )
+        return _EMAIL_OUTCOME_FAILED
 
 
 async def _dispatch_webhook(
@@ -769,120 +792,160 @@ async def background_dispatch_event(event_type: str, payload: dict) -> None:
         await dispatch_event(event_type, payload, db)
 
 
-async def background_dispatch_order_confirmation(order_id: int) -> bool:
-    """Dispatch the order-confirmation email for a given order.
+async def dispatch_order_confirmation_email(db: AsyncSession, order_id: int) -> str:
+    """Dispatch the order_confirmation email and return a truthful outcome.
+
+    Called synchronously by the order-confirm endpoint AFTER the order has been
+    committed as confirmed, so the result (sent / failed / unavailable /
+    skipped) is real and can be reported to the admin. Never raises: send
+    failures are captured in notification_logs and returned as ``failed``
+    without undermining the committed confirmation.
+    """
+    from app.modules.customers.model import Customer
+    from app.modules.orders.model import Order
+
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items), selectinload(Order.customer))
+        .where(Order.id == order_id)
+    )
+    order = result.scalar_one_or_none()
+    if order is None:
+        return _EMAIL_OUTCOME_UNAVAILABLE
+
+    customer: Customer | None = order.customer
+    customer_name = _customer_display_name(customer)
+    payload = _build_order_notification_payload(order, customer_name)
+
+    event = "order_confirmation"
+    config = await get_sender_config(db)
+    recipient = payload.get("email") or payload.get("customer_email")
+    if not recipient:
+        return _EMAIL_OUTCOME_UNAVAILABLE
+    if not await is_notification_enabled(db, event):
+        return _EMAIL_OUTCOME_SKIPPED
+    if not config.is_enabled:
+        return _EMAIL_OUTCOME_SKIPPED
+
+    # The manual confirmation email must go ONLY to the customer. Select the
+    # order_confirmation rule that is explicitly addressed to the customer;
+    # an admin/literal-address rule must never satisfy the customer path.
+    result = await db.execute(
+        select(DispatchRule).where(
+            DispatchRule.event_type == NotificationEventType.order_confirmation,
+            DispatchRule.channel == NotificationChannel.email,
+            DispatchRule.recipient == "customer",
+            DispatchRule.is_active == True,  # noqa: E712
+        )
+    )
+    email_rule = result.scalars().first()
+    if email_rule is None:
+        return _EMAIL_OUTCOME_SKIPPED
+
+    outcome = await _dispatch_email(
+        db,
+        event,
+        email_rule,
+        payload,
+        customer_id=payload.get("customer_id"),
+        order_id=payload.get("order_id"),
+    )
+    await db.commit()
+    return outcome
+
+
+async def background_dispatch_order_confirmation(order_id: int) -> None:
+    """Background task fired when an order is manually confirmed.
 
     Loads the order + customer in its own session, builds the notification
     payload and runs the `order_confirmation` dispatch rules (email to the
     customer by default). Failures are captured in notification_logs.
-
-    Returns ``True`` if at least one confirmation email was successfully
-    dispatched, ``False`` otherwise. Callers use this to decide whether the
-    order's ``confirmation_email_sent`` flag may be set.
     """
     from app.modules.customers.model import Customer
     from app.modules.orders.model import Order
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Order)
-            .options(selectinload(Order.items), selectinload(Order.customer))
-            .where(Order.id == order_id)
-        )
-        order = result.scalar_one_or_none()
-        if order is None:
-            return False
-
-        customer: Customer | None = order.customer
-        customer_name = "Valued Customer"
-        if customer:
-            customer_name = (
-                customer.first_name or customer.last_name
-            ) and " ".join(filter(None, [customer.first_name, customer.last_name])) or "Valued Customer"
-
-        payload = {
-            "email": customer.email if customer else None,
-            "customer_email": customer.email if customer else None,
-            "customer_name": customer_name,
-            "order_number": order.order_number,
-            "order_id": order.id,
-            "currency": order.currency,
-            "subtotal": str(order.subtotal),
-            "shipping_cost": str(order.shipping_cost),
-            "tax": str(order.tax),
-            "total_price": str(order.total_price),
-            "paid_amount": str(order.paid_amount),
-            "payment_status": order.payment_status.value,
-            "tracking_number": order.tracking_number,
-            "tracking_company": order.tracking_company,
-            "items": [
-                {
-                    "product_name": item.product_name,
-                    "sku": item.sku,
-                    "variant_title": item.variant_title,
-                    "quantity": item.quantity,
-                    "unit_price": str(item.unit_price),
-                    "total_price": str(item.total_price),
-                }
-                for item in order.items
-            ],
-        }
-        response = await dispatch_event("order_confirmation", payload, db)
-        return response.dispatched > 0
-
-
-async def background_dispatch_order_placed(order_id: int) -> None:
-    """Background task fired when a native order is created.
-
-    Loads the order + customer in its own session, builds the notification
-    payload and runs the `order_placed` dispatch rules (email to the customer
-    by default — subject "Your Eligo Leather Order Has Been Placed").
-    Failures are captured in notification_logs and never affect the order.
-    """
-    from app.modules.customers.model import Customer
-    from app.modules.orders.model import Order
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Order)
-            .options(selectinload(Order.items), selectinload(Order.customer))
-            .where(Order.id == order_id)
-        )
-        order = result.scalar_one_or_none()
+        order = await _load_order_for_notification(db, order_id)
         if order is None:
             return
 
         customer: Customer | None = order.customer
-        customer_name = order.customer_name or "Valued Customer"
+        customer_name = _customer_display_name(customer)
 
-        payload = {
-            "email": order.customer_email,
-            "customer_email": order.customer_email,
-            "customer_name": customer_name,
-            "order_number": order.order_number,
-            "order_id": order.id,
-            "currency": order.currency,
-            "subtotal": str(order.subtotal),
-            "shipping_cost": str(order.shipping_cost),
-            "tax": str(order.tax),
-            "total_price": str(order.total_price),
-            "paid_amount": str(order.paid_amount),
-            "payment_status": order.payment_status.value,
-            "tracking_number": order.tracking_number,
-            "tracking_company": order.tracking_company,
-            "items": [
-                {
-                    "product_name": item.product_name,
-                    "sku": item.sku,
-                    "variant_title": item.variant_title,
-                    "quantity": item.quantity,
-                    "unit_price": str(item.unit_price),
-                    "total_price": str(item.total_price),
-                }
-                for item in order.items
-            ],
-        }
+        payload = _build_order_notification_payload(order, customer_name)
+        await dispatch_event("order_confirmation", payload, db)
+
+
+async def background_dispatch_order_placed(order_id: int) -> None:
+    """Background task fired when a storefront order is successfully placed.
+
+    Loads the order + customer in its own session, builds the notification
+    payload and runs the `order_placed` dispatch rules (email to the customer
+    by default). Failures are captured in notification_logs.
+    """
+    from app.modules.customers.model import Customer
+    from app.modules.orders.model import Order
+
+    async with AsyncSessionLocal() as db:
+        order = await _load_order_for_notification(db, order_id)
+        if order is None:
+            return
+
+        customer: Customer | None = order.customer
+        customer_name = _customer_display_name(customer)
+
+        payload = _build_order_notification_payload(order, customer_name)
         await dispatch_event("order_placed", payload, db)
+
+
+async def _load_order_for_notification(db: AsyncSession, order_id: int) -> object:
+    from app.modules.orders.model import Order
+
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items), selectinload(Order.customer))
+        .where(Order.id == order_id)
+    )
+    return result.scalar_one_or_none()
+
+
+def _customer_display_name(customer) -> str:
+    if customer is None:
+        return "Valued Customer"
+    name = " ".join(filter(None, [customer.first_name, customer.last_name])).strip()
+    return name or "Valued Customer"
+
+
+def _build_order_notification_payload(order, customer_name: str) -> dict:
+    """Build the shared notification payload for order events."""
+    customer = order.customer
+    return {
+        "email": customer.email if customer else None,
+        "customer_email": customer.email if customer else None,
+        "customer_name": customer_name,
+        "order_number": order.order_number,
+        "order_id": order.id,
+        "currency": order.currency,
+        "subtotal": str(order.subtotal),
+        "shipping_cost": str(order.shipping_cost),
+        "tax": str(order.tax),
+        "total_price": str(order.total_price),
+        "paid_amount": str(order.paid_amount),
+        "payment_status": order.payment_status.value,
+        "tracking_number": order.tracking_number,
+        "tracking_company": order.tracking_company,
+        "items": [
+            {
+                "product_name": item.product_name,
+                "sku": item.sku,
+                "variant_title": item.variant_title,
+                "quantity": item.quantity,
+                "unit_price": str(item.unit_price),
+                "total_price": str(item.total_price),
+            }
+            for item in order.items
+        ],
+    }
 
 
 # =====================================================================
@@ -1020,6 +1083,70 @@ async def send_test_with_template(
 
 
 # =====================================================================
+# ORDER_CONFIRMATION TEMPLATE UPGRADE (phone-confirmation wording)
+# =====================================================================
+
+# Historical built-in default that shipped unchanged in every published
+# version before the manual phone-confirmation workflow. Used as the exact
+# fingerprint to identify an UNTOUCHED built-in row so a customized template
+# is never overwritten.
+OLD_ORDER_CONFIRMATION_SUBJECT = "Order {{ order_number }} confirmed - {{ store_name }}"
+OLD_ORDER_CONFIRMATION_BODY = (
+    "<p>Hi {{ customer_name }},</p>"
+    "<p>Thank you for your order. We're getting it ready.</p>"
+    "<h3>Order {{ order_number }}</h3>"
+    '<table border="1" cellpadding="8" cellspacing="0" '
+    'style="border-collapse:collapse;width:100%">'
+    "<tr><th>Item</th><th>Qty</th><th>Price</th></tr>"
+    "{% for item in items %}"
+    "<tr><td>{{ item.product_name }}</td><td>{{ item.quantity }}</td>"
+    "<td>{{ item.total_price }} {{ currency }}</td></tr>"
+    "{% endfor %}"
+    "</table>"
+    "<p><strong>Total:</strong> {{ total_price }} {{ currency }}</p>"
+    "{% if tracking_number %}"
+    "<p>Tracking: {{ tracking_number }} ({{ tracking_company }})</p>"
+    "{% endif %}"
+    "<p>Thank you for shopping with {{ store_name }}.</p>"
+)
+
+
+def _is_old_order_confirmation_default(subject: str, html_body: str) -> bool:
+    """True only when a row matches the historical untampered built-in default."""
+    return subject == OLD_ORDER_CONFIRMATION_SUBJECT and html_body == OLD_ORDER_CONFIRMATION_BODY
+
+
+async def _upgrade_default_order_confirmation_template(db: AsyncSession) -> bool:
+    """Upgrade an untouched built-in ``order_confirmation`` template to the
+    phone-confirmation wording. Returns True when a row was upgraded.
+
+    Only the row whose subject + body still exactly match the historical
+    built-in default is touched. Any admin-customized template is preserved.
+    Idempotent: once upgraded the body no longer matches the old fingerprint.
+    """
+    new_default = next(
+        (t for t in BUILT_IN_TEMPLATES if t["code"] == "order_confirmation"), None
+    )
+    if new_default is None:
+        return False
+
+    result = await db.execute(
+        select(EmailTemplate).where(EmailTemplate.code == "order_confirmation")
+    )
+    template = result.scalar_one_or_none()
+    if template is None:
+        return False
+    if not _is_old_order_confirmation_default(template.subject, template.html_body):
+        return False
+
+    template.name = new_default["name"]
+    template.subject = new_default["subject"]
+    template.html_body = new_default["html_body"]
+    await db.commit()
+    return True
+
+
+# =====================================================================
 # CUSTOMER SEARCH FOR MANUAL EMAIL
 # =====================================================================
 
@@ -1061,6 +1188,10 @@ async def search_customers_for_email(
 async def seed_defaults(db: AsyncSession) -> None:
     await get_sender_config(db)
 
+    # Templates: add any built-in template whose code is missing. Existing
+    # rows (including admin-customized ones) are NEVER overwritten, so this
+    # safely introduces new built-in templates (e.g. order_placed) onto an
+    # existing database without touching customized templates.
     result = await db.execute(select(EmailTemplate.code))
     existing_codes = {row[0] for row in result.all()}
     for template in BUILT_IN_TEMPLATES:
@@ -1074,18 +1205,34 @@ async def seed_defaults(db: AsyncSession) -> None:
             )
     await db.commit()
 
-    result = await db.execute(select(DispatchRule.id).limit(1))
-    if result.scalar_one_or_none() is None:
-        for rule in DEFAULT_RULES:
-            template = await get_template_by_code(rule.pop("template_code"), db)
-            db.add(
-                DispatchRule(
-                    event_type=rule["event_type"],
-                    channel=rule["channel"],
-                    recipient=rule["recipient"],
-                    template_id=template.id if template else None,
-                )
+    # Dispatch rules: add each missing default rule individually, keyed by
+    # (event_type, channel, recipient), so a DB that already has some rules
+    # still receives the newly-added order_placed rule. Existing /
+    # admin-customized rules are left untouched, and no duplicate rules are
+    # ever added.
+    result = await db.execute(
+        select(DispatchRule.event_type, DispatchRule.channel, DispatchRule.recipient)
+    )
+    existing_rules = {
+        (row[0], row[1].value if isinstance(row[1], NotificationChannel) else row[1], row[2])
+        for row in result.all()
+    }
+    added_any = False
+    for rule in DEFAULT_RULES:
+        key = (rule["event_type"], rule["channel"], rule["recipient"])
+        if key in existing_rules:
+            continue
+        template = await get_template_by_code(rule["template_code"], db)
+        db.add(
+            DispatchRule(
+                event_type=rule["event_type"],
+                channel=rule["channel"],
+                recipient=rule["recipient"],
+                template_id=template.id if template else None,
             )
+        )
+        added_any = True
+    if added_any:
         await db.commit()
 
     # Seed notification settings (one row per event type, defaults to enabled)

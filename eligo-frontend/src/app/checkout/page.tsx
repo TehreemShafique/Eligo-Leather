@@ -276,7 +276,7 @@ const handleApplyDiscount = async () => {
             Thank you for your order
           </h1>
           <p className="mt-4 text-base leading-7 text-neutral-600">
-            Your Cash on Delivery order has been received. We will contact you when it is ready to ship.
+            Your Cash on Delivery order has been received. Our team will contact you to confirm it before processing.
           </p>
           <div className="mx-auto mt-6 max-w-sm rounded-[10px] bg-slate-50 px-4 py-3 text-sm">
             Order reference: <strong className="text-amber-800">{completedOrderId}</strong>

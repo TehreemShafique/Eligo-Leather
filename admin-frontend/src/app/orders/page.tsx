@@ -36,6 +36,7 @@ interface Order {
   payment_status: string
   fulfillment_status: string
   delivery_status: string
+  confirmed_at: string | null
   tags: string | null
   is_archived: boolean
   created_at: string
@@ -261,6 +262,9 @@ export default function AdminOrdersPage() {
                         <Link href={`/orders/${encodeURIComponent(String(order.order_number).replace(/^#/, ""))}`} className="font-bold text-amber-900 hover:underline">
                           {order.order_number}
                         </Link>
+                        {order.confirmed_at === null && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold align-middle" title="Order has not been manually confirmed yet">Needs confirm</span>
+                        )}
                       </td>
                       <td className="eligo-td font-semibold text-gray-900">{order.customer_name || "Guest"}</td>
                       <td className="eligo-td text-gray-600 truncate max-w-[200px]">

@@ -86,20 +86,30 @@ interface OrderData {
   delivery_status: string
   delivery_method: string
   return_status: string
-  order_status: string
-  confirmation_email_sent: boolean
   tracking_company: string | null
   tracking_number: string | null
   shipping_address: string | null
   billing_address: string | null
   tags: string | null
   is_archived: boolean
+  confirmed_at: string | null
   created_at: string
   updated_at: string
   items: OrderItem[]
   customer_name?: string | null
   customer_phone?: string | null
   customer_email?: string | null
+}
+
+interface ConfirmOrderResponse {
+  order_id: number
+  order_number: string
+  confirmed_at: string | null
+  already_confirmed: boolean
+  email_status: "sent" | "failed" | "unavailable" | "skipped"
+  email_message: string | null
+  courier_booked: boolean
+  courier_error: string | null
 }
 
 type FeedItem =
@@ -189,6 +199,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const [itemImages, setItemImages] = useState<Record<number, string>>({})
   const [editAddressOpen, setEditAddressOpen] = useState(false)
   const [restocking, setRestocking] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   const [editShippingAddress, setEditShippingAddress] = useState("")
   const [commentText, setCommentText] = useState("")
@@ -283,18 +294,48 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
     } catch { toast.error("Failed to update delivery status") }
   }
 
-  // Confirm the order after the admin has manually called the customer.
-  // The backend does the one-time status update and sends the confirmation
-  // email; repeated clicks are blocked server-side.
+  // One-time manual confirmation after verifying the customer by phone.
+  // This triggers the order-confirmation email and the Leopards booking, so
+  // the API makes it idempotent: any retry observes the already-confirmed
+  // outcome and runs zero side effects.
   const handleConfirmOrder = async () => {
-    if (!order || order.confirmation_email_sent) return
-    if (!window.confirm("Confirm this order and send the confirmation email to the customer?")) return
+    if (!order || confirming) return
+    if (
+      !window.confirm(
+        `Confirm order ${order.order_number} after verifying it with the customer by phone?\n\n` +
+        `This is a one-time action.\n\n` +
+        `This sends the order confirmation email and books the shipment with Leopards immediately.`,
+      )
+    ) {
+      return
+    }
+    setConfirming(true)
     try {
-      await apiFetch(`/api/v1/orders/${orderId}/confirm`, { method: "POST" })
-      toast.success("Order confirmed! Confirmation email sent to the customer.")
+      const result = await apiFetch<ConfirmOrderResponse>(`/api/v1/orders/${orderId}/confirm`, { method: "POST" })
+      if (result.already_confirmed) {
+        toast.info("This order was already confirmed.")
+      } else if (result.email_status === "failed" && !result.courier_booked) {
+        toast.error("Order confirmed, but the confirmation email and courier booking both failed.")
+      } else if (result.email_status === "failed") {
+        toast.warning("Order confirmed and courier booked, but the confirmation email failed.")
+      } else if (result.email_status === "unavailable") {
+        toast.success(result.courier_booked
+          ? "Order confirmed. Customer has no email address — courier booked."
+          : "Order confirmed. Customer has no email address.")
+      } else if (result.email_status === "skipped") {
+        toast.success(result.courier_booked
+          ? "Order confirmed and courier booked. Confirmation email was not sent because notifications are currently unavailable/disabled."
+          : "Order confirmed. Confirmation email was not sent because notifications are currently unavailable/disabled.")
+      } else if (!result.courier_booked) {
+        toast.warning("Order confirmed and confirmation email sent, but courier booking failed.")
+      } else {
+        toast.success("Order confirmed! Confirmation email sent and courier booked.")
+      }
       fetchOrder(); fetchAuditLog()
     } catch {
-      toast.error("Failed to confirm the order. Please try again.")
+      toast.error("Failed to confirm order")
+    } finally {
+      setConfirming(false)
     }
   }
 
@@ -436,7 +477,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const tags = order.tags ? order.tags.split(",").map(t => t.trim()).filter(Boolean) : []
   const isPaid = order.payment_status === "paid"
   const isFulfilled = order.fulfillment_status === "fulfilled"
-  const isOrderConfirmed = order.order_status === "confirmed" && order.confirmation_email_sent
+  const isConfirmed = order.confirmed_at !== null && order.confirmed_at !== undefined
   const restockableItems = order.items.filter(i => !i.restocked)
   const allRestocked = order.items.length > 0 && restockableItems.length === 0
   const totalRestockUnits = order.items.reduce((sum, i) => sum + i.quantity, 0)
@@ -487,9 +528,9 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
                 {isFulfilled ? <Truck className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
                 <span>{isFulfilled ? "Fulfilled" : "Unfulfilled"}</span>
               </span>
-              <span className={`px-3 py-1 text-xs font-bold rounded-full flex items-center gap-1.5 border ${isOrderConfirmed ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-orange-100 text-orange-800 border-orange-300"}`}>
-                {isOrderConfirmed ? <CheckCircle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                <span>{isOrderConfirmed ? "Confirmed" : "Placed"}</span>
+              <span className={`px-3 py-1 text-xs font-bold rounded-full flex items-center gap-1.5 border ${isConfirmed ? "bg-teal-100 text-teal-800 border-teal-300" : "bg-gray-100 text-gray-700 border-gray-200"}`} title={isConfirmed ? "Order was verified with the customer and confirmed" : "Order has not been manually confirmed yet"}>
+                {isConfirmed ? <CheckCircle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                <span>{isConfirmed ? "Customer confirmed" : "Awaiting confirmation"}</span>
               </span>
             </div>
             <p className="text-xs text-gray-500 mt-1">
@@ -498,22 +539,10 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
           </div>
         </div>
         <div className="flex items-center gap-2 relative">
-          {isOrderConfirmed ? (
-            <span className="px-3.5 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-xl inline-flex items-center gap-1.5 cursor-default" title="Confirmation email already sent">
-              <CheckCircle className="w-3.5 h-3.5" />
-              <span>Order Confirmed</span>
-              <span className="text-emerald-600 font-medium">· Email sent</span>
-            </span>
-          ) : (
-            <button
-              onClick={handleConfirmOrder}
-              title="Call the customer, then confirm the order. The confirmation email is sent automatically (once)."
-              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <CheckCircle className="w-3.5 h-3.5" />
-              <span>Confirm Order</span>
-            </button>
-          )}
+          {!isConfirmed && <button onClick={handleConfirmOrder} disabled={confirming} title="Verify the order with the customer by phone, then confirm it once. Sends the confirmation email and books Leopards." className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+            {confirming ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+            <span>{confirming ? "Confirming..." : "Confirm Order"}</span>
+          </button>}
           {!isPaid && <button onClick={handleMarkPaid} className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Paid</button>}
           {!isFulfilled && <button onClick={handleMarkDelivered} className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Delivered</button>}
           {restockableItems.length > 0 && (
@@ -703,6 +732,14 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
               {order.customer_phone && <div className="flex items-center gap-2.5"><Phone className="w-4 h-4 text-gray-400" /><span className="text-xs text-gray-700">{order.customer_phone}</span></div>}
               {order.customer_email && <div className="flex items-center gap-2.5"><EnvelopeSimple className="w-4 h-4 text-gray-400" /><span className="text-xs text-gray-700">{order.customer_email}</span></div>}
             </div>
+            {isConfirmed && (
+              <div className="pt-2 border-t border-gray-100">
+                <div className="px-2.5 py-2 bg-teal-50 border border-teal-200 rounded-xl space-y-1">
+                  <div className="flex items-center gap-2 text-[11px] font-bold text-teal-800"><CheckCircle className="w-3.5 h-3.5" />Confirmed {order.confirmed_at ? `on ${formatDateLong(order.confirmed_at)}` : ""}</div>
+                  {!order.customer_email && <div className="text-[10px] text-teal-700 leading-relaxed">Customer has no email on file — no confirmation email was sent. Confirmation was completed by phone.</div>}
+                </div>
+              </div>
+            )}
             {order.shipping_address && <div className="pt-2 border-t border-gray-100"><div className="flex items-start gap-2.5"><MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" /><span className="text-xs text-gray-700 leading-relaxed">{order.shipping_address}</span></div></div>}
           </div>
 

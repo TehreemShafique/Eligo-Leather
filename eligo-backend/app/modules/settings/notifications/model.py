@@ -10,8 +10,8 @@ from app.db.base import Base
 
 
 class NotificationEventType(str, enum.Enum):
-    order_confirmation = "order_confirmation"
     order_placed = "order_placed"
+    order_confirmation = "order_confirmation"
     order_shipped = "order_shipped"
     order_delivered = "order_delivered"
     order_cancelled = "order_cancelled"

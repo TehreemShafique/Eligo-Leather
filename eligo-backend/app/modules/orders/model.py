@@ -13,18 +13,6 @@ def _utcnow() -> datetime:
 
 # ==== Enums ====
 
-class OrderStatus(str, enum.Enum):
-    """Lifecycle of an order before fulfilment.
-
-    ``placed``    - created on the storefront; admin must manually call the
-                    customer and confirm it by phone.
-    ``confirmed`` - admin verified the order with the customer; the order
-                    confirmation email has been dispatched.
-    """
-
-    placed = "placed"
-    confirmed = "confirmed"
-
 class PaymentStatus(str, enum.Enum):
     paid = "paid"
     pending = "pending"
@@ -79,6 +67,7 @@ class RecoveryStatus(str, enum.Enum):
 
 class AuditEventType(str, enum.Enum):
     order_created = "order_created"
+    customer_confirmed = "customer_confirmed"
     payment_updated = "payment_updated"
     fulfillment_updated = "fulfillment_updated"
     delivery_updated = "delivery_updated"
@@ -129,6 +118,12 @@ class Order(Base):
     fulfill_by: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Customer phone-confirmation gate: null = not yet confirmed by phone,
+    # set = admin confirmed after speaking with the customer. Only confirmed
+    # orders move to the courier workflow.
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     channel: Mapped[str] = mapped_column(String, default="Online Store")
     currency: Mapped[str] = mapped_column(String(3), default="PKR")
@@ -151,12 +146,6 @@ class Order(Base):
     delivery_method: Mapped[DeliveryMethod] = mapped_column(SAEnum(DeliveryMethod), default=DeliveryMethod.standard)
     return_status: Mapped[ReturnStatus] = mapped_column(SAEnum(ReturnStatus), default=ReturnStatus.none)
     label_status: Mapped[LabelStatus] = mapped_column(SAEnum(LabelStatus), default=LabelStatus.not_generated)
-
-    # Manual order-lifecycle status: admin calls the customer, then confirms
-    # the order (one-time). ``confirmation_email_sent`` is the DB-level guard
-    # that prevents the confirmation email from ever being dispatched twice.
-    order_status: Mapped[OrderStatus] = mapped_column(SAEnum(OrderStatus), default=OrderStatus.placed)
-    confirmation_email_sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Tracking
     tracking_company: Mapped[str | None] = mapped_column(String, nullable=True)
