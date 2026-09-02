@@ -86,6 +86,8 @@ interface OrderData {
   delivery_status: string
   delivery_method: string
   return_status: string
+  order_status: string
+  confirmation_email_sent: boolean
   tracking_company: string | null
   tracking_number: string | null
   shipping_address: string | null
@@ -281,6 +283,21 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
     } catch { toast.error("Failed to update delivery status") }
   }
 
+  // Confirm the order after the admin has manually called the customer.
+  // The backend does the one-time status update and sends the confirmation
+  // email; repeated clicks are blocked server-side.
+  const handleConfirmOrder = async () => {
+    if (!order || order.confirmation_email_sent) return
+    if (!window.confirm("Confirm this order and send the confirmation email to the customer?")) return
+    try {
+      await apiFetch(`/api/v1/orders/${orderId}/confirm`, { method: "POST" })
+      toast.success("Order confirmed! Confirmation email sent to the customer.")
+      fetchOrder(); fetchAuditLog()
+    } catch {
+      toast.error("Failed to confirm the order. Please try again.")
+    }
+  }
+
   // Returns every non-restocked order item back to its variant's inventory
   // (same product + same color variant that was ordered). The order itself
   // stays in the system for courier (Leopards) return claims.
@@ -419,6 +436,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
   const tags = order.tags ? order.tags.split(",").map(t => t.trim()).filter(Boolean) : []
   const isPaid = order.payment_status === "paid"
   const isFulfilled = order.fulfillment_status === "fulfilled"
+  const isOrderConfirmed = order.order_status === "confirmed" && order.confirmation_email_sent
   const restockableItems = order.items.filter(i => !i.restocked)
   const allRestocked = order.items.length > 0 && restockableItems.length === 0
   const totalRestockUnits = order.items.reduce((sum, i) => sum + i.quantity, 0)
@@ -469,6 +487,10 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
                 {isFulfilled ? <Truck className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
                 <span>{isFulfilled ? "Fulfilled" : "Unfulfilled"}</span>
               </span>
+              <span className={`px-3 py-1 text-xs font-bold rounded-full flex items-center gap-1.5 border ${isOrderConfirmed ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-orange-100 text-orange-800 border-orange-300"}`}>
+                {isOrderConfirmed ? <CheckCircle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                <span>{isOrderConfirmed ? "Confirmed" : "Placed"}</span>
+              </span>
             </div>
             <p className="text-xs text-gray-500 mt-1">
               {formatDateLong(order.created_at)} from <strong className="text-gray-800">{order.channel}</strong>
@@ -476,6 +498,22 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
           </div>
         </div>
         <div className="flex items-center gap-2 relative">
+          {isOrderConfirmed ? (
+            <span className="px-3.5 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-xl inline-flex items-center gap-1.5 cursor-default" title="Confirmation email already sent">
+              <CheckCircle className="w-3.5 h-3.5" />
+              <span>Order Confirmed</span>
+              <span className="text-emerald-600 font-medium">· Email sent</span>
+            </span>
+          ) : (
+            <button
+              onClick={handleConfirmOrder}
+              title="Call the customer, then confirm the order. The confirmation email is sent automatically (once)."
+              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
+              <span>Confirm Order</span>
+            </button>
+          )}
           {!isPaid && <button onClick={handleMarkPaid} className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Paid</button>}
           {!isFulfilled && <button onClick={handleMarkDelivered} className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Delivered</button>}
           {restockableItems.length > 0 && (

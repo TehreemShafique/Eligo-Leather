@@ -13,6 +13,18 @@ def _utcnow() -> datetime:
 
 # ==== Enums ====
 
+class OrderStatus(str, enum.Enum):
+    """Lifecycle of an order before fulfilment.
+
+    ``placed``    - created on the storefront; admin must manually call the
+                    customer and confirm it by phone.
+    ``confirmed`` - admin verified the order with the customer; the order
+                    confirmation email has been dispatched.
+    """
+
+    placed = "placed"
+    confirmed = "confirmed"
+
 class PaymentStatus(str, enum.Enum):
     paid = "paid"
     pending = "pending"
@@ -139,6 +151,12 @@ class Order(Base):
     delivery_method: Mapped[DeliveryMethod] = mapped_column(SAEnum(DeliveryMethod), default=DeliveryMethod.standard)
     return_status: Mapped[ReturnStatus] = mapped_column(SAEnum(ReturnStatus), default=ReturnStatus.none)
     label_status: Mapped[LabelStatus] = mapped_column(SAEnum(LabelStatus), default=LabelStatus.not_generated)
+
+    # Manual order-lifecycle status: admin calls the customer, then confirms
+    # the order (one-time). ``confirmation_email_sent`` is the DB-level guard
+    # that prevents the confirmation email from ever being dispatched twice.
+    order_status: Mapped[OrderStatus] = mapped_column(SAEnum(OrderStatus), default=OrderStatus.placed)
+    confirmation_email_sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Tracking
     tracking_company: Mapped[str | None] = mapped_column(String, nullable=True)

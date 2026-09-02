@@ -78,6 +78,31 @@ BUILT_IN_TEMPLATES = [
         ),
     },
     {
+        "code": "order_placed",
+        "name": "Order Placed",
+        "subject": "Your Eligo Leather Order Has Been Placed",
+        "html_body": (
+            "<p>Hi {{ customer_name }},</p>"
+            "<p>Your order has been placed successfully! We have received your "
+            "order and will contact you shortly to confirm it.</p>"
+            "<h3>Order {{ order_number }}</h3>"
+            "<table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" "
+            "style=\"border-collapse:collapse;width:100%\">"
+            "<tr><th>Item</th><th>Qty</th><th>Price</th></tr>"
+            "{% for item in items %}"
+            "<tr><td>{{ item.product_name }}{% if item.variant_title %}"
+            " - {{ item.variant_title }}{% endif %}</td>"
+            "<td>{{ item.quantity }}</td>"
+            "<td>{{ item.total_price }} {{ currency }}</td></tr>"
+            "{% endfor %}"
+            "</table>"
+            "<p><strong>Total:</strong> {{ total_price }} {{ currency }}</p>"
+            "<p>We have received your order and will contact you shortly to "
+            "confirm it.</p>"
+            "<p>Thank you for shopping with {{ store_name }}.</p>"
+        ),
+    },
+    {
         "code": "order_shipped",
         "name": "Order Shipped",
         "subject": "Your order {{ order_number }} is on the way",
@@ -154,6 +179,13 @@ DEFAULT_RULES = [
         "channel": "email",
         "recipient": "customer",
         "template_code": "order_confirmation",
+    },
+    # Customer gets an "Order Placed" acknowledgement email on order placement.
+    {
+        "event_type": "order_placed",
+        "channel": "email",
+        "recipient": "customer",
+        "template_code": "order_placed",
     },
     {
         "event_type": "order_shipped",
@@ -737,12 +769,16 @@ async def background_dispatch_event(event_type: str, payload: dict) -> None:
         await dispatch_event(event_type, payload, db)
 
 
-async def background_dispatch_order_confirmation(order_id: int) -> None:
-    """Background task fired when a native order is created.
+async def background_dispatch_order_confirmation(order_id: int) -> bool:
+    """Dispatch the order-confirmation email for a given order.
 
     Loads the order + customer in its own session, builds the notification
     payload and runs the `order_confirmation` dispatch rules (email to the
     customer by default). Failures are captured in notification_logs.
+
+    Returns ``True`` if at least one confirmation email was successfully
+    dispatched, ``False`` otherwise. Callers use this to decide whether the
+    order's ``confirmation_email_sent`` flag may be set.
     """
     from app.modules.customers.model import Customer
     from app.modules.orders.model import Order
@@ -755,7 +791,7 @@ async def background_dispatch_order_confirmation(order_id: int) -> None:
         )
         order = result.scalar_one_or_none()
         if order is None:
-            return
+            return False
 
         customer: Customer | None = order.customer
         customer_name = "Valued Customer"
@@ -791,7 +827,62 @@ async def background_dispatch_order_confirmation(order_id: int) -> None:
                 for item in order.items
             ],
         }
-        await dispatch_event("order_confirmation", payload, db)
+        response = await dispatch_event("order_confirmation", payload, db)
+        return response.dispatched > 0
+
+
+async def background_dispatch_order_placed(order_id: int) -> None:
+    """Background task fired when a native order is created.
+
+    Loads the order + customer in its own session, builds the notification
+    payload and runs the `order_placed` dispatch rules (email to the customer
+    by default — subject "Your Eligo Leather Order Has Been Placed").
+    Failures are captured in notification_logs and never affect the order.
+    """
+    from app.modules.customers.model import Customer
+    from app.modules.orders.model import Order
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Order)
+            .options(selectinload(Order.items), selectinload(Order.customer))
+            .where(Order.id == order_id)
+        )
+        order = result.scalar_one_or_none()
+        if order is None:
+            return
+
+        customer: Customer | None = order.customer
+        customer_name = order.customer_name or "Valued Customer"
+
+        payload = {
+            "email": order.customer_email,
+            "customer_email": order.customer_email,
+            "customer_name": customer_name,
+            "order_number": order.order_number,
+            "order_id": order.id,
+            "currency": order.currency,
+            "subtotal": str(order.subtotal),
+            "shipping_cost": str(order.shipping_cost),
+            "tax": str(order.tax),
+            "total_price": str(order.total_price),
+            "paid_amount": str(order.paid_amount),
+            "payment_status": order.payment_status.value,
+            "tracking_number": order.tracking_number,
+            "tracking_company": order.tracking_company,
+            "items": [
+                {
+                    "product_name": item.product_name,
+                    "sku": item.sku,
+                    "variant_title": item.variant_title,
+                    "quantity": item.quantity,
+                    "unit_price": str(item.unit_price),
+                    "total_price": str(item.total_price),
+                }
+                for item in order.items
+            ],
+        }
+        await dispatch_event("order_placed", payload, db)
 
 
 # =====================================================================

@@ -4,6 +4,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.modules.orders.model import (
+    OrderStatus,
     PaymentStatus, FulfillmentStatus, DeliveryStatus, DeliveryMethod,
     ReturnStatus, LabelStatus, DraftOrderStatus, RecoveryStatus,
     AuditEventType,
@@ -133,6 +134,8 @@ class OrderOut(BaseModel):
     delivery_method: DeliveryMethod
     return_status: ReturnStatus
     label_status: LabelStatus
+    order_status: OrderStatus
+    confirmation_email_sent: bool
     tracking_company: str | None
     tracking_number: str | None
     shipping_address: str | None

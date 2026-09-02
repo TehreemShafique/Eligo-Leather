@@ -19,7 +19,7 @@ from app.modules.orders import leopard_service
 from app.modules.orders import leopard_client
 from decimal import Decimal
 from app.modules.orders.model import (
-    Order, OrderItem, OrderAuditLog,
+    Order, OrderItem, OrderAuditLog, OrderStatus,
     PaymentStatus, FulfillmentStatus, DeliveryStatus, LeopardShipment,
 )
 from app.modules.customers.model import Customer, CustomerAddress
@@ -33,7 +33,10 @@ from app.modules.orders.schema import (
     SendRecoveryEmailRequest, SendRecoveryEmailResponse,
     ExportOrdersRequest, OrdersAnalyticsSummary,
 )
-from app.modules.settings.notifications.service import background_dispatch_order_confirmation
+from app.modules.settings.notifications.service import (
+    background_dispatch_order_confirmation,
+    background_dispatch_order_placed,
+)
 
 router = APIRouter(prefix="/orders", tags=["Orders"], dependencies=[Depends(get_current_user)])
 public_webhook_router = APIRouter(prefix="/orders", tags=["Orders - Webhooks"])
@@ -1475,13 +1478,13 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         ) from exc
     await db.refresh(new_order)
 
-    # ---- Order confirmation email (background; must never break checkout) ----
+    # ---- "Order Placed" acknowledgment email (background; never breaks order) ----
     try:
         import asyncio
-        asyncio.create_task(background_dispatch_order_confirmation(new_order.id))
-    except Exception as notif_exc:
+        asyncio.create_task(background_dispatch_order_placed(new_order.id))
+    except Exception as placed_exc:
         logging.getLogger(__name__).warning(
-            "Order confirmation notification failed for %s: %s", order_number, notif_exc
+            "Order placed notification failed for %s: %s", order_number, placed_exc
         )
 
     # ---- Auto-book with Leopards (best effort; must never break checkout) ----
@@ -1836,9 +1839,10 @@ async def create_order(
     db: AsyncSession = Depends(get_db),
 ):
     order = await service.create_order(db, data)
-    # Fire the order confirmation email in the background so the SMTP
-    # handshake can never block the create response.
-    background_tasks.add_task(background_dispatch_order_confirmation, order.id)
+    # Fire the "Order Placed" acknowledgment email in the background. The
+    # order *confirmation* email is NOT sent here - it only goes out after the
+    # admin manually calls the customer and confirms the order.
+    background_tasks.add_task(background_dispatch_order_placed, order.id)
     return order
 
 
@@ -2021,6 +2025,64 @@ async def update_order(order_id: int, data: OrderUpdate, db: AsyncSession = Depe
     order = await service.update_order(db, order_id, data)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+
+@router.post("/{order_id}/confirm", response_model=OrderOut)
+async def confirm_order(order_id: int, db: AsyncSession = Depends(get_db)):
+    """Confirm a placed order after the admin manually calls the customer.
+
+    One-time, backend/Database enforced: once the order is confirmed, the
+    ``confirmation_email_sent`` flag blocks any further confirmation action, so
+    repeated clicks can never dispatch a duplicate confirmation email.
+
+    Flow: set ``order_status = confirmed`` -> dispatch the existing Jinja2
+    order-confirmation email via the existing email service -> mark the email
+    as sent only if it was actually dispatched (failures are logged to
+    ``notification_logs`` and leave the flag unset so it can be retried).
+    """
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items), selectinload(Order.customer))
+        .where(Order.id == order_id)
+    )
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Already confirmed (one-time guard) - idempotent no-op, no resend.
+    if order.confirmation_email_sent:
+        return order
+
+    order.order_status = OrderStatus.confirmed
+    await db.commit()
+    await db.refresh(order)
+
+    # Dispatch the existing confirmation email now (not from the frontend).
+    # Returns True only when the email was successfully dispatched.
+    dispatched_ok = await background_dispatch_order_confirmation(order.id)
+
+    # Re-check the once-only flag: a concurrent confirm may have won the race
+    # and already sent the email. Only mark sent when we actually dispatched it
+    # and no other confirmation completed in the meantime.
+    if dispatched_ok and not order.confirmation_email_sent:
+        order.confirmation_email_sent = True
+    # If dispatch failed, leave confirmation_email_sent unset so the admin can
+    # retry; the failure was recorded in notification_logs (existing pattern).
+    await db.commit()
+    await db.refresh(order)
+
+    db.add(OrderAuditLog(
+        order_id=order.id,
+        event_type="status_changed",
+        description=(
+            f"Order confirmed after manual customer call; "
+            f"confirmation email {'sent' if dispatched_ok else 'send failed - logged'}."
+        ),
+        actor_name="Admin",
+    ))
+    await db.commit()
+
     return order
 
 

@@ -4,7 +4,9 @@ from decimal import Decimal
 
 import pytest
 
-from app.modules.orders.model import Order, OrderItem, OrderAuditLog, ReturnStatus
+from app.modules.orders.model import (
+    Order, OrderItem, OrderAuditLog, OrderStatus, ReturnStatus,
+)
 
 
 async def _seed_order(db_session, order_number="ORD-SEED", **kwargs):
@@ -37,6 +39,10 @@ async def test_create_order(client, auth_headers, monkeypatch):
 
     monkeypatch.setattr(
         "app.modules.orders.router.background_dispatch_order_confirmation",
+        _noop_background_dispatch,
+    )
+    monkeypatch.setattr(
+        "app.modules.orders.router.background_dispatch_order_placed",
         _noop_background_dispatch,
     )
     response = await client.post(
@@ -554,5 +560,119 @@ async def test_generate_leopard_cn_api(client):
     res_json = response.json()
     assert res_json["status"] == "success"
     assert len(res_json["results"]) == 2
+
+
+def _make_confirm_dispatch(monkeypatch, dispatched: bool):
+    """Patch ``background_dispatch_order_confirmation`` to return ``dispatched``
+    and track how often it was invoked."""
+    calls = {"count": 0}
+
+    async def _fake_dispatch(order_id: int) -> bool:
+        calls["count"] += 1
+        return dispatched
+
+    monkeypatch.setattr(
+        "app.modules.orders.router.background_dispatch_order_confirmation",
+        _fake_dispatch,
+    )
+    return calls
+
+
+async def test_confirm_order_sets_status_and_sends_email(
+    client, db_session, monkeypatch
+):
+    seeded = await _seed_order(db_session, order_number="ORD-CONF-1")
+    calls = _make_confirm_dispatch(monkeypatch, dispatched=True)
+
+    response = await client.post(f"/api/v1/orders/{seeded.id}/confirm")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["order_status"] == "confirmed"
+    assert body["confirmation_email_sent"] is True
+    assert calls["count"] == 1
+
+    from sqlalchemy import select
+    result = await db_session.execute(
+        select(Order).where(Order.id == seeded.id)
+    )
+    db_order = result.scalar_one()
+    assert db_order.order_status == OrderStatus.confirmed
+    assert db_order.confirmation_email_sent is True
+
+    audit = await db_session.execute(
+        select(OrderAuditLog).where(
+            OrderAuditLog.order_id == seeded.id,
+            OrderAuditLog.event_type == "status_changed",
+        )
+    )
+    assert audit.scalar_one_or_none() is not None
+
+
+async def test_confirm_order_missing_returns_404(client):
+    response = await client.post("/api/v1/orders/99999/confirm")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Order not found"
+
+
+async def test_confirm_order_idempotent_no_duplicate_email(
+    client, db_session, monkeypatch
+):
+    seeded = await _seed_order(db_session, order_number="ORD-CONF-2")
+    calls = _make_confirm_dispatch(monkeypatch, dispatched=True)
+
+    first = await client.post(f"/api/v1/orders/{seeded.id}/confirm")
+    second = await client.post(f"/api/v1/orders/{seeded.id}/confirm")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["confirmation_email_sent"] is True
+    # The email must never be dispatched twice.
+    assert calls["count"] == 1
+
+
+async def test_confirm_order_failed_dispatch_leaves_flag_unset(
+    client, db_session, monkeypatch
+):
+    seeded = await _seed_order(db_session, order_number="ORD-CONF-3")
+    calls = _make_confirm_dispatch(monkeypatch, dispatched=False)
+
+    response = await client.post(f"/api/v1/orders/{seeded.id}/confirm")
+
+    assert response.status_code == 200
+    # Status is confirmed, but because the email wasn't actually dispatched,
+    # the flag stays unset so the admin can retry.
+    assert response.json()["order_status"] == "confirmed"
+    assert response.json()["confirmation_email_sent"] is False
+    assert calls["count"] == 1
+
+
+async def test_confirm_order_flag_set_only_after_successful_dispatch(
+    client, db_session, monkeypatch
+):
+    # First attempt fails, second attempt succeeds -> email dispatched on
+    # the retry and the flag is then set.
+    seeded = await _seed_order(db_session, order_number="ORD-CONF-4")
+    state = {"ok": False, "count": 0}
+
+    async def _flaky_dispatch(order_id: int) -> bool:
+        state["count"] += 1
+        return state["ok"]
+
+    monkeypatch.setattr(
+        "app.modules.orders.router.background_dispatch_order_confirmation",
+        _flaky_dispatch,
+    )
+
+    first = await client.post(f"/api/v1/orders/{seeded.id}/confirm")
+    assert first.status_code == 200
+    assert first.json()["confirmation_email_sent"] is False
+
+    state["ok"] = True
+    second = await client.post(f"/api/v1/orders/{seeded.id}/confirm")
+    assert second.status_code == 200
+    assert second.json()["confirmation_email_sent"] is True
+    assert state["count"] == 2
+
 
 

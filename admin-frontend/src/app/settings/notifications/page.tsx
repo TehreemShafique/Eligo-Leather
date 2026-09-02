@@ -33,6 +33,7 @@ const API = "/api/v1/settings/notifications"
 
 const NOTIFICATION_TYPES: { key: string; label: string; desc: string; category: "transactional" | "promotional" | "internal" }[] = [
   { key: "order_confirmation", label: "Order Confirmation", desc: "Sent when a customer successfully places an order", category: "transactional" },
+  { key: "order_placed", label: "Order Placed", desc: "Sent when a customer successfully places an order", category: "transactional" },
   { key: "order_shipped", label: "Order Shipped", desc: "Sent when an order is fulfilled and shipped", category: "transactional" },
   { key: "order_delivered", label: "Order Delivered", desc: "Sent when the shipment is confirmed delivered", category: "transactional" },
   { key: "order_cancelled", label: "Order Cancelled", desc: "Sent when an order is cancelled", category: "transactional" },
