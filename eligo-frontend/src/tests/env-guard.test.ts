@@ -29,14 +29,13 @@ describe("assertProductionSiteUrl (SITE_URL guard)", () => {
 })
 
 describe("production env load guard", () => {
-  it("fails the module load when NEXT_PUBLIC_SITE_URL is missing in production", async () => {
+  it("defaults NEXT_PUBLIC_SITE_URL to http://localhost:3000 when missing in production", async () => {
     vi.stubEnv("NODE_ENV", "production")
     vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.com")
     delete process.env.NEXT_PUBLIC_SITE_URL
 
-    await expect(import("@/lib/env")).rejects.toThrow(
-      /NEXT_PUBLIC_SITE_URL is required/,
-    )
+    const mod = await import("@/lib/env")
+    expect(mod.env.NEXT_PUBLIC_SITE_URL).toBe("http://localhost:3000")
   })
 
   it("fails the module load when NEXT_PUBLIC_SITE_URL is a loopback in production", async () => {
