@@ -8,7 +8,6 @@ import { ProductSpecGrid } from "./product-spec-grid"
 import { RelatedProducts } from "./related-products"
 import { TestimonialsSection } from "@/components/home/testimonials-section"
 import { fetchReviewSummary } from "@/modules/reviews/api"
-import { getProductSlug, getCategoryLabel } from "@/modules/catalog/types"
 import type { ProductOut, ProductListOut } from "@/modules/catalog/schema"
 
 const COLOR_HEX_MAP: Record<string, string> = {
@@ -64,7 +63,7 @@ export function ProductDetailView({ product, relatedProducts = [] }: ProductDeta
   }))
 
   const [activeColor, setActiveColor] = useState(colors[0]?.name || "")
-  const [galleryImages, setGalleryImages] = useState<string[]>(imageUrls.length > 0 ? imageUrls : [])
+  const [galleryImages] = useState<string[]>(imageUrls.length > 0 ? imageUrls : [])
 
   // Real average rating + count computed from approved reviews in the backend.
   const [reviewRating, setReviewRating] = useState<number | null>(null)
@@ -91,7 +90,6 @@ export function ProductDetailView({ product, relatedProducts = [] }: ProductDeta
     setActiveColor(colorName)
   }
 
-  const productSlug = getProductSlug(product)
   const mainImage = galleryImages.length > 0 ? galleryImages[0] : ""
 
   return (

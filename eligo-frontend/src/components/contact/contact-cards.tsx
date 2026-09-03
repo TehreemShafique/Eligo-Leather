@@ -3,9 +3,6 @@
 import { EnvelopeSimple, PhoneCall, MapPin, Clock } from "@phosphor-icons/react"
 
 export function ContactCards() {
-  const googleMapsUrl =
-    "https://maps.google.com/?q=Gulberg+Empire,+Civic+Center,+Executive+Block,+Gulberg+Greens,+Islamabad"
-
   return (
     <section className="mx-auto w-full max-w-[1280px] px-4 pb-24 pt-20 font-['Manrope'] sm:px-6 lg:px-8 lg:pb-24 lg:pt-20 xl:px-0 xl:pb-[5.416667vw] xl:pt-[4.166667vw]">
       {/* Section Header */}

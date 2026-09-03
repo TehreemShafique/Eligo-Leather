@@ -26,7 +26,7 @@ export default function ScratchWelcomePopup({
   const [showModal, setShowModal] = useState(isOpen)
 
   useEffect(() => {
-    setShowModal(isOpen)
+    queueMicrotask(() => setShowModal(isOpen))
   }, [isOpen])
 
   // Initialize Canvas Scratch Surface

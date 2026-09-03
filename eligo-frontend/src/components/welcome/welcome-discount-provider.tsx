@@ -51,11 +51,11 @@ export default function WelcomeDiscountProvider() {
     const existing = readCookie(VISITOR_COOKIE)
     const visitor = existing || generateVisitorId()
     if (!existing) writeVisitorCookie(visitor)
-    setVisitorId(visitor)
 
     // 2. Ask the backend — it alone decides eligibility for this visitor.
     const runEligibilityCheck = async () => {
       try {
+        setVisitorId(visitor)
         const res = await api.post<WelcomeEligibilityResponse, { visitor_id: string }>(
           "/discounts/public/welcome-check",
           { visitor_id: visitor },
@@ -70,11 +70,10 @@ export default function WelcomeDiscountProvider() {
           // Delay the open so the popup never flashes in mid-render.
           setTimeout(() => setPopupOpen(true), 400)
         }
-      } catch (error) {
+      } catch {
         // Safety: an eligibility API failure must never show the popup.
         // Intentional behind a warn log — no technical detail is shown to
         // the customer.
-        // eslint-disable-next-line no-console
         console.warn("Welcome discount eligibility check could not be completed.")
         setEligibility(false)
       }

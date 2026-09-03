@@ -42,9 +42,6 @@ const PRODUCT_LEFT_POSITIONS = [
   "lg:left-[81.25cqw]",
 ] as const
 
-const FALLBACK_SECONDARY_IMAGE =
-  "/images/homepage/30_rectangle_1682.webp"
-
 export function ProductsSection({
   initialProducts = [],
 }: {

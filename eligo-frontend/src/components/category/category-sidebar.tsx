@@ -1,7 +1,5 @@
 "use client"
 
-import Link from "next/link"
-
 export interface CategorySubItem {
   id: string
   name: string
