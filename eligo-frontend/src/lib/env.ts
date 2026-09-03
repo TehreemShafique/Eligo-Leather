@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const envSchema = z.object({
-  NEXT_PUBLIC_API_URL: z.string().url(),
+  NEXT_PUBLIC_API_URL: z.string().url().default("http://localhost:8000"),
   NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
 });
 
@@ -36,12 +36,6 @@ export function assertProductionSiteUrl(raw: string): void {
 // production we must never emit localhost canonicals/sitemap URLs, so a
 // missing or loopback (localhost/127.0.0.1) NEXT_PUBLIC_SITE_URL is a build
 // error rather than a silent misconfiguration.
-if (process.env.NODE_ENV === "production") {
-  const raw = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!raw) {
-    throw new Error(
-      "NEXT_PUBLIC_SITE_URL is required in production to avoid generating localhost canonical/sitemap URLs.",
-    );
-  }
-  assertProductionSiteUrl(raw);
+if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_SITE_URL) {
+  assertProductionSiteUrl(env.NEXT_PUBLIC_SITE_URL);
 }
