@@ -36,6 +36,9 @@ export function assertProductionSiteUrl(raw: string): void {
 // production we must never emit localhost canonicals/sitemap URLs, so a
 // missing or loopback (localhost/127.0.0.1) NEXT_PUBLIC_SITE_URL is a build
 // error rather than a silent misconfiguration.
-if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_SITE_URL) {
+if (process.env.NODE_ENV === "production") {
+  if (!process.env.NEXT_PUBLIC_SITE_URL) {
+    throw new Error("NEXT_PUBLIC_SITE_URL is required in production.");
+  }
   assertProductionSiteUrl(env.NEXT_PUBLIC_SITE_URL);
 }
