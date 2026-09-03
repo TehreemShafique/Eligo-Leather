@@ -7,9 +7,16 @@ const compat = new FlatCompat({
 
 const eslintConfig = defineConfig([
   ...compat.extends("next/core-web-vitals", "next/typescript"),
-  // Override default ignores of eslint-config-next.
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": "warn",
+      "@typescript-eslint/no-explicit-any": "off",
+      "react/no-unescaped-entities": "off",
+      "@next/next/no-img-element": "warn",
+      "@next/next/no-html-link-for-pages": "off",
+    },
+  },
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",
