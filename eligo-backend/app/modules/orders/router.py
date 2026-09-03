@@ -234,15 +234,8 @@ async def generate_leopard_cn_api(request: Request, db: AsyncSession = Depends(g
             continue
 
         if order_row:
-            # Extract consignee details from the local order
-            customer_name = ""
-            customer_phone = ""
-            if order_row.customer:
-                customer_name = f"{order_row.customer.first_name or ''} {order_row.customer.last_name or ''}".strip()
-                customer_phone = order_row.customer.phone or ""
-
-            consignee_name = customer_name or "Customer"
-            consignee_phone = customer_phone or "0000000000"
+            consignee_name = order_row.customer_name or "Customer"
+            consignee_phone = order_row.customer_phone or "0000000000"
             consignee_address = leopard_service.clean_consignee_address(
                 order_row.shipping_address
             )
@@ -1539,12 +1532,6 @@ async def get_public_order_detail_api(order_id: str, db: AsyncSession = Depends(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    customer = order.customer
-    customer_name = None
-    if customer:
-        parts = [customer.first_name or "", customer.last_name or ""]
-        customer_name = " ".join(p for p in parts if p).strip() or customer.email
-
     def _to_grams(weight: Decimal | None, unit: str | None) -> float:
         if not weight:
             return 0.0
@@ -1591,8 +1578,8 @@ async def get_public_order_detail_api(order_id: str, db: AsyncSession = Depends(
         "order": {
             "id": order.id,
             "order_number": order.order_number,
-            "customer_name": customer_name,
-            "customer_phone": customer.phone if customer else None,
+            "customer_name": order.customer_name,
+            "customer_phone": order.customer_phone,
             "customer_email": order.customer_email,
             "shipping_address": order.shipping_address,
             "city": order.destination,
@@ -1641,10 +1628,6 @@ async def mark_order_paid_public_api(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    customer = order.customer
-    parts = [customer.first_name or "", customer.last_name or ""] if customer else []
-    customer_name = " ".join(p for p in parts if p).strip() or (customer.email if customer else None)
-
     already_paid = order.payment_status == PaymentStatus.paid
     order.payment_status = PaymentStatus.paid
     order.paid_amount = order.total_price
@@ -1666,9 +1649,9 @@ async def mark_order_paid_public_api(
         background_dispatch_event,
         "order_paid",
         {
-            "email": customer.email if customer else None,
-            "customer_email": customer.email if customer else None,
-            "customer_name": customer_name or "Valued Customer",
+            "email": order.customer_email,
+            "customer_email": order.customer_email,
+            "customer_name": order.customer_name or "Valued Customer",
             "order_number": order.order_number,
             "total_price": str(order.total_price),
             "paid_amount": str(order.paid_amount),
@@ -1711,10 +1694,6 @@ async def mark_order_delivered_public_api(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    customer = order.customer
-    parts = [customer.first_name or "", customer.last_name or ""] if customer else []
-    customer_display_name = " ".join(p for p in parts if p).strip() or (customer.email if customer else None)
-
     already_delivered = order.delivery_status == DeliveryStatus.delivered
     order.delivery_status = DeliveryStatus.delivered
     order.fulfillment_status = FulfillmentStatus.fulfilled
@@ -1740,7 +1719,7 @@ async def mark_order_delivered_public_api(
         {
             "email": order.customer_email,
             "customer_email": order.customer_email,
-            "customer_name": customer_display_name or "Valued Customer",
+            "customer_name": order.customer_name or "Valued Customer",
             "order_number": order.order_number,
             "tracking_number": order.tracking_number,
             "tracking_company": order.tracking_company or "Leopards Courier",

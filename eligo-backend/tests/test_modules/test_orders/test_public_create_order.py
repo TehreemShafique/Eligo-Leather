@@ -696,3 +696,275 @@ async def test_create_order_snapshots_shipping_email(client, db_session):
     # The linked customer matches, and the snapshot survives independently.
     customer = await db_session.get(Customer, order.customer_id)
     assert customer.email == "snapshot@example.com"
+
+
+async def test_order_detail_returns_order_snapshot_not_customer_profile(client, db_session):
+    """``GET /api/v1/orders/detail/{order_id}`` must report the ORDER's own
+    checkout snapshot (shipping_name / shipping_phone / shipping_email), not the
+    linked Customer profile, when a returning customer places an order with
+    different checkout details than their archived profile."""
+    from app.modules.customers.model import Customer
+
+    product, variant = await _seed_product(db_session, stock=10)
+
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            first_name="Ali",
+            last_name="Raza",
+            email="returning-detail@example.com",
+            phone="03001234567",
+            city="Lahore",
+            shipping_address="Ali Raza | Phone: 03001234567 | 1 Street, Lahore, Pakistan",
+            destination="Lahore",
+        ),
+    )
+    assert response.status_code == 200
+
+    # Second order, same email -> same customer, but different checkout details.
+    second = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            quantity=2,
+            first_name="Bilal",
+            last_name="Khan",
+            email="returning-detail@example.com",
+            phone="03121234567",
+            city="Karachi",
+            shipping_address="House 9, Phase 4, Karachi, Pakistan",
+            destination="Karachi",
+        ),
+    )
+    assert second.status_code == 200
+    second_order_id = second.json()["order_id"]
+
+    # Fetch the order detail as the Leopards UI does.
+    detail = await client.get(f"/api/v1/orders/detail/{second_order_id}")
+    assert detail.status_code == 200
+    order_payload = detail.json()["order"]
+
+    # The order's own checkout snapshot wins over the shared profile.
+    assert order_payload["customer_name"] == "Bilal Khan"
+    assert order_payload["customer_phone"] == "03121234567"
+    assert order_payload["customer_email"] == "returning-detail@example.com"
+
+    # Confirm the shared profile still holds the OLD values.
+    db_session.expire_all()
+    order = await _load_order(db_session, second_order_id)
+    customer = await db_session.get(Customer, order.customer_id)
+    assert customer.first_name == "Ali"
+    assert customer.last_name == "Raza"
+    assert customer.phone == "03001234567"
+    assert customer.email == "returning-detail@example.com"
+
+
+async def test_generate_cn_uses_order_snapshot_not_customer_profile(client, db_session, monkeypatch):
+    """``POST /api/v1/orders/leopard/generate-cn`` must book the consignee using
+    the ORDER's checkout snapshot (customer_name / customer_phone prefer
+    shipping_name / shipping_phone), not the linked Customer profile."""
+    from app.modules.customers.model import Customer
+    from app.modules.orders import leopard_client
+
+    product, variant = await _seed_product(db_session, stock=10)
+
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            first_name="Ali",
+            last_name="Raza",
+            email="cn-returning@example.com",
+            phone="03001234567",
+            city="Lahore",
+            shipping_address="Ali Raza | Phone: 03001234567 | 1 Street, Lahore, Pakistan",
+            destination="Lahore",
+        ),
+    )
+    assert response.status_code == 200
+    second = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            quantity=2,
+            first_name="Bilal",
+            last_name="Khan",
+            email="cn-returning@example.com",
+            phone="03121234567",
+            city="Karachi",
+            shipping_address="House 9, Phase 4, Karachi, Pakistan",
+            destination="Karachi",
+        ),
+    )
+    assert second.status_code == 200
+    second_order_id = second.json()["order_id"]
+
+    captured = {}
+
+    async def _fake_cn_list():
+        return [{"cn_with_prefix": "CN-TEST-0001", "cn_without_prefix": "0001"}]
+
+    async def _fake_book_packet_api(payload):
+        captured.update(payload)
+        return {"status": 1, "track_number": "CN-TEST-0001"}
+
+    monkeypatch.setattr(leopard_client, "cn_list", _fake_cn_list)
+    monkeypatch.setattr(leopard_client, "book_packet_api", _fake_book_packet_api)
+
+    response = await client.post(
+        "/api/v1/orders/leopard/generate-cn",
+        json={"order_ids": [second_order_id]},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+
+    # Consignee details must come from the order snapshot (Bilal), NOT the
+    # shared profile (Ali).
+    assert captured["consignee_name"] == "Bilal Khan"
+    assert captured["consignee_phone"] == "03121234567"
+
+    # The shared profile still holds the old values.
+    db_session.expire_all()
+    order = await _load_order(db_session, second_order_id)
+    customer = await db_session.get(Customer, order.customer_id)
+    assert customer.first_name == "Ali"
+    assert customer.phone == "03001234567"
+
+
+async def test_mark_paid_notification_uses_order_snapshot(client, db_session, monkeypatch):
+    """``POST /api/v1/orders/mark-paid/{order_id}`` must notify using the
+    ORDER's checkout snapshot (customer_name / customer_email), not the shared
+    Customer profile."""
+    from app.modules.customers.model import Customer
+    from app.modules.settings.notifications import service as notif_service
+
+    product, variant = await _seed_product(db_session, stock=10)
+
+    first = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            first_name="Ali",
+            last_name="Raza",
+            email="paid-returning@example.com",
+            phone="03001234567",
+            city="Lahore",
+            shipping_address="Ali Raza | Phone: 03001234567 | 1 Street, Lahore, Pakistan",
+            destination="Lahore",
+        ),
+    )
+    assert first.status_code == 200
+    second = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            quantity=2,
+            first_name="Bilal",
+            last_name="Khan",
+            email="paid-returning@example.com",
+            phone="03121234567",
+            city="Karachi",
+            shipping_address="House 9, Phase 4, Karachi, Pakistan",
+            destination="Karachi",
+        ),
+    )
+    assert second.status_code == 200
+    second_order_id = second.json()["order_id"]
+
+    captured = {}
+
+    async def _fake_dispatch(event_type, payload):
+        captured["event_type"] = event_type
+        captured.update(payload)
+
+    monkeypatch.setattr(notif_service, "background_dispatch_event", _fake_dispatch)
+
+    response = await client.post(f"/api/v1/orders/mark-paid/{second_order_id}")
+    assert response.status_code == 200
+
+    # Notification must use the order's checkout snapshot (Bilal).
+    assert captured["event_type"] == "order_paid"
+    assert captured["customer_name"] == "Bilal Khan"
+    assert captured["customer_email"] == "paid-returning@example.com"
+    assert captured["email"] == "paid-returning@example.com"
+
+    # The shared profile still holds the old values.
+    db_session.expire_all()
+    order = await _load_order(db_session, second_order_id)
+    customer = await db_session.get(Customer, order.customer_id)
+    assert customer.first_name == "Ali"
+    assert customer.phone == "03001234567"
+
+
+async def test_mark_delivered_notification_uses_order_snapshot(client, db_session, monkeypatch):
+    """``POST /api/v1/orders/mark-delivered/{order_id}`` must notify using the
+    ORDER's checkout snapshot (customer_name), not the shared Customer
+    profile."""
+    from app.modules.customers.model import Customer
+    from app.modules.settings.notifications import service as notif_service
+
+    product, variant = await _seed_product(db_session, stock=10)
+
+    first = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            first_name="Ali",
+            last_name="Raza",
+            email="del-returning@example.com",
+            phone="03001234567",
+            city="Lahore",
+            shipping_address="Ali Raza | Phone: 03001234567 | 1 Street, Lahore, Pakistan",
+            destination="Lahore",
+        ),
+    )
+    assert first.status_code == 200
+    second = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            quantity=2,
+            first_name="Bilal",
+            last_name="Khan",
+            email="del-returning@example.com",
+            phone="03121234567",
+            city="Karachi",
+            shipping_address="House 9, Phase 4, Karachi, Pakistan",
+            destination="Karachi",
+        ),
+    )
+    assert second.status_code == 200
+    second_order_id = second.json()["order_id"]
+
+    captured = {}
+
+    async def _fake_dispatch(event_type, payload):
+        captured["event_type"] = event_type
+        captured.update(payload)
+
+    monkeypatch.setattr(notif_service, "background_dispatch_event", _fake_dispatch)
+
+    response = await client.post(f"/api/v1/orders/mark-delivered/{second_order_id}")
+    assert response.status_code == 200
+
+    # Notification must use the order's checkout snapshot (Bilal).
+    assert captured["event_type"] == "order_delivered"
+    assert captured["customer_name"] == "Bilal Khan"
+    assert captured["customer_email"] == "del-returning@example.com"
+
+    # The shared profile still holds the old values.
+    db_session.expire_all()
+    order = await _load_order(db_session, second_order_id)
+    customer = await db_session.get(Customer, order.customer_id)
+    assert customer.first_name == "Ali"
+    assert customer.phone == "03001234567"
