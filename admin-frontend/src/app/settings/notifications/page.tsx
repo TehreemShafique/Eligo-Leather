@@ -1003,6 +1003,18 @@ export default function AdminSettingsNotificationsPage() {
                             <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
                               <CheckCircle className="w-3 h-3" /> Sent
                             </span>
+                          ) : log.status === "failed" ? (
+                            <span className="inline-flex items-center gap-1 text-red-600 font-semibold" title={log.error || ""}>
+                              <Warning className="w-3 h-3" /> Failed
+                            </span>
+                          ) : log.status === "unavailable" ? (
+                            <span className="inline-flex items-center gap-1 text-amber-600 font-semibold" title={log.error || ""}>
+                              <X className="w-3 h-3" /> Unavailable
+                            </span>
+                          ) : log.status === "skipped" ? (
+                            <span className="inline-flex items-center gap-1 text-gray-500 font-semibold" title={log.error || ""}>
+                              <Clock className="w-3 h-3" /> Skipped
+                            </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-red-600 font-semibold" title={log.error || ""}>
                               <Warning className="w-3 h-3" /> Failed

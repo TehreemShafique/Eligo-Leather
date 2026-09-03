@@ -32,6 +32,8 @@ class NotificationChannel(str, enum.Enum):
 class DispatchStatus(str, enum.Enum):
     success = "success"
     failed = "failed"
+    unavailable = "unavailable"
+    skipped = "skipped"
 
 
 class SenderConfig(Base):

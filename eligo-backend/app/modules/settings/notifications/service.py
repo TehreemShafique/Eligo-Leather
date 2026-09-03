@@ -679,8 +679,31 @@ async def _dispatch_email(
     config = await get_sender_config(db)
     recipient = _resolve_recipient(rule, payload, config)
     if not recipient:
+        await _log(
+            db,
+            event_type,
+            NotificationChannel.email,
+            None,
+            None,
+            DispatchStatus.unavailable,
+            "No recipient email for this dispatch.",
+            template_code=rule.template_id,
+            customer_id=customer_id,
+            order_id=order_id,
+        )
         return _EMAIL_OUTCOME_UNAVAILABLE
     if not config.is_enabled:
+        await _log(
+            db,
+            event_type,
+            NotificationChannel.email,
+            recipient,
+            None,
+            DispatchStatus.skipped,
+            "Email sending is disabled in sender configuration.",
+            customer_id=customer_id,
+            order_id=order_id,
+        )
         return _EMAIL_OUTCOME_SKIPPED
 
     template = None
@@ -688,7 +711,32 @@ async def _dispatch_email(
         template = await get_template(rule.template_id, db)
     if template is None:
         template = await get_template_by_code(event_type, db)
-    if template is None or not template.is_active:
+    if template is None:
+        await _log(
+            db,
+            event_type,
+            NotificationChannel.email,
+            recipient,
+            None,
+            DispatchStatus.skipped,
+            f"No active email template for event '{event_type}'.",
+            customer_id=customer_id,
+            order_id=order_id,
+        )
+        return _EMAIL_OUTCOME_SKIPPED
+    if not template.is_active:
+        await _log(
+            db,
+            event_type,
+            NotificationChannel.email,
+            recipient,
+            None,
+            DispatchStatus.skipped,
+            f"Email template '{template.code}' is inactive.",
+            template_code=template.code,
+            customer_id=customer_id,
+            order_id=order_id,
+        )
         return _EMAIL_OUTCOME_SKIPPED
 
     context = {**payload, "store_name": config.from_name, "support_email": config.admin_email}

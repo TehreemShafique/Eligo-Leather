@@ -501,15 +501,9 @@ async def fetch_local_orders_for_leopard(db: AsyncSession) -> list[dict]:
 
     rows = []
     for idx, o in enumerate(orders):
-        customer_name = ""
-        customer_phone = ""
-        customer_email = ""
-        if o.customer:
-            first = o.customer.first_name or ""
-            last = o.customer.last_name or ""
-            customer_name = f"{first} {last}".strip() or "Customer"
-            customer_phone = o.customer.phone or ""
-            customer_email = o.customer.email or ""
+        customer_name = o.customer_name or "Customer"
+        customer_phone = o.customer_phone or ""
+        customer_email = o.customer_email or ""
 
         cn_number = o.tracking_number or ""
 
@@ -1160,6 +1154,25 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
                 ),
                 actor_name="Leopards Courier",
             ))
+
+        from app.modules.settings.notifications.service import background_dispatch_event
+        _notif_payload = {
+            "email": order_row.customer_email,
+            "customer_email": order_row.customer_email,
+            "customer_name": order_row.customer_name or consignee_name or "Valued Customer",
+            "order_number": order_row.order_number,
+            "tracking_number": str(cn_number),
+            "tracking_company": "Leopards Courier",
+            "currency": str(order_row.currency) if hasattr(order_row, "currency") else "PKR",
+            "total_price": str(order_row.total_price),
+        }
+        try:
+            import asyncio
+            asyncio.create_task(background_dispatch_event("order_shipped", _notif_payload))
+        except Exception as exc:
+            logger.warning(
+                "Failed to dispatch order_shipped email for %s: %s", order_id, exc
+            )
 
     await record_log(
         db,

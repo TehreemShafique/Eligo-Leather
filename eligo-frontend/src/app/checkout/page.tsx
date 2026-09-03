@@ -75,23 +75,32 @@ export default function CheckoutPage() {
   const [appliedDiscountCode, setAppliedDiscountCode] = useState("")
   const [discountLoading, setDiscountLoading] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [completedOrderId, setCompletedOrderId] = useState<string>(() => {
-    // Restore a previously-created order confirmation (e.g. after a refresh)
-    // so an accidental navigation can never lose the confirmation state.
-    if (typeof window === "undefined") return ""
-    try {
-      const saved = window.sessionStorage.getItem(LAST_ORDER_KEY)
-      const { orderNumber } = saved ? (JSON.parse(saved) as { orderNumber?: string }) : {}
-      return orderNumber || ""
-    } catch {
-      return ""
-    }
-  })
-  const [orderComplete, setOrderComplete] = useState(() => Boolean(completedOrderId))
+  const [completedOrderId, setCompletedOrderId] = useState<string>("")
+  const [orderComplete, setOrderComplete] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<CheckoutFieldErrors>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
   // Server-authoritative shipping configuration (charge + free threshold).
   const [shippingCalc, setShippingCalc] = useState<ShippingCalculation | null>(null)
+
+  // Restore a previously-created order confirmation (e.g. after a refresh) so an
+  // accidental navigation can never lose the confirmation state. sessionStorage
+  // is client-only, so this runs after hydration to keep the server-rendered
+  // HTML stable (avoiding a hydration mismatch between the checkout/empty-cart
+  // and the success view).
+  useEffect(() => {
+    let savedOrderNumber = ""
+    try {
+      const saved = window.sessionStorage.getItem(LAST_ORDER_KEY)
+      const { orderNumber } = saved ? (JSON.parse(saved) as { orderNumber?: string }) : {}
+      savedOrderNumber = orderNumber || ""
+    } catch {
+      savedOrderNumber = ""
+    }
+    if (savedOrderNumber) {
+      setCompletedOrderId(savedOrderNumber)
+      setOrderComplete(true)
+    }
+  }, [])
 
   // Synchronous lock so rapid double clicks cannot fire a second request.
   const pendingRef = useRef(false)

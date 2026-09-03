@@ -561,7 +561,7 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
             <span>{confirming ? "Confirming..." : "Confirm Order"}</span>
           </button>}
           {!isPaid && <button onClick={handleMarkPaid} className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Paid</button>}
-          {!isFulfilled && <button onClick={handleMarkDelivered} className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Delivered</button>}
+          {!isFulfilled && <button onClick={handleMarkDelivered} className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Shipped</button>}
           {restockableItems.length > 0 && (
             <button
               onClick={handleRestock}
