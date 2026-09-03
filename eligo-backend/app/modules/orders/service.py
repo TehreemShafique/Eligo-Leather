@@ -71,6 +71,7 @@ async def create_order(db: AsyncSession, data: OrderCreate) -> Order:
         billing_address=data.billing_address,
         shipping_name=data.shipping_name,
         shipping_email=data.shipping_email,
+        shipping_phone=data.shipping_phone,
         tracking_company=data.tracking_company,
         tracking_number=data.tracking_number,
         items=[
@@ -608,6 +609,27 @@ async def convert_draft_to_order(db: AsyncSession, draft_id: int, order_number: 
     if not draft:
         return None
 
+    # Preserve the customer contact snapshot onto the resulting order so a
+    # later edit to the shared Customer profile never rewrites this order's
+    # history. Prefer the draft's own fields, then fall back to the linked
+    # customer profile.
+    customer = None
+    if draft.customer_id:
+        customer = (
+            await db.execute(select(Customer).where(Customer.id == draft.customer_id))
+        ).scalar_one_or_none()
+    customer_name_parts = [
+        p for p in (
+            (getattr(customer, "first_name", None) or "") if customer else "",
+            (getattr(customer, "last_name", None) or "") if customer else "",
+        ) if p
+    ]
+    shipping_name = " ".join(customer_name_parts).strip() or (
+        getattr(customer, "email", None) if customer else None
+    )
+    shipping_email = draft.customer_email or (getattr(customer, "email", None) if customer else None)
+    shipping_phone = draft.customer_phone or (getattr(customer, "phone", None) if customer else None)
+
     order = Order(
         order_number=order_number,
         customer_id=draft.customer_id,
@@ -621,6 +643,9 @@ async def convert_draft_to_order(db: AsyncSession, draft_id: int, order_number: 
         shipping_address=draft.shipping_address,
         billing_address=draft.billing_address,
         tags=draft.tags,
+        shipping_name=shipping_name,
+        shipping_email=shipping_email,
+        shipping_phone=shipping_phone,
         items=[
             OrderItem(
                 product_id=item.product_id,
@@ -841,17 +866,17 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
             order = result.scalar_one_or_none()
             if order:
                 old_status = order.fulfillment_status
-                if "delivered" in status_str.lower():
-                    order.fulfillment_status = "Fulfilled (Delivered)"
-                elif "dispatch" in status_str.lower() or "transit" in status_str.lower():
-                    order.fulfillment_status = f"Fulfilled ({status_str})"
-                elif "return" in status_str.lower() or "cancel" in status_str.lower():
-                    order.fulfillment_status = f"Returned ({status_str})"
+                lower_status = status_str.lower()
+                if "delivered" in lower_status:
+                    order.fulfillment_status = FulfillmentStatus.fulfilled
+                elif "return" in lower_status or "cancel" in lower_status:
+                    order.fulfillment_status = FulfillmentStatus.unfulfilled
+                elif "dispatch" in lower_status or "transit" in lower_status:
+                    order.fulfillment_status = FulfillmentStatus.fulfilled
 
                 # Mirror the courier lifecycle onto the structured
                 # delivery_status so the storefront and admin track shipping
                 # separately from payment/fulfillment.
-                lower_status = status_str.lower()
                 delivery_mapping = [
                     (("out for delivery", "out-for-delivery"), DeliveryStatus.out_for_delivery),
                     (("return",), DeliveryStatus.returned),

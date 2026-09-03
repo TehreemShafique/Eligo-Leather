@@ -600,7 +600,7 @@ async def test_leopard_webhook_out_for_delivery_updates_status_and_emails(
     assert event_payload["customer_email"] == "ofd-webhook@example.com"
 
 
-async def test_get_leopard_orders_api(client, db_session, monkeypatch):
+async def test_get_leopard_orders_api(client, auth_headers, db_session, monkeypatch):
     await _seed_order(db_session, order_number="#1331", tracking_number="ID7536607778")
 
     async def _mock_track(cn_numbers):
@@ -619,15 +619,15 @@ async def test_get_leopard_orders_api(client, db_session, monkeypatch):
     from app.modules.orders import leopard_client
     monkeypatch.setattr(leopard_client, "track_booked_packets", _mock_track)
 
-    response = await client.get("/api/v1/orders/leopard/list")
+    response = await client.get("/api/v1/orders/leopard/list", headers=auth_headers)
     assert response.status_code == 200
     res_json = response.json()
     assert res_json["status"] == "success"
     assert len(res_json["orders"]) >= 1
 
 
-async def test_generate_leopard_cn_api(client):
-    response = await client.post("/api/v1/orders/leopard/generate-cn", json={"order_ids": [1331, 1329]})
+async def test_generate_leopard_cn_api(client, auth_headers):
+    response = await client.post("/api/v1/orders/leopard/generate-cn", json={"order_ids": [1331, 1329]}, headers=auth_headers)
     assert response.status_code == 200
     res_json = response.json()
     assert res_json["status"] == "success"

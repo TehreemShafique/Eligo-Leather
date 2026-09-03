@@ -698,7 +698,7 @@ async def test_create_order_snapshots_shipping_email(client, db_session):
     assert customer.email == "snapshot@example.com"
 
 
-async def test_order_detail_returns_order_snapshot_not_customer_profile(client, db_session):
+async def test_order_detail_returns_order_snapshot_not_customer_profile(client, db_session, auth_headers):
     """``GET /api/v1/orders/detail/{order_id}`` must report the ORDER's own
     checkout snapshot (shipping_name / shipping_phone / shipping_email), not the
     linked Customer profile, when a returning customer places an order with
@@ -743,7 +743,7 @@ async def test_order_detail_returns_order_snapshot_not_customer_profile(client, 
     second_order_id = second.json()["order_id"]
 
     # Fetch the order detail as the Leopards UI does.
-    detail = await client.get(f"/api/v1/orders/detail/{second_order_id}")
+    detail = await client.get(f"/api/v1/orders/detail/{second_order_id}", headers=auth_headers)
     assert detail.status_code == 200
     order_payload = detail.json()["order"]
 
@@ -762,7 +762,7 @@ async def test_order_detail_returns_order_snapshot_not_customer_profile(client, 
     assert customer.email == "returning-detail@example.com"
 
 
-async def test_generate_cn_uses_order_snapshot_not_customer_profile(client, db_session, monkeypatch):
+async def test_generate_cn_uses_order_snapshot_not_customer_profile(client, db_session, monkeypatch, auth_headers):
     """``POST /api/v1/orders/leopard/generate-cn`` must book the consignee using
     the ORDER's checkout snapshot (customer_name / customer_phone prefer
     shipping_name / shipping_phone), not the linked Customer profile."""
@@ -819,6 +819,7 @@ async def test_generate_cn_uses_order_snapshot_not_customer_profile(client, db_s
     response = await client.post(
         "/api/v1/orders/leopard/generate-cn",
         json={"order_ids": [second_order_id]},
+        headers=auth_headers,
     )
     assert response.status_code == 200
     body = response.json()
@@ -837,7 +838,7 @@ async def test_generate_cn_uses_order_snapshot_not_customer_profile(client, db_s
     assert customer.phone == "03001234567"
 
 
-async def test_mark_paid_notification_uses_order_snapshot(client, db_session, monkeypatch):
+async def test_mark_paid_notification_uses_order_snapshot(client, db_session, monkeypatch, auth_headers):
     """``POST /api/v1/orders/mark-paid/{order_id}`` must notify using the
     ORDER's checkout snapshot (customer_name / customer_email), not the shared
     Customer profile."""
@@ -887,7 +888,7 @@ async def test_mark_paid_notification_uses_order_snapshot(client, db_session, mo
 
     monkeypatch.setattr(notif_service, "background_dispatch_event", _fake_dispatch)
 
-    response = await client.post(f"/api/v1/orders/mark-paid/{second_order_id}")
+    response = await client.post(f"/api/v1/orders/mark-paid/{second_order_id}", headers=auth_headers)
     assert response.status_code == 200
 
     # Notification must use the order's checkout snapshot (Bilal).
@@ -904,7 +905,7 @@ async def test_mark_paid_notification_uses_order_snapshot(client, db_session, mo
     assert customer.phone == "03001234567"
 
 
-async def test_mark_delivered_notification_uses_order_snapshot(client, db_session, monkeypatch):
+async def test_mark_delivered_notification_uses_order_snapshot(client, db_session, monkeypatch, auth_headers):
     """``POST /api/v1/orders/mark-delivered/{order_id}`` must notify using the
     ORDER's checkout snapshot (customer_name), not the shared Customer
     profile."""
@@ -954,7 +955,7 @@ async def test_mark_delivered_notification_uses_order_snapshot(client, db_sessio
 
     monkeypatch.setattr(notif_service, "background_dispatch_event", _fake_dispatch)
 
-    response = await client.post(f"/api/v1/orders/mark-delivered/{second_order_id}")
+    response = await client.post(f"/api/v1/orders/mark-delivered/{second_order_id}", headers=auth_headers)
     assert response.status_code == 200
 
     # Notification must use the order's checkout snapshot (Bilal).
@@ -970,7 +971,7 @@ async def test_mark_delivered_notification_uses_order_snapshot(client, db_sessio
     assert customer.phone == "03001234567"
 
 
-async def test_mark_out_for_delivery_uses_order_snapshot_and_emails(client, db_session, monkeypatch):
+async def test_mark_out_for_delivery_uses_order_snapshot_and_emails(client, db_session, monkeypatch, auth_headers):
     """``POST /api/v1/orders/mark-out-for-delivery/{order_id}`` must set the
     delivery status, dispatch the order_out_for_delivery email using the ORDER's
     checkout snapshot, and write an audit-log entry."""
@@ -1021,7 +1022,7 @@ async def test_mark_out_for_delivery_uses_order_snapshot_and_emails(client, db_s
 
     monkeypatch.setattr(notif_service, "background_dispatch_event", _fake_dispatch)
 
-    response = await client.post(f"/api/v1/orders/mark-out-for-delivery/{second_order_id}")
+    response = await client.post(f"/api/v1/orders/mark-out-for-delivery/{second_order_id}", headers=auth_headers)
     assert response.status_code == 200
     assert response.json()["delivery_status"] == "out_for_delivery"
 

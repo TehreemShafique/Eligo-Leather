@@ -87,6 +87,7 @@ class OrderCreate(BaseModel):
     tracking_number: str | None = None
     shipping_name: str | None = None
     shipping_email: str | None = None
+    shipping_phone: str | None = None
     items: list[OrderItemCreate] = []
 
 
