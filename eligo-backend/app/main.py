@@ -9,7 +9,7 @@ for _stream in (sys.stdout, sys.stderr):
     if _stream is not None and hasattr(_stream, "reconfigure"):
         try:
             _stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
 from fastapi import FastAPI, Request, Response

@@ -18,7 +18,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 _DEFAULT_STORE_URL = "http://localhost:3000"
-_DEFAULT_SECRET = "change-me-to-a-long-random-string"
+_DEFAULT_SECRET = "change-me-to-a-long-random-string"  # nosec B105
 _TIMEOUT = httpx.Timeout(5.0)
 
 

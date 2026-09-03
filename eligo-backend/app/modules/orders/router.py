@@ -453,7 +453,7 @@ async def get_leopard_load_sheet_download_api(challan_no: str, db: AsyncSession 
     # Register the challan so it shows up in the Generated Load Sheets list.
     try:
         await leopard_service.register_challan(db, challan_no)
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
     return Response(

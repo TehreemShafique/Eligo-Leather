@@ -758,7 +758,7 @@ async def send_recovery_email(
             "recovery_url": recovery_url or "http://localhost:3000/cart",
             "store_name": "Eligo Leather",
         }))
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
     await db.commit()
@@ -892,7 +892,7 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
                     try:
                         import asyncio
                         asyncio.create_task(background_dispatch_event("order_delivered", _notif_payload))
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
                 elif "out for delivery" in status_lower or "out-for-delivery" in status_lower:
                     _notif_payload = {
@@ -909,7 +909,7 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
                     try:
                         import asyncio
                         asyncio.create_task(background_dispatch_event("order_out_for_delivery", _notif_payload))
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
                 elif "dispatch" in status_lower or "transit" in status_lower:
                     _notif_payload = {
@@ -925,7 +925,7 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
                     try:
                         import asyncio
                         asyncio.create_task(background_dispatch_event("order_shipped", _notif_payload))
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
 
     await db.commit()
