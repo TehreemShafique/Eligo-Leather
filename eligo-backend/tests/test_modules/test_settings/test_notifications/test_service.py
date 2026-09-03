@@ -19,6 +19,7 @@ from app.modules.orders.model import (
 from app.modules.settings.apps.crypto import decrypt_credentials
 from app.modules.settings.notifications import service
 from app.modules.settings.notifications.model import (
+    DispatchRule,
     DispatchStatus,
     EmailTemplate,
     NotificationChannel,
@@ -431,6 +432,30 @@ async def test_seed_defaults_is_idempotent(db_session):
 async def test_order_placed_is_valid_event():
     assert NotificationEventType.order_placed.value == "order_placed"
     assert "order_placed" in {e.value for e in NotificationEventType}
+
+
+async def test_order_out_for_delivery_is_valid_event_and_seeded(db_session):
+    """The out-for-delivery event must exist, be a valid enum member, and be
+    seeded with an active customer email template + the correct subject."""
+    assert NotificationEventType.order_out_for_delivery.value == "order_out_for_delivery"
+    assert "order_out_for_delivery" in {e.value for e in NotificationEventType}
+
+    await service.seed_defaults(db_session)
+
+    template = await service.get_template_by_code("order_out_for_delivery", db_session)
+    assert template is not None
+    assert template.is_active is True
+    assert template.subject == "Your order {{ order_number }} is out for delivery today!"
+
+    result = await db_session.execute(
+        select(DispatchRule).where(
+            DispatchRule.event_type == NotificationEventType.order_out_for_delivery,
+        )
+    )
+    rule = result.scalar_one()
+    assert rule.recipient == "customer"
+    assert rule.is_active is True
+    assert rule.template_id == template.id
 
 
 async def test_seed_adds_missing_default_rule_individually(db_session):

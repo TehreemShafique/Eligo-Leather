@@ -294,6 +294,23 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
     } catch { toast.error("Failed to update delivery status") }
   }
 
+  const handleMarkOutForDelivery = async () => {
+    if (!order) return
+    if (
+      !window.confirm(
+        `Mark order ${order.order_number} as out for delivery?\n\n` +
+        `This sends the customer an email letting them know their parcel is out for delivery today.`,
+      )
+    ) {
+      return
+    }
+    try {
+      await apiFetch(`/api/v1/orders/mark-out-for-delivery/${orderId}`, { method: "POST" })
+      toast.success("Order marked as out for delivery!")
+      fetchOrder(); fetchAuditLog()
+    } catch { toast.error("Failed to update delivery status") }
+  }
+
   // One-time manual confirmation after verifying the customer by phone.
   // This triggers the order-confirmation email and the Leopards booking, so
   // the API makes it idempotent: any retry observes the already-confirmed
@@ -566,6 +583,10 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
                 <button onClick={() => { setMoreActionsOpen(false); setEditAddressOpen(true) }} className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"><PencilSimple className="w-4 h-4 text-gray-600" /><span>Edit shipping address</span></button>
                 <button onClick={() => { setMoreActionsOpen(false); window.print() }} className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"><Printer className="w-4 h-4 text-gray-600" /><span>Print order page</span></button>
                 <button onClick={() => { setMoreActionsOpen(false); setPackingSlipOpen(true) }} className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"><FileText className="w-4 h-4 text-gray-600" /><span>Print packing slip</span></button>
+                <div className="pt-1 border-t border-gray-100">
+                  <div className="px-4 py-1 text-[11px] font-bold text-gray-400">Delivery</div>
+                  <button onClick={() => { setMoreActionsOpen(false); handleMarkOutForDelivery() }} className="w-full text-left px-4 py-1.5 hover:bg-blue-50 flex items-center gap-2.5 text-gray-800 font-semibold"><Truck className="w-4 h-4 text-blue-600" /><span>Mark as Out for Delivery</span></button>
+                </div>
                 <div className="pt-1 border-t border-gray-100">
                   <div className="px-4 py-1 text-[11px] font-bold text-gray-400">Book Shipment</div>
                   <Link href={`/settings/apps/leopards-courier?order_id=${encodeURIComponent(id)}`} onClick={() => setMoreActionsOpen(false)} className="w-full text-left px-4 py-2 hover:bg-amber-50 flex items-center gap-2.5 font-bold text-gray-900">

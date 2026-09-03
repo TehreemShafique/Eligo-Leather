@@ -1737,8 +1737,77 @@ async def mark_order_delivered_public_api(
 
 
 
+@public_webhook_router.post("/mark-out-for-delivery/{order_id}")
+async def mark_order_out_for_delivery_public_api(
+    order_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark an order as Out for Delivery in PostgreSQL DB, persist a timeline
+    event, and email the customer that their parcel is out for delivery today."""
+    clean_id = order_id.replace("#", "").strip()
+    search_num = f"#{clean_id}"
+
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.customer), selectinload(Order.items))
+        .where(Order.order_number == search_num)
+    )
+    order = result.scalar_one_or_none()
+
+    if not order and clean_id.isdigit():
+        result = await db.execute(
+            select(Order)
+            .options(selectinload(Order.customer), selectinload(Order.items))
+            .where(Order.id == int(clean_id))
+        )
+        order = result.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    already_out = order.delivery_status == DeliveryStatus.out_for_delivery
+    order.delivery_status = DeliveryStatus.out_for_delivery
+    if not already_out:
+        courier = order.tracking_company or "Leopards Courier"
+        db.add(OrderAuditLog(
+            order_id=order.id,
+            event_type="delivery_updated",
+            description=(
+                f"{courier} marked this order as out for delivery today"
+                + (f" (Tracking #{order.tracking_number})." if order.tracking_number else ".")
+            ),
+            actor_name=courier,
+        ))
+    await db.commit()
+    await db.refresh(order)
+
+    from app.modules.settings.notifications.service import background_dispatch_event
+    background_tasks.add_task(
+        background_dispatch_event,
+        "order_out_for_delivery",
+        {
+            "email": order.customer_email,
+            "customer_email": order.customer_email,
+            "customer_name": order.customer_name or "Valued Customer",
+            "order_number": order.order_number,
+            "tracking_number": order.tracking_number,
+            "tracking_company": order.tracking_company or "Leopards Courier",
+            "destination_city": order.shipping_city or order.destination or "",
+            "total_price": str(order.total_price),
+            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+        },
+    )
+
+    return {
+        "status": "success",
+        "message": f"Order #{clean_id} marked as Out for Delivery in Database",
+        "delivery_status": "out_for_delivery",
+    }
 
 
+# ================================================================
+# Analytics
 # ================================================================
 # Analytics
 # ================================================================

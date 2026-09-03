@@ -539,6 +539,67 @@ async def test_receive_leopard_webhook(client, db_session):
     assert res_json["processed_result"]["matched_updated"] == 1
 
 
+async def test_leopard_webhook_out_for_delivery_updates_status_and_emails(
+    client, db_session, monkeypatch
+):
+    """When Leopards reports "out for delivery", the order's delivery_status must
+    become out_for_delivery and an order_out_for_delivery email must be dispatched
+    using the ORDER's checkout snapshot."""
+    from app.modules.orders.model import DeliveryStatus
+    from app.modules.settings.notifications import service as notif_service
+
+    order = await _seed_order(
+        db_session,
+        order_number="ORD-LPD-OFD-1",
+        tracking_number="LPD-OFD-777",
+        shipping_name="Bilal Khan",
+        shipping_phone="03121234567",
+        shipping_email="ofd-webhook@example.com",
+        shipping_city="Karachi",
+        destination="Karachi",
+        total_price=Decimal("20.00"),
+    )
+
+    dispatched = []
+
+    async def _fake_dispatch(event_type, payload):
+        dispatched.append((event_type, payload))
+
+    monkeypatch.setattr(notif_service, "background_dispatch_event", _fake_dispatch)
+
+    payload = {
+        "data": [
+            {
+                "cn_number": "LPD-OFD-777",
+                "status": "Out for delivery",
+                "receiver_name": "Bilal Khan",
+            }
+        ]
+    }
+
+    response = await client.post("/api/v1/orders/webhooks/leopard", json=payload)
+    assert response.status_code == 200
+    assert response.json()["processed_result"]["matched_updated"] == 1
+
+    # Let the fire-and-forget dispatch task run.
+    import asyncio
+    for _ in range(5):
+        await asyncio.sleep(0)
+
+    # The order's structured delivery_status was updated.
+    order_id = order.id
+    db_session.expire_all()
+    fresh = await db_session.get(Order, order_id)
+    assert fresh.delivery_status == DeliveryStatus.out_for_delivery
+
+    # The out-for-delivery email was dispatched with order snapshot details.
+    events = [e for e, _ in dispatched]
+    assert "order_out_for_delivery" in events
+    event_payload = next(p for e, p in dispatched if e == "order_out_for_delivery")
+    assert event_payload["customer_name"] == "Bilal Khan"
+    assert event_payload["customer_email"] == "ofd-webhook@example.com"
+
+
 async def test_get_leopard_orders_api(client, db_session):
     await _seed_order(db_session, order_number="#1331", tracking_number="ID7536607778")
     response = await client.get("/api/v1/orders/leopard/list")

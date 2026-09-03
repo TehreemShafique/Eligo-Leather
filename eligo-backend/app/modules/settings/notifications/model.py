@@ -13,6 +13,7 @@ class NotificationEventType(str, enum.Enum):
     order_placed = "order_placed"
     order_confirmation = "order_confirmation"
     order_shipped = "order_shipped"
+    order_out_for_delivery = "order_out_for_delivery"
     order_delivered = "order_delivered"
     order_cancelled = "order_cancelled"
     return_requested = "return_requested"

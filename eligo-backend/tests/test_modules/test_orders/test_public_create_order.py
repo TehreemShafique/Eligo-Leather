@@ -968,3 +968,82 @@ async def test_mark_delivered_notification_uses_order_snapshot(client, db_sessio
     customer = await db_session.get(Customer, order.customer_id)
     assert customer.first_name == "Ali"
     assert customer.phone == "03001234567"
+
+
+async def test_mark_out_for_delivery_uses_order_snapshot_and_emails(client, db_session, monkeypatch):
+    """``POST /api/v1/orders/mark-out-for-delivery/{order_id}`` must set the
+    delivery status, dispatch the order_out_for_delivery email using the ORDER's
+    checkout snapshot, and write an audit-log entry."""
+    from app.modules.customers.model import Customer
+    from app.modules.orders.model import DeliveryStatus, OrderAuditLog
+    from app.modules.settings.notifications import service as notif_service
+
+    product, variant = await _seed_product(db_session, stock=10)
+
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            first_name="Ali",
+            last_name="Raza",
+            email="ofd-returning@example.com",
+            phone="03001234567",
+            city="Lahore",
+            shipping_address="Ali Raza | Phone: 03001234567 | 1 Street, Lahore, Pakistan",
+            destination="Lahore",
+        ),
+    )
+    assert response.status_code == 200
+    second = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(
+            product,
+            variant,
+            quantity=2,
+            first_name="Bilal",
+            last_name="Khan",
+            email="ofd-returning@example.com",
+            phone="03121234567",
+            city="Karachi",
+            shipping_address="House 9, Phase 4, Karachi, Pakistan",
+            destination="Karachi",
+        ),
+    )
+    assert second.status_code == 200
+    second_order_id = second.json()["order_id"]
+
+    captured = {}
+
+    async def _fake_dispatch(event_type, payload):
+        captured["event_type"] = event_type
+        captured.update(payload)
+
+    monkeypatch.setattr(notif_service, "background_dispatch_event", _fake_dispatch)
+
+    response = await client.post(f"/api/v1/orders/mark-out-for-delivery/{second_order_id}")
+    assert response.status_code == 200
+    assert response.json()["delivery_status"] == "out_for_delivery"
+
+    # Notification must use the order's checkout snapshot (Bilal), not the
+    # shared profile (Ali).
+    assert captured["event_type"] == "order_out_for_delivery"
+    assert captured["customer_name"] == "Bilal Khan"
+    assert captured["customer_email"] == "ofd-returning@example.com"
+
+    # Delivery status on the order is out_for_delivery.
+    db_session.expire_all()
+    order = await _load_order(db_session, second_order_id)
+    assert order.delivery_status == DeliveryStatus.out_for_delivery
+
+    # An audit-log entry was written.
+    log_result = await db_session.execute(
+        select(OrderAuditLog).where(OrderAuditLog.order_id == second_order_id)
+    )
+    logs = log_result.scalars().all()
+    assert any(log.event_type == "delivery_updated" for log in logs)
+
+    # The shared profile still holds the old values.
+    customer = await db_session.get(Customer, order.customer_id)
+    assert customer.first_name == "Ali"
+    assert customer.phone == "03001234567"

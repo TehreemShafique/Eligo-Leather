@@ -894,6 +894,23 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
                         asyncio.create_task(background_dispatch_event("order_delivered", _notif_payload))
                     except Exception:
                         pass
+                elif "out for delivery" in status_lower or "out-for-delivery" in status_lower:
+                    _notif_payload = {
+                        "email": getattr(order, "customer_email", None) or entry.get("email"),
+                        "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
+                        "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                        "order_number": order.order_number,
+                        "tracking_number": str(cn_number),
+                        "tracking_company": "Leopards Courier",
+                        "destination_city": order.shipping_city or order.destination or "",
+                        "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+                        "total_price": str(order.total_price),
+                    }
+                    try:
+                        import asyncio
+                        asyncio.create_task(background_dispatch_event("order_out_for_delivery", _notif_payload))
+                    except Exception:
+                        pass
                 elif "dispatch" in status_lower or "transit" in status_lower:
                     _notif_payload = {
                         "email": getattr(order, "customer_email", None) or entry.get("email"),

@@ -117,6 +117,24 @@ BUILT_IN_TEMPLATES = [
         ),
     },
     {
+        "code": "order_out_for_delivery",
+        "name": "Order Out for Delivery",
+        "subject": "Your order {{ order_number }} is out for delivery today!",
+        "html_body": (
+            "<p>Hi {{ customer_name }},</p>"
+            "<p>Great news - your order <strong>{{ order_number }}</strong> is "
+            "out for delivery today and should reach you shortly.</p>"
+            "{% if tracking_number %}"
+            "<p>Tracking: {{ tracking_number }} ({{ tracking_company }})</p>"
+            "{% endif %}"
+            "{% if destination_city %}"
+            "<p>Destination: {{ destination_city }}</p>"
+            "{% endif %}"
+            "<p>Please keep your phone nearby so the courier can reach you.</p>"
+            "<p>Thank you for shopping with {{ store_name }}.</p>"
+        ),
+    },
+    {
         "code": "order_delivered",
         "name": "Order Delivered",
         "subject": "Your order {{ order_number }} has been delivered",
@@ -193,6 +211,12 @@ DEFAULT_RULES = [
         "channel": "email",
         "recipient": "customer",
         "template_code": "order_shipped",
+    },
+    {
+        "event_type": "order_out_for_delivery",
+        "channel": "email",
+        "recipient": "customer",
+        "template_code": "order_out_for_delivery",
     },
     {
         "event_type": "order_delivered",
