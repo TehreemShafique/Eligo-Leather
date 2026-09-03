@@ -69,6 +69,8 @@ async def create_order(db: AsyncSession, data: OrderCreate) -> Order:
         po_number=data.po_number,
         shipping_address=data.shipping_address,
         billing_address=data.billing_address,
+        shipping_name=data.shipping_name,
+        shipping_email=data.shipping_email,
         tracking_company=data.tracking_company,
         tracking_number=data.tracking_number,
         items=[

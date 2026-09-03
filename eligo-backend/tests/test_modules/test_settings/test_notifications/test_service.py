@@ -687,10 +687,20 @@ async def test_dispatch_email_sent_on_success(db_session, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-async def _seed_customer_with_order(db_session, *, email="c@example.com"):
+async def _seed_customer_with_order(
+    db_session,
+    *,
+    email="c@example.com",
+    first_name="Ali",
+    last_name="Raza",
+    shipping_name=None,
+    shipping_email="__snapshot__",
+):
+    if shipping_email == "__snapshot__":
+        shipping_email = email
     customer = Customer(
-        first_name="Ali",
-        last_name="Raza",
+        first_name=first_name,
+        last_name=last_name,
         email=email,
         phone="03001234567",
         email_subscription=True,
@@ -709,6 +719,8 @@ async def _seed_customer_with_order(db_session, *, email="c@example.com"):
         customer_id=customer.id,
         channel="Online Store",
         currency="PKR",
+        shipping_name=shipping_name,
+        shipping_email=shipping_email,
         subtotal=Decimal("2500.00"),
         shipping_cost=Decimal("250.00"),
         tax=Decimal("0.00"),
@@ -844,3 +856,172 @@ async def test_confirmation_rule_selection_skips_inactive_customer_rule(db_sessi
     outcome = await service.dispatch_order_confirmation_email(db_session, order.id)
     assert outcome == "skipped"
     assert await service.list_logs(db_session) == []
+
+
+# ---------------------------------------------------------------------------
+# Checkout name snapshot takes precedence over the shared customer profile
+# ---------------------------------------------------------------------------
+
+async def test_notification_payload_prefers_order_shipping_name():
+    """The notification payload uses the order's checkout ``shipping_name``
+    (e.g. a gift recipient) rather than the shared customer profile name."""
+    customer = Customer(
+        first_name="John",
+        last_name="Doe",
+        email="john@example.com",
+    )
+    order = Order(
+        order_number="CN-9002",
+        customer=customer,
+        channel="Online Store",
+        currency="PKR",
+        shipping_name="Jane Smith",
+        subtotal=Decimal("2500.00"),
+        shipping_cost=Decimal("250.00"),
+        tax=Decimal("0.00"),
+        total_price=Decimal("2750.00"),
+        discount=Decimal("0.00"),
+        paid_amount=Decimal("0.00"),
+        payment_status=PaymentStatus.pending,
+        fulfillment_status=FulfillmentStatus.unfulfilled,
+        delivery_status=DeliveryStatus.pending,
+        delivery_method=DeliveryMethod.standard,
+        return_status=ReturnStatus.none,
+        label_status=LabelStatus.not_generated,
+    )
+    customer_name = service._customer_display_name(order, customer)
+    assert customer_name == "Jane Smith"
+
+    payload = service._build_order_notification_payload(order, customer_name)
+    assert payload["customer_name"] == "Jane Smith"
+
+
+async def test_notification_payload_falls_back_to_profile_name():
+    """Without a checkout ``shipping_name``, the shared profile name is used."""
+    order = Order(
+        order_number="CN-9003",
+        customer=None,
+        channel="Online Store",
+        currency="PKR",
+        shipping_name=None,
+        subtotal=Decimal("2500.00"),
+        shipping_cost=Decimal("250.00"),
+        tax=Decimal("0.00"),
+        total_price=Decimal("2750.00"),
+        discount=Decimal("0.00"),
+        paid_amount=Decimal("0.00"),
+        payment_status=PaymentStatus.pending,
+        fulfillment_status=FulfillmentStatus.unfulfilled,
+        delivery_status=DeliveryStatus.pending,
+        delivery_method=DeliveryMethod.standard,
+        return_status=ReturnStatus.none,
+        label_status=LabelStatus.not_generated,
+    )
+    customer = Customer(
+        first_name="John",
+        last_name="Doe",
+        email="john@example.com",
+    )
+    assert service._customer_display_name(order, customer) == "John Doe"
+
+
+async def test_order_confirmation_email_greets_checkout_name(db_session, monkeypatch):
+    """End-to-end: confirmation email payload greets the checkout name even
+    when the shared customer profile carries a different name."""
+    await service.get_sender_config(db_session)
+    await service.create_template(
+        EmailTemplateCreate(
+            code="order_confirmation",
+            name="C",
+            subject="Hello {{ customer_name }}",
+            html_body="<p>Hi {{ customer_name }}, thanks for your order.</p>",
+        ),
+        db_session,
+    )
+    customer, order = await _seed_customer_with_order(
+        db_session,
+        first_name="John",
+        last_name="Doe",
+        shipping_name="Jane Smith",
+    )
+    await _confirmation_rule(db_session, recipient="customer")
+
+    rendered = {}
+
+    async def _record(config, to, subject, html_body):
+        rendered["subject"] = subject
+        rendered["html_body"] = html_body
+        return {"provider": "smtp", "provider_message_id": None}
+
+    monkeypatch.setattr(service, "_send_email", _record)
+    outcome = await service.dispatch_order_confirmation_email(db_session, order.id)
+    assert outcome == "sent"
+    assert "Jane Smith" in rendered["subject"]
+    assert "John Doe" not in rendered["subject"]
+    assert "Jane Smith" in rendered["html_body"]
+    assert "John Doe" not in rendered["html_body"]
+
+
+# ---------------------------------------------------------------------------
+# Order email snapshot survives a later Customer.email edit
+# ---------------------------------------------------------------------------
+
+async def test_customer_email_prefers_order_shipping_email_snapshot(db_session):
+    """Changing the linked Customer profile email must NOT change
+    `order.customer_email` when the order carries a checkout snapshot."""
+    customer, order = await _seed_customer_with_order(
+        db_session, email="original@example.com", shipping_email="checkout@example.com"
+    )
+    assert order.shipping_email == "checkout@example.com"
+    assert order.customer_email == "checkout@example.com"
+
+    customer.email = "changed@example.com"
+    await db_session.commit()
+
+    result = await db_session.execute(
+        select(Order).where(Order.id == order.id)
+    )
+    order = result.scalar_one()
+    assert order.customer_email == "checkout@example.com"
+
+
+async def test_order_confirmation_email_uses_snapshot_after_customer_email_edit(
+    db_session, monkeypatch
+):
+    """The confirmation dispatch still sends to the checkout snapshot address
+    even after the shared customer profile email is edited."""
+    await service.get_sender_config(db_session)
+    template = await service.create_template(
+        EmailTemplateCreate(
+            code="order_confirmation",
+            name="C",
+            subject="Sub",
+            html_body="<p>Hi {{ customer_name }}</p>",
+        ),
+        db_session,
+    )
+    customer, order = await _seed_customer_with_order(
+        db_session, email="original@example.com", shipping_email="checkout@example.com"
+    )
+    await _confirmation_rule(db_session, recipient="customer", template=template)
+
+    # Admin edits the customer profile email after the order was placed.
+    customer.email = "changed@example.com"
+    await db_session.commit()
+
+    sent_to = []
+    rendered = {}
+
+    async def _record(config, to, subject, html_body):
+        sent_to.append(to)
+        rendered.update(subject=subject, html_body=html_body)
+        return {"provider": "smtp", "provider_message_id": None}
+
+    monkeypatch.setattr(service, "_send_email", _record)
+    outcome = await service.dispatch_order_confirmation_email(db_session, order.id)
+    assert outcome == "sent"
+    assert sent_to == ["checkout@example.com"]
+    assert "changed@example.com" not in sent_to
+
+    logs = await service.list_logs(db_session)
+    assert logs[-1].recipient == "checkout@example.com"

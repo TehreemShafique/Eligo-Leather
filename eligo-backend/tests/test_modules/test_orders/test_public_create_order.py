@@ -674,3 +674,25 @@ async def test_returning_customer_keeps_original_profile_under_same_email(client
     assert default_addr is not None
     assert default_addr.address_line1 == "1 Street, Lahore, Pakistan"
     assert default_addr.phone == "03001234567"
+async def test_create_order_snapshots_shipping_email(client, db_session):
+    """Public checkout snapshots the contact email onto the Order as
+    `shipping_email` so a later change to the Customer profile never rewrites
+    which address each historical order is notified at."""
+    from app.modules.customers.model import Customer
+
+    product, variant = await _seed_product(db_session, stock=10)
+    response = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload(product, variant, email="snapshot@example.com"),
+    )
+    assert response.status_code == 200
+    order_id = response.json()["order_id"]
+
+    db_session.expire_all()
+    order = await _load_order(db_session, order_id)
+    assert order.shipping_email == "snapshot@example.com"
+    assert order.customer_email == "snapshot@example.com"
+
+    # The linked customer matches, and the snapshot survives independently.
+    customer = await db_session.get(Customer, order.customer_id)
+    assert customer.email == "snapshot@example.com"

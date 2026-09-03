@@ -814,7 +814,7 @@ async def dispatch_order_confirmation_email(db: AsyncSession, order_id: int) -> 
         return _EMAIL_OUTCOME_UNAVAILABLE
 
     customer: Customer | None = order.customer
-    customer_name = _customer_display_name(customer)
+    customer_name = _customer_display_name(order, customer)
     payload = _build_order_notification_payload(order, customer_name)
 
     event = "order_confirmation"
@@ -870,7 +870,7 @@ async def background_dispatch_order_confirmation(order_id: int) -> None:
             return
 
         customer: Customer | None = order.customer
-        customer_name = _customer_display_name(customer)
+        customer_name = _customer_display_name(order, customer)
 
         payload = _build_order_notification_payload(order, customer_name)
         await dispatch_event("order_confirmation", payload, db)
@@ -892,7 +892,7 @@ async def background_dispatch_order_placed(order_id: int) -> None:
             return
 
         customer: Customer | None = order.customer
-        customer_name = _customer_display_name(customer)
+        customer_name = _customer_display_name(order, customer)
 
         payload = _build_order_notification_payload(order, customer_name)
         await dispatch_event("order_placed", payload, db)
@@ -909,7 +909,18 @@ async def _load_order_for_notification(db: AsyncSession, order_id: int) -> objec
     return result.scalar_one_or_none()
 
 
-def _customer_display_name(customer) -> str:
+def _customer_display_name(order, customer) -> str:
+    """Resolve the display name for an order notification greeting.
+
+    Prefers the order's own checkout snapshot (``order.shipping_name``) so each
+    email greets the recipient as named at checkout, even when a shared customer
+    profile was entered with a different name. Falls back to the linked customer
+    profile, then to a generic greeting.
+    """
+    if order is not None:
+        shipping_name = (order.shipping_name or "").strip()
+        if shipping_name:
+            return shipping_name
     if customer is None:
         return "Valued Customer"
     name = " ".join(filter(None, [customer.first_name, customer.last_name])).strip()
@@ -917,11 +928,17 @@ def _customer_display_name(customer) -> str:
 
 
 def _build_order_notification_payload(order, customer_name: str) -> dict:
-    """Build the shared notification payload for order events."""
-    customer = order.customer
+    """Build the shared notification payload for order events.
+
+    The recipient email resolves through ``order.customer_email``, which prefers
+    the order's own checkout snapshot (``order.shipping_email``) so historical
+    orders always notify the address used at checkout even if the linked
+    customer profile's email is edited later.
+    """
+    email = order.customer_email
     return {
-        "email": customer.email if customer else None,
-        "customer_email": customer.email if customer else None,
+        "email": email,
+        "customer_email": email,
         "customer_name": customer_name,
         "order_number": order.order_number,
         "order_id": order.id,

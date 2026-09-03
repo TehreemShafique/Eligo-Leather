@@ -1367,6 +1367,7 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
         destination=data.get("destination", country or "Pakistan"),
         # Delivery-address snapshot taken now; later edits never rewrite it.
         shipping_name=full_name or None,
+        shipping_email=email,
         shipping_phone=phone,
         shipping_address_line1=address_body or None,
         shipping_city=city or None,
@@ -1592,7 +1593,7 @@ async def get_public_order_detail_api(order_id: str, db: AsyncSession = Depends(
             "order_number": order.order_number,
             "customer_name": customer_name,
             "customer_phone": customer.phone if customer else None,
-            "customer_email": customer.email if customer else None,
+            "customer_email": order.customer_email,
             "shipping_address": order.shipping_address,
             "city": order.destination,
             "country": "Pakistan",
@@ -1737,8 +1738,8 @@ async def mark_order_delivered_public_api(
         background_dispatch_event,
         "order_delivered",
         {
-            "email": customer.email if customer else None,
-            "customer_email": customer.email if customer else None,
+            "email": order.customer_email,
+            "customer_email": order.customer_email,
             "customer_name": customer_display_name or "Valued Customer",
             "order_number": order.order_number,
             "tracking_number": order.tracking_number,

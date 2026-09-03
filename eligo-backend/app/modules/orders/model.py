@@ -159,6 +159,7 @@ class Order(Base):
     # edits to the customer profile or shipping settings never rewrite the
     # history of existing orders.
     shipping_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_email: Mapped[str | None] = mapped_column(String, nullable=True)
     shipping_phone: Mapped[str | None] = mapped_column(String, nullable=True)
     shipping_address_line1: Mapped[str | None] = mapped_column(Text, nullable=True)
     shipping_city: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -204,6 +205,12 @@ class Order(Base):
 
     @property
     def customer_email(self) -> str | None:
+        # Prefer the order's own checkout email snapshot (``shipping_email``) so
+        # each order always contacts the address it was placed with, even when a
+        # shared customer record's email is later edited. Falls back to the
+        # linked profile.
+        if self.shipping_email:
+            return self.shipping_email
         return self.customer.email if self.customer else None
 
     @property
