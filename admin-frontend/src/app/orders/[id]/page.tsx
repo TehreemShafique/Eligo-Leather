@@ -285,8 +285,23 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
     } catch { toast.error("Failed to update payment status") }
   }
 
+  const handleMarkShipped = async () => {
+    if (!order) return
+    if (!window.confirm(`Mark order ${order.order_number} as shipped?\n\nThis sends the customer a shipped email.`)) {
+      return
+    }
+    try {
+      await apiFetch(`/api/v1/orders/mark-shipped/${orderId}`, { method: "POST" })
+      toast.success("Order marked as shipped!")
+      fetchOrder(); fetchAuditLog()
+    } catch { toast.error("Failed to mark order as shipped") }
+  }
+
   const handleMarkDelivered = async () => {
     if (!order) return
+    if (!window.confirm(`Mark order ${order.order_number} as delivered?\n\nThis sends the customer a delivered email.`)) {
+      return
+    }
     try {
       await apiFetch(`/api/v1/orders/mark-delivered/${orderId}`, { method: "POST" })
       toast.success("Order marked as delivered!")
@@ -561,7 +576,8 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
             <span>{confirming ? "Confirming..." : "Confirm Order"}</span>
           </button>}
           {!isPaid && <button onClick={handleMarkPaid} className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Paid</button>}
-          {!isFulfilled && <button onClick={handleMarkDelivered} className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Shipped</button>}
+          {(order.delivery_status === "pending" || order.delivery_status === "booked") && <button onClick={handleMarkShipped} className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Shipped</button>}
+          {order.delivery_status !== "pending" && order.delivery_status !== "delivered" && <button onClick={handleMarkDelivered} className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer">Mark as Delivered</button>}
           {restockableItems.length > 0 && (
             <button
               onClick={handleRestock}
@@ -585,7 +601,9 @@ export default function AdminOrderDetailPage({ params }: OrderDetailPageProps) {
                 <button onClick={() => { setMoreActionsOpen(false); setPackingSlipOpen(true) }} className="w-full text-left px-4 py-1.5 hover:bg-gray-50 flex items-center gap-2.5 text-gray-800 font-semibold"><FileText className="w-4 h-4 text-gray-600" /><span>Print packing slip</span></button>
                 <div className="pt-1 border-t border-gray-100">
                   <div className="px-4 py-1 text-[11px] font-bold text-gray-400">Delivery</div>
-                  <button onClick={() => { setMoreActionsOpen(false); handleMarkOutForDelivery() }} className="w-full text-left px-4 py-1.5 hover:bg-blue-50 flex items-center gap-2.5 text-gray-800 font-semibold"><Truck className="w-4 h-4 text-blue-600" /><span>Mark as Out for Delivery</span></button>
+                  {(order.delivery_status === "booked" || order.delivery_status === "picked_up" || order.delivery_status === "in_transit") && (
+                    <button onClick={() => { setMoreActionsOpen(false); handleMarkOutForDelivery() }} className="w-full text-left px-4 py-1.5 hover:bg-blue-50 flex items-center gap-2.5 text-gray-800 font-semibold"><Truck className="w-4 h-4 text-blue-600" /><span>Mark as Out for Delivery</span></button>
+                  )}
                 </div>
                 <div className="pt-1 border-t border-gray-100">
                   <div className="px-4 py-1 text-[11px] font-bold text-gray-400">Book Shipment</div>

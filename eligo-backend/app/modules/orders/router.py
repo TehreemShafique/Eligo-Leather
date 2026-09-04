@@ -1603,7 +1603,6 @@ async def get_public_order_detail_api(order_id: str, db: AsyncSession = Depends(
 @router.post("/mark-paid/{order_id}")
 async def mark_order_paid_public_api(
     order_id: str,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """Mark an order as Paid in PostgreSQL DB and persist a timeline event."""
@@ -1614,6 +1613,7 @@ async def mark_order_paid_public_api(
         select(Order)
         .options(selectinload(Order.customer))
         .where(Order.order_number == search_num)
+        .with_for_update()
     )
     order = result.scalar_one_or_none()
 
@@ -1622,6 +1622,7 @@ async def mark_order_paid_public_api(
             select(Order)
             .options(selectinload(Order.customer))
             .where(Order.id == int(clean_id))
+            .with_for_update()
         )
         order = result.scalar_one_or_none()
 
@@ -1644,25 +1645,101 @@ async def mark_order_paid_public_api(
     await db.commit()
     await db.refresh(order)
 
-    from app.modules.settings.notifications.service import background_dispatch_event
-    background_tasks.add_task(
-        background_dispatch_event,
-        "order_paid",
-        {
-            "email": order.customer_email,
-            "customer_email": order.customer_email,
-            "customer_name": order.customer_name or "Valued Customer",
-            "order_number": order.order_number,
-            "total_price": str(order.total_price),
-            "paid_amount": str(order.paid_amount),
-            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
-        },
-    )
-
     return {
         "status": "success",
         "message": f"Order #{clean_id} marked as Paid in Database",
         "payment_status": "paid",
+    }
+
+
+@router.post("/mark-shipped/{order_id}")
+async def mark_order_shipped_public_api(
+    order_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark an order as Shipped for manual (non-Leopards) fulfilment.
+
+    Only allowed from genuine pre-dispatch states (``pending`` or ``booked``).
+    Rejects backward/invalid transitions such as ``picked_up``/``in_transit``/
+    ``out_for_delivery``/``delivered``/``failed``/``returned`` -> shipped.
+    Sets ``delivery_status = in_transit`` and ``fulfillment_status = fulfilled``
+    and dispatches the ``order_shipped`` notification only on a genuine
+    transition.
+    """
+    clean_id = order_id.replace("#", "").strip()
+    search_num = f"#{clean_id}"
+
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.customer), selectinload(Order.items))
+        .where(Order.order_number == search_num)
+        .with_for_update()
+    )
+    order = result.scalar_one_or_none()
+
+    if not order and clean_id.isdigit():
+        result = await db.execute(
+            select(Order)
+            .options(selectinload(Order.customer), selectinload(Order.items))
+            .where(Order.id == int(clean_id))
+            .with_for_update()
+        )
+        order = result.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.delivery_status not in (DeliveryStatus.pending, DeliveryStatus.booked):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Order cannot be marked as shipped from its current delivery "
+                f"status ('{order.delivery_status.value}'). "
+                "Mark as shipped is only available for pending or booked orders."
+            ),
+        )
+
+    already_shipped = order.delivery_status == DeliveryStatus.in_transit
+    order.delivery_status = DeliveryStatus.in_transit
+    order.fulfillment_status = FulfillmentStatus.fulfilled
+    if not already_shipped:
+        items_count = len(order.items or [])
+        courier = order.tracking_company or "Leopards Courier"
+        db.add(OrderAuditLog(
+            order_id=order.id,
+            event_type="delivery_updated",
+            description=(
+                f"{courier} marked {items_count or 1} item(s) as shipped"
+                + (f" (Tracking #{order.tracking_number})." if order.tracking_number else ".")
+            ),
+            actor_name=courier,
+        ))
+    await db.commit()
+    await db.refresh(order)
+
+    if not already_shipped:
+        from app.modules.settings.notifications.service import background_dispatch_event
+        background_tasks.add_task(
+            background_dispatch_event,
+            "order_shipped",
+            {
+                "email": order.customer_email,
+                "customer_email": order.customer_email,
+                "customer_name": order.customer_name or "Valued Customer",
+                "order_number": order.order_number,
+                "tracking_number": order.tracking_number,
+                "tracking_company": order.tracking_company or "Leopards Courier",
+                "total_price": str(order.total_price),
+                "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+            },
+        )
+
+    return {
+        "status": "success",
+        "message": f"Order #{clean_id} marked as Shipped in Database",
+        "delivery_status": "in_transit",
+        "fulfillment_status": "fulfilled",
     }
 
 
@@ -1672,7 +1749,13 @@ async def mark_order_delivered_public_api(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Mark an order as Delivered in PostgreSQL DB and persist a timeline event."""
+    """Mark an order as Delivered in PostgreSQL DB and persist a timeline event.
+
+    Allowed from any non-pending delivery state. ``failed``/``returned`` are
+    permitted so an admin can correct a courier-lifeycle misreport and close
+    the order, but an unshipped order (``pending``) cannot jump to delivered.
+    The notification is dispatched only on a genuine status transition.
+    """
     clean_id = order_id.replace("#", "").strip()
     search_num = f"#{clean_id}"
 
@@ -1680,6 +1763,7 @@ async def mark_order_delivered_public_api(
         select(Order)
         .options(selectinload(Order.customer), selectinload(Order.items))
         .where(Order.order_number == search_num)
+        .with_for_update()
     )
     order = result.scalar_one_or_none()
 
@@ -1688,11 +1772,22 @@ async def mark_order_delivered_public_api(
             select(Order)
             .options(selectinload(Order.customer), selectinload(Order.items))
             .where(Order.id == int(clean_id))
+            .with_for_update()
         )
         order = result.scalar_one_or_none()
 
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.delivery_status == DeliveryStatus.pending:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Order cannot be marked as delivered from its current delivery "
+                f"status ('{order.delivery_status.value}'). "
+                "It must be shipped first."
+            ),
+        )
 
     already_delivered = order.delivery_status == DeliveryStatus.delivered
     order.delivery_status = DeliveryStatus.delivered
@@ -1712,21 +1807,22 @@ async def mark_order_delivered_public_api(
     await db.commit()
     await db.refresh(order)
 
-    from app.modules.settings.notifications.service import background_dispatch_event
-    background_tasks.add_task(
-        background_dispatch_event,
-        "order_delivered",
-        {
-            "email": order.customer_email,
-            "customer_email": order.customer_email,
-            "customer_name": order.customer_name or "Valued Customer",
-            "order_number": order.order_number,
-            "tracking_number": order.tracking_number,
-            "tracking_company": order.tracking_company or "Leopards Courier",
-            "total_price": str(order.total_price),
-            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
-        },
-    )
+    if not already_delivered:
+        from app.modules.settings.notifications.service import background_dispatch_event
+        background_tasks.add_task(
+            background_dispatch_event,
+            "order_delivered",
+            {
+                "email": order.customer_email,
+                "customer_email": order.customer_email,
+                "customer_name": order.customer_name or "Valued Customer",
+                "order_number": order.order_number,
+                "tracking_number": order.tracking_number,
+                "tracking_company": order.tracking_company or "Leopards Courier",
+                "total_price": str(order.total_price),
+                "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+            },
+        )
 
     return {
         "status": "success",
@@ -1744,7 +1840,13 @@ async def mark_order_out_for_delivery_public_api(
     db: AsyncSession = Depends(get_db),
 ):
     """Mark an order as Out for Delivery in PostgreSQL DB, persist a timeline
-    event, and email the customer that their parcel is out for delivery today."""
+    event, and email the customer that their parcel is out for delivery today.
+
+    Only allowed from states in which the parcel is already outbound
+    (``booked``, ``picked_up``, ``in_transit``). Prevents invalid backward
+    transitions such as ``pending``, ``delivered``, ``failed`` or ``returned``
+    -> ``out_for_delivery``.
+    """
     clean_id = order_id.replace("#", "").strip()
     search_num = f"#{clean_id}"
 
@@ -1752,6 +1854,7 @@ async def mark_order_out_for_delivery_public_api(
         select(Order)
         .options(selectinload(Order.customer), selectinload(Order.items))
         .where(Order.order_number == search_num)
+        .with_for_update()
     )
     order = result.scalar_one_or_none()
 
@@ -1760,11 +1863,26 @@ async def mark_order_out_for_delivery_public_api(
             select(Order)
             .options(selectinload(Order.customer), selectinload(Order.items))
             .where(Order.id == int(clean_id))
+            .with_for_update()
         )
         order = result.scalar_one_or_none()
 
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.delivery_status not in (
+        DeliveryStatus.booked,
+        DeliveryStatus.picked_up,
+        DeliveryStatus.in_transit,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Order cannot be marked as out for delivery from its current "
+                f"delivery status ('{order.delivery_status.value}'). "
+                "The parcel must be booked/picked up/in transit first."
+            ),
+        )
 
     already_out = order.delivery_status == DeliveryStatus.out_for_delivery
     order.delivery_status = DeliveryStatus.out_for_delivery
@@ -1782,22 +1900,23 @@ async def mark_order_out_for_delivery_public_api(
     await db.commit()
     await db.refresh(order)
 
-    from app.modules.settings.notifications.service import background_dispatch_event
-    background_tasks.add_task(
-        background_dispatch_event,
-        "order_out_for_delivery",
-        {
-            "email": order.customer_email,
-            "customer_email": order.customer_email,
-            "customer_name": order.customer_name or "Valued Customer",
-            "order_number": order.order_number,
-            "tracking_number": order.tracking_number,
-            "tracking_company": order.tracking_company or "Leopards Courier",
-            "destination_city": order.shipping_city or order.destination or "",
-            "total_price": str(order.total_price),
-            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
-        },
-    )
+    if not already_out:
+        from app.modules.settings.notifications.service import background_dispatch_event
+        background_tasks.add_task(
+            background_dispatch_event,
+            "order_out_for_delivery",
+            {
+                "email": order.customer_email,
+                "customer_email": order.customer_email,
+                "customer_name": order.customer_name or "Valued Customer",
+                "order_number": order.order_number,
+                "tracking_number": order.tracking_number,
+                "tracking_company": order.tracking_company or "Leopards Courier",
+                "destination_city": order.shipping_city or order.destination or "",
+                "total_price": str(order.total_price),
+                "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+            },
+        )
 
     return {
         "status": "success",

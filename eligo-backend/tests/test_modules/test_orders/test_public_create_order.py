@@ -838,10 +838,10 @@ async def test_generate_cn_uses_order_snapshot_not_customer_profile(client, db_s
     assert customer.phone == "03001234567"
 
 
-async def test_mark_paid_notification_uses_order_snapshot(client, db_session, monkeypatch, auth_headers):
-    """``POST /api/v1/orders/mark-paid/{order_id}`` must notify using the
-    ORDER's checkout snapshot (customer_name / customer_email), not the shared
-    Customer profile."""
+async def test_mark_paid_updates_payment_state_no_customer_email(client, db_session, monkeypatch, auth_headers):
+    """``POST /api/v1/orders/mark-paid/{order_id}`` must mark the order as Paid
+    in the database and persist a timeline event WITHOUT sending any customer
+    email/notification (the `order_paid` dispatch was intentionally removed)."""
     from app.modules.customers.model import Customer
     from app.modules.settings.notifications import service as notif_service
 
@@ -890,14 +890,18 @@ async def test_mark_paid_notification_uses_order_snapshot(client, db_session, mo
 
     response = await client.post(f"/api/v1/orders/mark-paid/{second_order_id}", headers=auth_headers)
     assert response.status_code == 200
+    assert response.json()["payment_status"] == "paid"
 
-    # Notification must use the order's checkout snapshot (Bilal).
-    assert captured["event_type"] == "order_paid"
-    assert captured["customer_name"] == "Bilal Khan"
-    assert captured["customer_email"] == "paid-returning@example.com"
-    assert captured["email"] == "paid-returning@example.com"
+    # Order payment state is actually updated in the database.
+    db_session.expire_all()
+    order = await _load_order(db_session, second_order_id)
+    assert order.payment_status.value == "paid"
+    assert order.paid_amount == order.total_price
 
-    # The shared profile still holds the old values.
+    # No customer notification/email may be dispatched for Mark as Paid.
+    assert captured == {}
+
+    # The shared profile still holds the old values (order used its own snapshot).
     db_session.expire_all()
     order = await _load_order(db_session, second_order_id)
     customer = await db_session.get(Customer, order.customer_id)
@@ -908,8 +912,11 @@ async def test_mark_paid_notification_uses_order_snapshot(client, db_session, mo
 async def test_mark_delivered_notification_uses_order_snapshot(client, db_session, monkeypatch, auth_headers):
     """``POST /api/v1/orders/mark-delivered/{order_id}`` must notify using the
     ORDER's checkout snapshot (customer_name), not the shared Customer
-    profile."""
+    profile. The order is first placed in a valid pre-delivery state
+    (``in_transit``) because ``pending -> delivered`` is intentionally rejected.
+    """
     from app.modules.customers.model import Customer
+    from app.modules.orders.model import DeliveryStatus
     from app.modules.settings.notifications import service as notif_service
 
     product, variant = await _seed_product(db_session, stock=10)
@@ -946,6 +953,12 @@ async def test_mark_delivered_notification_uses_order_snapshot(client, db_sessio
     )
     assert second.status_code == 200
     second_order_id = second.json()["order_id"]
+
+    # Place the order in a valid pre-delivery source state; `pending->delivered`
+    # is intentionally disallowed, so move it to in_transit first.
+    order = await _load_order(db_session, second_order_id)
+    order.delivery_status = DeliveryStatus.in_transit
+    await db_session.commit()
 
     captured = {}
 
@@ -1013,6 +1026,13 @@ async def test_mark_out_for_delivery_uses_order_snapshot_and_emails(client, db_s
     )
     assert second.status_code == 200
     second_order_id = second.json()["order_id"]
+
+    # Place the order in a valid source state for "out for delivery"
+    # (booked / picked_up / in_transit); `pending -> out_for_delivery` is
+    # intentionally disallowed, so move it to in_transit first.
+    order = await _load_order(db_session, second_order_id)
+    order.delivery_status = DeliveryStatus.in_transit
+    await db_session.commit()
 
     captured = {}
 

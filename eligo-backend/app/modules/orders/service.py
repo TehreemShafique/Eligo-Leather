@@ -829,6 +829,12 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
             items = [payload]
 
     updated_orders = []
+    # Notifications are collected during the loop and dispatched only after the
+    # enclosing transaction commits successfully. This guarantees an email is
+    # never sent for a status/audit change that is later rolled back, and that
+    # each transitioned order's notification is sent exactly once.
+    pending_dispatches = []
+
     for entry in items:
         if not isinstance(entry, dict):
             continue
@@ -855,17 +861,21 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
             await upsert_shipment_from_webhook(db, cn_str, status_str, entry)
 
             result = await db.execute(
-                select(Order).where(
+                select(Order)
+                .options(selectinload(Order.customer))
+                .where(
                     or_(
                         Order.tracking_number == cn_str,
                         Order.tracking_number == f"ID{cn_clean}",
                         Order.tracking_number == cn_clean,
                     )
                 )
+                .with_for_update()
             )
             order = result.scalar_one_or_none()
             if order:
-                old_status = order.fulfillment_status
+                old_fulfillment = order.fulfillment_status
+                old_delivery = order.delivery_status
                 lower_status = status_str.lower()
                 if "delivered" in lower_status:
                     order.fulfillment_status = FulfillmentStatus.fulfilled
@@ -891,68 +901,79 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
                         order.delivery_status = target
                         break
 
-                await _log_audit(
-                    db,
-                    order.id,
-                    "leopard_webhook_update",
-                    f"Leopard status updated from '{old_status}' to '{order.fulfillment_status}' via webhook.",
-                    actor_name="Leopard Courier Webhook",
-                    metadata_json=json.dumps(entry),
-                )
-                updated_orders.append({"order_id": order.id, "cn_number": cn_number, "status": status_str})
+                fulfilled_changed = order.fulfillment_status != old_fulfillment
+                delivery_changed = order.delivery_status != old_delivery
+                transitioned = fulfilled_changed or delivery_changed
 
-                from app.modules.settings.notifications.service import background_dispatch_event
-                status_lower = status_str.lower()
-                if "delivered" in status_lower:
-                    _notif_payload = {
-                        "email": getattr(order, "customer_email", None) or entry.get("email"),
-                        "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
-                        "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
-                        "order_number": order.order_number,
-                        "tracking_number": str(cn_number),
-                        "tracking_company": "Leopards Courier",
-                        "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
-                        "total_price": str(order.total_price),
-                    }
-                    try:
-                        import asyncio
-                        asyncio.create_task(background_dispatch_event("order_delivered", _notif_payload))
-                    except Exception:  # nosec B110
-                        pass
-                elif "out for delivery" in status_lower or "out-for-delivery" in status_lower:
-                    _notif_payload = {
-                        "email": getattr(order, "customer_email", None) or entry.get("email"),
-                        "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
-                        "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
-                        "order_number": order.order_number,
-                        "tracking_number": str(cn_number),
-                        "tracking_company": "Leopards Courier",
-                        "destination_city": order.shipping_city or order.destination or "",
-                        "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
-                        "total_price": str(order.total_price),
-                    }
-                    try:
-                        import asyncio
-                        asyncio.create_task(background_dispatch_event("order_out_for_delivery", _notif_payload))
-                    except Exception:  # nosec B110
-                        pass
-                elif "dispatch" in status_lower or "transit" in status_lower:
-                    _notif_payload = {
-                        "email": getattr(order, "customer_email", None) or entry.get("email"),
-                        "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
-                        "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
-                        "order_number": order.order_number,
-                        "tracking_number": str(cn_number),
-                        "tracking_company": "Leopards Courier",
-                        "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
-                        "total_price": str(order.total_price),
-                    }
-                    try:
-                        import asyncio
-                        asyncio.create_task(background_dispatch_event("order_shipped", _notif_payload))
-                    except Exception:  # nosec B110
-                        pass
+                if transitioned:
+                    await _log_audit(
+                        db,
+                        order.id,
+                        "leopard_webhook_update",
+                        f"Leopard status updated from '{old_fulfillment}' to '{order.fulfillment_status}' via webhook.",
+                        actor_name="Leopard Courier Webhook",
+                        metadata_json=json.dumps(entry),
+                    )
+                    updated_orders.append({"order_id": order.id, "cn_number": cn_number, "status": status_str})
 
+                # Only send a lifecycle email when the structured delivery_status
+                # genuinely transitioned to the corresponding end state. A mere
+                # fulfillment-status change (or a re-arrival of the same courier
+                # status) must not re-trigger a shipped/out-for-delivery/delivered
+                # notification.
+                if delivery_changed and order.delivery_status == DeliveryStatus.out_for_delivery:
+                    pending_dispatches.append(
+                        ("order_out_for_delivery", {
+                            "email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                            "order_number": order.order_number,
+                            "tracking_number": str(cn_number),
+                            "tracking_company": "Leopards Courier",
+                            "destination_city": order.shipping_city or order.destination or "",
+                            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+                            "total_price": str(order.total_price),
+                        })
+                    )
+                elif delivery_changed and order.delivery_status == DeliveryStatus.delivered:
+                    pending_dispatches.append(
+                        ("order_delivered", {
+                            "email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                            "order_number": order.order_number,
+                            "tracking_number": str(cn_number),
+                            "tracking_company": "Leopards Courier",
+                            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+                            "total_price": str(order.total_price),
+                        })
+                    )
+                elif delivery_changed and order.delivery_status == DeliveryStatus.in_transit:
+                    pending_dispatches.append(
+                        ("order_shipped", {
+                            "email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                            "order_number": order.order_number,
+                            "tracking_number": str(cn_number),
+                            "tracking_company": "Leopards Courier",
+                            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+                            "total_price": str(order.total_price),
+                        })
+                    )
+
+    # Commit all intended DB transitions (status changes + audit logs) before
+    # dispatching any notifications, so a rollback never leaks an email.
     await db.commit()
+
+    if pending_dispatches:
+        from app.modules.settings.notifications.service import background_dispatch_event
+        import asyncio
+        for event, payload in pending_dispatches:
+            try:
+                asyncio.create_task(background_dispatch_event(event, payload))
+            except Exception:  # nosec B110
+                pass
+
     return {"matched_updated": len(updated_orders), "updated": updated_orders}
 
