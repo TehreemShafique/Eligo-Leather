@@ -29,6 +29,7 @@ const VariantOutSchema = z.object({
   weight_unit: z.string(),
   inventory_tracked: z.boolean(),
   continue_selling_out_of_stock: z.boolean(),
+  is_canonical: z.boolean().optional(),
   is_active: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),

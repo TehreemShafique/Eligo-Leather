@@ -64,7 +64,7 @@ export function ProductDetailView({ product, relatedProducts = [] }: ProductDeta
       class: `bg-[${hex}]`,
       hex,
       variantId: v.id,
-      isCanonical: v.id === firstVariant?.id,
+      isCanonical: v.is_canonical ?? v.id === firstVariant?.id,
     }
   })
 

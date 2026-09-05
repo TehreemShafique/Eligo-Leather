@@ -73,7 +73,7 @@ export function ProductBuyBox({
       onColorSelect(colorObj.name)
     }
 
-    if (colorObj.variantId) {
+    if (colorObj.variantId && !colorObj.isCanonical) {
       const newUrl = `${window.location.pathname}?variant=${colorObj.variantId}`
       window.history.replaceState(null, "", newUrl)
     } else {
