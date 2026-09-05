@@ -42,7 +42,7 @@ jobs:
 
        # ── Fix: Convert GitHub Username to Lowercase for Docker ──
       - name: Lowercase Repository Owner Name
-        run: echo "REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        run: echo "REPO_OWNER=$(echo "tehreemshafique" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -61,7 +61,7 @@ jobs:
           context: ./eligo-frontend
           push: true
           # ⚠️ MANUALLY EDIT THIS: Change 'your-github-username' to your exact GitHub user or organization
-          tags: ghcr.io/${{ github.repository_owner }}/eligo-frontend:latest
+          tags: ghcr.io/tehreemshafique/eligo-frontend:latest
           cache-from: type=gha,scope=ui-production
           cache-to: type=gha,scope=ui-production,mode=max
           build-args: |
@@ -74,7 +74,7 @@ jobs:
         with:
           context: ./eligo-backend
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/eligo-backend:latest
+          tags: ghcr.io/tehreemshafique/eligo-backend:latest
           cache-from: type=gha,scope=api-production
           cache-to: type=gha,scope=api-production,mode=max
 
@@ -84,7 +84,7 @@ jobs:
         with:
           context: ./admin-frontend
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/admin-frontend:latest
+          tags: ghcr.io/tehreemshafique/admin-frontend:latest
           cache-from: type=gha,scope=admin-production
           cache-to: type=gha,scope=admin-production,mode=max
           build-args: |
@@ -125,7 +125,7 @@ jobs:
             
             # 1. FastAPI Backend Service
             echo "  backend:" >> docker-compose.yml
-            echo "    image: ghcr.io/${{ github.repository_owner }}/eligo-backend:latest" >> docker-compose.yml
+            echo "    image: ghcr.io/tehreemshafique/eligo-backend:latest" >> docker-compose.yml
             echo "    container_name: eligo-backend-prod" >> docker-compose.yml
             echo "    ports:" >> docker-compose.yml
             echo "      - \"${{ env.API_PORT }}:8000\"" >> docker-compose.yml
@@ -141,7 +141,7 @@ jobs:
             
             # 2. Next.js Storefront Service
             echo "  frontend:" >> docker-compose.yml
-            echo "    image: ghcr.io/${{ github.repository_owner }}/eligo-frontend:latest" >> docker-compose.yml
+            echo "    image: ghcr.io/tehreemshafique/eligo-frontend:latest" >> docker-compose.yml
             echo "    container_name: eligo-frontend-prod" >> docker-compose.yml
             echo "    ports:" >> docker-compose.yml
             echo "      - \"${{ env.FRONTEND_PORT }}:3000\"" >> docker-compose.yml
@@ -157,7 +157,7 @@ jobs:
 
             # 3. Next.js Admin Panel Service
             echo "  admin:" >> docker-compose.yml
-            echo "    image: ghcr.io/${{ github.repository_owner }}/admin-frontend:latest" >> docker-compose.yml
+            echo "    image: ghcr.io/tehreemshafique/admin-frontend:latest" >> docker-compose.yml
             echo "    container_name: eligo-admin-prod" >> docker-compose.yml
             echo "    ports:" >> docker-compose.yml
             echo "      - \"${{ env.ADMIN_PORT }}:3000\"" >> docker-compose.yml
