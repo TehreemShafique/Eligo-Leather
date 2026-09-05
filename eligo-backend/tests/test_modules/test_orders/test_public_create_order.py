@@ -554,6 +554,68 @@ async def test_create_order_applies_one_time_welcome_discount(client, db_session
     assert Decimal(str(second_order.discount)) == Decimal("0.00")
 
 
+async def test_welcome_coupon_consumed_after_first_order_without_using_it(
+    client, db_session
+):
+    """A visitor who saves the welcome code but checks out with another/no
+    coupon still loses the first-time offer: the outstanding welcome coupon is
+    expired after their first successful order, so reusing it later fails even
+    though it was never applied on that first order."""
+    from app.modules.discounts.model import WelcomeDiscountSettings
+
+    db_session.add(WelcomeDiscountSettings(discount_percentage=10, is_active=True))
+    await db_session.commit()
+
+    check = await client.post(
+        "/api/v1/discounts/public/welcome-check",
+        json={"visitor_id": "visitor-od-expire-1"},
+    )
+    unique_code = check.json()["coupon_code"]
+    assert unique_code is not None
+
+    product, variant = await _seed_product(db_session)
+    product_id = int(product.id)
+    variant_id = int(variant.id)
+
+    # First order uses NO discount code (the visitor saved the welcome code for
+    # later instead of applying it here).
+    first = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload_ids(product_id, variant_id, visitor_id="visitor-od-expire-1"),
+    )
+    assert first.status_code == 200
+    first_order = await _load_order(db_session, first.json()["order_id"])
+    assert Decimal(str(first_order.discount)) == Decimal("0.00")
+
+    # The saved welcome code must now be refused by the preview endpoint ...
+    verify = await client.post(
+        "/api/v1/discounts/public/verify-coupon",
+        json={
+            "code": unique_code,
+            "subtotal": 2750.0,
+            "visitor_id": "visitor-od-expire-1",
+        },
+    )
+    assert verify.status_code == 200
+    vbody = verify.json()
+    assert vbody["valid"] is False
+
+    # ... and applying it on a later (different-basket) order grants no discount.
+    second = await client.post(
+        "/api/v1/orders/create-order",
+        json=_payload_ids(
+            product_id,
+            variant_id,
+            quantity=2,
+            discount_code=unique_code,
+            visitor_id="visitor-od-expire-1",
+        ),
+    )
+    assert second.status_code == 200
+    second_order = await _load_order(db_session, second.json()["order_id"])
+    assert Decimal(str(second_order.discount)) == Decimal("0.00")
+
+
 async def test_idempotency_key_reuses_existing_order(client, db_session):
     """Same ``idempotency_key`` twice -> exactly one order, same id, stock
     deducted once (double-submit / network retry safety)."""

@@ -56,14 +56,22 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
   const [codAmount, setCodAmount] = useState("0")
   const [specialInstructions, setSpecialInstructions] = useState("")
 
-  // Shipper & Business Info (from Settings -> General store settings)
+  // Shipper / Company Information (the business shipping the parcel — never
+  // the customer/consignee). Prefilled from Admin -> Leopards Courier Settings
+  // -> Default Shipper Information; editable per-booking.
   const [accountName, setAccountName] = useState("102620 / ELIGO LEATHER")
   const [businessAddress, setBusinessAddress] = useState(
     "Office # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad"
   )
+  const [shipperName, setShipperName] = useState("ELIGO LEATHER")
   const [shipperContact, setShipperContact] = useState("03345399470")
-  // Shipper Address and Return Address are both the business address
-  const shipperReturnAddress = businessAddress
+  const [shipperEmail, setShipperEmail] = useState("")
+  const [shipperAddress, setShipperAddress] = useState(
+    "Office # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad"
+  )
+  const [shipperCity, setShipperCity] = useState("ISLAMABAD")
+  // Shipper Return Address is the shipper's address (used on printed label)
+  const shipperReturnAddress = shipperAddress
 
   // Courier Booking State
   const [isBooked, setIsBooked] = useState(false)
@@ -86,6 +94,10 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
       accountName,
       businessAddress,
       shipperContact,
+      shipperName,
+      shipperEmail,
+      shipperAddress,
+      shipperCity,
       cnNumber,
       bookingDate,
     },
@@ -122,13 +134,41 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
         }
 
         try {
-          const settings = await apiFetch<{ store_name?: string; store_phone?: string; address?: string }>(
+          // Shipper / company info on the waybill comes from the administratively
+          // configured Leopards "Default Shipper Information" (name, phone, email,
+          // address, city). Priority: 1) values edited here, 2) default_shipper,
+          // 3) safe fallbacks. The general store phone/address/settings are NEVER
+          // used ahead of a configured default_shipper for shipper fields.
+          let shipper: {
+            name?: string
+            phone?: string
+            email?: string
+            address?: string
+            city?: string
+          } = {}
+          try {
+            const leopards = await apiFetch<{
+              settings?: { default_shipper?: typeof shipper }
+            }>("/api/v1/orders/leopard/settings")
+            shipper = leopards?.settings?.default_shipper || {}
+          } catch {
+            // Endpoint unavailable - use fallbacks below.
+          }
+
+          const settings = await apiFetch<{ store_name?: string; address?: string }>(
             "/api/v1/settings/general/store-settings"
           )
           if (settings && !cancelled) {
             if (settings.address && settings.address.trim()) setBusinessAddress(settings.address.trim())
-            if (settings.store_phone) setShipperContact(settings.store_phone)
             if (settings.store_name) setAccountName(`102620 / ${settings.store_name.toUpperCase()}`)
+          }
+
+          if (!cancelled) {
+            if (shipper.name && shipper.name.trim()) setShipperName(shipper.name.trim())
+            if (shipper.phone && shipper.phone.trim()) setShipperContact(shipper.phone.trim())
+            if (shipper.email && shipper.email.trim()) setShipperEmail(shipper.email.trim())
+            if (shipper.address && shipper.address.trim()) setShipperAddress(shipper.address.trim())
+            if (shipper.city && shipper.city.trim()) setShipperCity(shipper.city.trim().toUpperCase())
           }
         } catch {
           // Not logged in as admin or endpoint unavailable - keep defaults
@@ -171,6 +211,10 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
           consignee_email: "",
           consignee_address: shippingAddress,
           destination_city: city,
+          shipper_name: shipperName,
+          shipper_phone: shipperContact,
+          shipper_email: shipperEmail,
+          shipper_address: shipperAddress,
           special_instructions: specialInstructions || "N/A",
           weight: weightGrams || "500",
           weight_grams: parseInt(weightGrams.replace(/[^0-9]/g, "")) || 500,
@@ -334,6 +378,69 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
                   value={accountName}
                   onChange={(e) => setAccountName(e.target.value)}
                   className="w-full h-10 px-3 bg-gray-50 border border-gray-300 rounded-xl font-bold text-gray-900 uppercase focus:outline-hidden"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 mt-3 border-t-2 border-dashed border-amber-200">
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-xs font-black text-gray-900 tracking-wide uppercase">
+                  Shipper Information (Company Sending This Parcel)
+                </h3>
+                <span className="px-2 py-0.5 bg-amber-50 text-amber-900 font-bold text-[10px] rounded-full border border-amber-200">
+                  From Admin → Leopards Default Shipper
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Shipper / Company Name</label>
+                  <input
+                    type="text"
+                    value={shipperName}
+                    onChange={(e) => setShipperName(e.target.value)}
+                    className="w-full h-10 px-3 bg-amber-50/40 border border-gray-300 rounded-xl font-bold text-gray-900 uppercase focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Shipper Contact #</label>
+                  <input
+                    type="text"
+                    value={shipperContact}
+                    onChange={(e) => setShipperContact(e.target.value)}
+                    className="w-full h-10 px-3 bg-amber-50/40 border border-gray-300 rounded-xl font-mono font-bold text-gray-900 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Shipper Email</label>
+                  <input
+                    type="text"
+                    value={shipperEmail}
+                    onChange={(e) => setShipperEmail(e.target.value)}
+                    className="w-full h-10 px-3 bg-amber-50/40 border border-gray-300 rounded-xl font-semibold text-gray-900 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Shipper City</label>
+                  <input
+                    type="text"
+                    value={shipperCity}
+                    onChange={(e) => setShipperCity(e.target.value)}
+                    className="w-full h-10 px-3 bg-amber-50/40 border border-gray-300 rounded-xl font-bold text-gray-900 uppercase focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <label className="block font-bold text-gray-700 mb-1">Shipper Complete Address</label>
+                <textarea
+                  rows={2}
+                  value={shipperAddress}
+                  onChange={(e) => setShipperAddress(e.target.value)}
+                  className="w-full p-3 bg-amber-50/40 border border-gray-300 rounded-xl font-semibold text-gray-900 focus:outline-hidden"
                 />
               </div>
             </div>
@@ -532,8 +639,9 @@ export default function AdminLeopardShipmentPage({ params }: { params: Promise<{
 
                     <div className="border-t border-gray-400 pt-1 space-y-1">
                       <div className="font-bold underline text-[11px] text-center">Shipper / Return Information</div>
-                      <div><span className="font-bold">AC / Name :</span> <span className="underline">{accountName}</span></div>
-                      <div><span className="font-bold">Address :</span> <span className="underline">{shipperReturnAddress}</span></div>
+                      <div><span className="font-bold">Name :</span> <span className="underline uppercase">{shipperName}</span></div>
+                      <div><span className="font-bold">Address :</span> <span className="underline">{shipperAddress}</span></div>
+                      <div><span className="font-bold">City :</span> <span className="uppercase">{shipperCity}</span></div>
                       <div><span className="font-bold">Contact #:</span> <span className="font-mono">{shipperContact}</span></div>
                       <div><span className="font-bold">Return Address :</span> <span>{shipperReturnAddress}</span></div>
                     </div>

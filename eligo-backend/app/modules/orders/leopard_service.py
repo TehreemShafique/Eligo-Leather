@@ -27,8 +27,17 @@ from app.modules.orders.model import (
     Order, OrderAuditLog, FulfillmentStatus,
 )
 from app.modules.settings.general.model import StoreSettings
+from app.modules.settings.apps.model import StoreIntegration
 
 logger = logging.getLogger(__name__)
+
+# App code for the Leopards Courier integration (matches router setup).
+LEOPARD_APP_CODE = "leopards_courier"
+
+# Default/fallback shipper (company) contact when the admin has not
+# configured it via Admin -> Leopards Courier Settings -> Default Shipper
+# Information -> Contact Phone.
+DEFAULT_SHIPPER_PHONE = "03345399470"
 
 # Fallback used only when the store has not saved its business address in
 # Settings -> General yet.
@@ -66,6 +75,47 @@ async def get_business_address(db: AsyncSession) -> str:
     if row is not None and row.address and str(row.address).strip():
         return str(row.address).strip()
     return DEFAULT_BUSINESS_ADDRESS
+
+
+async def get_leopard_default_shipper(db: AsyncSession) -> dict:
+    """The configured shipper/COMPANY information for Leopards waybills.
+
+    Source of truth is the admin-configured Leopards "Default Shipper
+    Information" (``default_shipper``): name, phone, email, address, city.
+    This is the company selling/shipping the products — never the
+    customer/consignee contact. Each field falls back independently when it
+    has not been configured.
+    """
+    result = await db.execute(
+        select(StoreIntegration).where(StoreIntegration.app_code == LEOPARD_APP_CODE)
+    )
+    row = result.scalar_one_or_none()
+    default_shipper = {}
+    if row is not None and isinstance(row.settings, dict):
+        default_shipper = row.settings.get("default_shipper") or {}
+
+    def _field(key: str) -> str:
+        if isinstance(default_shipper, dict):
+            value = default_shipper.get(key)
+            if value is not None:
+                return str(value).strip()
+        return ""
+
+    return {
+        "name": _field("name"),
+        "phone": _field("phone") or DEFAULT_SHIPPER_PHONE,
+        "email": _field("email"),
+        "address": _field("address"),
+        "city": _field("city"),
+    }
+
+
+async def get_leopard_shipper_phone(db: AsyncSession) -> str:
+    """Convenience: just the configured shipper/COMPANY phone (see
+    ``get_leopard_default_shipper``). ``DEFAULT_SHIPPER_PHONE`` is only a
+    fallback for installations that have not saved a shipper phone yet.
+    """
+    return (await get_leopard_default_shipper(db)).get("phone") or DEFAULT_SHIPPER_PHONE
 
 
 # ================================================================
@@ -1023,6 +1073,29 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
     weight = str(payload.get("weight", payload.get("weight_grams", "500")))
     pieces = int(payload.get("pieces", 1))
 
+    # Shipper/company information (the business selling/shipping — never the
+    # customer/consignee). Priority for manual booking:
+    #   1. values submitted on the manual booking page (this payload)
+    #   2. admin-configured Leopards default_shipper
+    #   3. safe fallback (name/address from business defaults, phone default)
+    # All resolved fields are forwarded to the Leopards booking API and echoed
+    # back in the booking details.
+    default_shipper = await get_leopard_default_shipper(db)
+    business_address = await get_business_address(db)
+    shipper_name = str(payload.get("shipper_name") or default_shipper["name"] or "ELIGO LEATHER").strip()
+    shipper_phone = str(payload.get("shipper_phone") or default_shipper["phone"]).strip()
+    shipper_email = str(payload.get("shipper_email") or default_shipper["email"] or "").strip()
+    shipper_address = str(
+        payload.get("shipper_address") or default_shipper["address"] or business_address
+    ).strip()
+    payload = {
+        **payload,
+        "shipper_name": shipper_name,
+        "shipper_phone": shipper_phone,
+        "shipper_email": shipper_email,
+        "shipper_address": shipper_address,
+    }
+
     # Call the live Leopards Merchant API
     api_res = await leopard_client.book_packet_api(payload)
     api_status = api_res.get("status")
@@ -1142,7 +1215,7 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
                 f"COD: Rs {cod_amount}"
             ),
             actor_name="Leopards Courier",
-        ))
+            ))
         if was_unfulfilled:
             db.add(OrderAuditLog(
                 order_id=order_row.id,
@@ -1154,25 +1227,6 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
                 ),
                 actor_name="Leopards Courier",
             ))
-
-        from app.modules.settings.notifications.service import background_dispatch_event
-        _notif_payload = {
-            "email": order_row.customer_email,
-            "customer_email": order_row.customer_email,
-            "customer_name": order_row.customer_name or consignee_name or "Valued Customer",
-            "order_number": order_row.order_number,
-            "tracking_number": str(cn_number),
-            "tracking_company": "Leopards Courier",
-            "currency": str(order_row.currency) if hasattr(order_row, "currency") else "PKR",
-            "total_price": str(order_row.total_price),
-        }
-        try:
-            import asyncio
-            asyncio.create_task(background_dispatch_event("order_shipped", _notif_payload))
-        except Exception as exc:
-            logger.warning(
-                "Failed to dispatch order_shipped email for %s: %s", order_id, exc
-            )
 
     await record_log(
         db,
@@ -1208,11 +1262,12 @@ async def book_packet(db: AsyncSession, payload: dict) -> dict:
             "pieces": pieces,
             "booking_date": booking_date,
             "status": "Booked",
-            "shipper_name": "ELIGO LEATHER",
+            "shipper_name": shipper_name,
             "shipper_ac": "102620 / ELIGO LEATHER",
-            "shipper_contact": "03345399470",
-            "shipper_address": business_address,
-            "return_address": business_address,
+            "shipper_contact": shipper_phone,
+            "shipper_email": shipper_email,
+            "shipper_address": shipper_address,
+            "return_address": shipper_address,
             "business_address": business_address,
             "origin_city": "ISLAMABAD",
         },

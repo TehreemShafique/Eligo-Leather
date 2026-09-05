@@ -342,10 +342,16 @@ async def book_packet_api(payload: dict) -> dict:
             booked_packet_order_id=str(payload.get("order_id", "")),
             origin_city=origin_val,
             destination_city=dest_val,
-            shipment_name_eng="self",
-            shipment_email="self",
-            shipment_phone="self",
-            shipment_address="self",
+            # Shipper/company information (the business shipping — never the
+            # customer/consignee). These fields accept real values OR 'self'
+            # (merchant account default). Supplied values come from the manual
+            # booking page / configured default_shipper; empty falls back to
+            # 'self'. NOTE: the Leopards bookPacket API has NO shipment_city
+            # field — the shipper's origin city is conveyed via origin_city.
+            shipment_name_eng=str(payload.get("shipper_name", "") or "self"),
+            shipment_email=str(payload.get("shipper_email", "") or "self"),
+            shipment_phone=str(payload.get("shipper_phone", "") or "self"),
+            shipment_address=str(payload.get("shipper_address", "") or "self"),
             consignment_name_eng=str(payload.get("consignee_name", "")),
             consignment_email=str(payload.get("consignee_email", "")),
             consignment_phone=str(payload.get("consignee_phone", "")),

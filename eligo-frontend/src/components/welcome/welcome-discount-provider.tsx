@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { api } from "@/lib/api-client"
+import { saveWelcomeCoupon } from "@/lib/welcome-coupon"
 import ScratchWelcomePopup from "@/components/ScratchWelcomePopup"
 
 const VISITOR_COOKIE = "eligo_visitor_id"
@@ -37,6 +39,7 @@ function generateVisitorId(): string {
 let eligibilityCheckStarted = false
 
 export default function WelcomeDiscountProvider() {
+  const router = useRouter()
   const [visitorId, setVisitorId] = useState<string | null>(null)
   const [eligibility, setEligibility] = useState<boolean | null>(null)
   const [discountPercentage, setDiscountPercentage] = useState(5)
@@ -92,6 +95,16 @@ export default function WelcomeDiscountProvider() {
           couponCode={couponCode}
           isOpen={popupOpen}
           onClose={() => setPopupOpen(false)}
+          onSaveCoupon={(code) => saveWelcomeCoupon(code, visitorId)}
+          onApplyCoupon={(code) => {
+            saveWelcomeCoupon(code, visitorId)
+            // Close the provider-owned popup state too (not just the popup's
+            // internal showModal) so the popup does not remain open across the
+            // navigation — this provider lives in the root layout and stays
+            // mounted when we push to /products.
+            setPopupOpen(false)
+            router.push("/products")
+          }}
         />
       )}
     </>

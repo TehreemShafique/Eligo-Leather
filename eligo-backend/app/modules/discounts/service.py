@@ -420,6 +420,53 @@ async def redeem_welcome_discount(
         return False
 
 
+async def consume_welcome_for_order(
+    db: AsyncSession,
+    *,
+    visitor_id: str | None = None,
+    user_email: str | None = None,
+    ip_address: str | None = None,
+    commit: bool = True,
+) -> bool:
+    """Expire this visitor's outstanding first-time welcome offer.
+
+    Called after a *successful* order is created so the one-time welcome
+    coupon can never be used on a later order, even when the just-placed order
+    used a different discount code (or none). This closes the gap where a
+    visitor saves the welcome code, checks out with another coupon, and would
+    otherwise be able to reuse the saved welcome code afterwards.
+
+    Marks the existing ``WelcomeDiscountLog`` row as redeemed — the same
+    consumed state the welcome code itself sets — leaving the historical/audit
+    row intact. Idempotent: a log that is missing or already redeemed is left
+    untouched, so the welcome-redemption path and this path never conflict.
+
+    Ownership resolution deliberately reuses the same visitor-id / email / IP
+    mechanism as the rest of the welcome flow (no new identity shortcuts).
+    By default the change is committed immediately; pass ``commit=False`` when
+    the caller wants it persisted atomically with its own transaction.
+    """
+    log = await _find_welcome_log(
+        db,
+        visitor_id=visitor_id,
+        user_email=user_email,
+        ip_address=ip_address,
+    )
+    if log is None or log.redeemed_at is not None:
+        return False
+    log.redeemed_at = datetime.utcnow()
+
+    if not commit:
+        return True
+
+    try:
+        await db.commit()
+        return True
+    except IntegrityError:
+        await db.rollback()
+        return False
+
+
 async def list_welcome_logs(
     db: AsyncSession, limit: int = 50,
 ) -> list[dict]:

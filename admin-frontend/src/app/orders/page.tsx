@@ -263,7 +263,7 @@ export default function AdminOrdersPage() {
                           {order.order_number}
                         </Link>
                         {order.confirmed_at === null && (
-                          <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold align-middle" title="Order has not been manually confirmed yet">Needs confirm</span>
+                          <span className="ml-2 inline-flex items-center whitespace-nowrap px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold" title="Order has not been manually confirmed yet">Needs confirm</span>
                         )}
                       </td>
                       <td className="eligo-td font-semibold text-gray-900">{order.customer_name || "Guest"}</td>

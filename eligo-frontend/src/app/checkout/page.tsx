@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import {
@@ -14,9 +14,10 @@ import {
   Truck,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import { useCartStore, selectCart, selectCartSubtotal } from "@/modules/cart/store"
+import { useCartStore, selectCart, selectCartSubtotal, type CartItem } from "@/modules/cart/store"
 import { PageBreadcrumb } from "@/components/ui/page-breadcrumb"
 import { api, ApiError, getApiErrorMessage } from "@/lib/api-client"
+import { clearWelcomeCoupon, loadWelcomeCoupon } from "@/lib/welcome-coupon"
 import { useNavigationLock } from "@/lib/use-navigation-lock"
 import {
   buildGuestOrderPayload,
@@ -47,6 +48,25 @@ function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match.split("=").slice(1).join("=")) : null
 }
 
+/**
+ * Stable string fingerprint of the meaningful cart contents, so a changed
+ * product / variant / quantity / price always triggers coupon revalidation —
+ * even when the subtotal stays the same (e.g. a same-price product swap).
+ * Self-contained line identity (product id + variant/color) so the page does
+ * not couple to the cart store's other exports.
+ */
+function cartContentsFingerprint(cart: CartItem[]): string {
+  return cart
+    .map(
+      (item) =>
+        `${String(item.id)}|${
+          item.variantId != null ? String(item.variantId) : ""
+        }|${(item.color ?? "").trim()}|${item.quantity}|${Number(item.price)}`,
+    )
+    .sort()
+    .join("::")
+}
+
 function resolveSubmitErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     return getApiErrorMessage(error)
@@ -73,7 +93,13 @@ export default function CheckoutPage() {
   const [formData, setFormData] = useState<CheckoutFormValues>(defaultCheckoutFormValues)
   const [appliedDiscount, setAppliedDiscount] = useState(0)
   const [appliedDiscountCode, setAppliedDiscountCode] = useState("")
-  const [discountLoading, setDiscountLoading] = useState(false)
+  // Monotonic bump issued every time a verification RESPONSE is actually
+  // processed (valid, invalid, or error). Guarantees a fresh render so the
+  // stale-window ("Recalculating…") state is left even when the revalidated
+  // discount amount is identical to the previous one — `setAppliedDiscount`
+  // alone would bail out on an equal number and the ref-based staleness check
+  // would then never be re-evaluated.
+  const [, setDiscountRefreshTick] = useState(0)
   const [loading, setLoading] = useState(false)
   const [completedOrderId, setCompletedOrderId] = useState<string>(() => {
     if (typeof window === "undefined") return ""
@@ -104,6 +130,36 @@ export default function CheckoutPage() {
   const pendingRef = useRef(false)
   const inputRefs = useRef<Partial<Record<CheckoutFieldKey, HTMLElement | null>>>({})
 
+  // Auto-apply (saved welcome coupon) bookkeeping. Refs keep the latest
+  // callback/state reachable so the auto-apply effect can run only when the
+  // cart fingerprint changes, without stale closures or re-running every
+  // render. autoAppliedRef guarantees exactly one initial verification.
+  const applyCodeRef = useRef<((rawCode: string, opts?: { silent?: boolean }) => Promise<void>) | null>(null)
+  const appliedCodeRef = useRef("")
+  const autoAppliedRef = useRef(false)
+  // Tracks whether the AUTOMATIC welcome-coupon flow is still the active flow
+  // (holds the saved welcome code). This is deliberately kept separate from
+  // appliedCodeRef (which reflects the LAST verification RESULT): during the
+  // first automatic verification appliedCodeRef is still empty, so keying the
+  // queue/revalidation on it would drop a cart change made mid-flight. The
+  // auto flow is stopped (cleared) the moment a different coupon is applied
+  // manually, so the auto-flow can never overwrite a manual coupon.
+  const activeAutoWelcomeRef = useRef("")
+
+  // Concurrency + sequencing for coupon verification. Refs are used for the
+  // in-flight flag so it can be read/written synchronously inside async
+  // callbacks (React state updates are async and could be stale mid-flight).
+  // A monotonic sequence discards stale responses, and a single pending-code
+  // ref coalesces rapid cart changes into one follow-up revalidation that
+  // always uses the LATEST cart. validatedFingerprintRef remembers WHICH cart
+  // the currently displayed discount was verified for: after a quantity /
+  // contents change the old amount is hidden until the revalidation response
+  // lands, so the UI never shows "new subtotal + old discount (or total)".
+  const discountLoadingRef = useRef(false)
+  const verifySeqRef = useRef(0)
+  const pendingRevalidateRef = useRef<string | null>(null)
+  const validatedFingerprintRef = useRef("")
+
   const placeOrderInProgress = loading || orderComplete
   useNavigationLock(placeOrderInProgress, { warnOnUnload: loading })
 
@@ -127,7 +183,16 @@ export default function CheckoutPage() {
   const baseShippingFee = shippingCalc?.shipping_cost ?? 0
   const finalShippingFee = Math.max(0, baseShippingFee)
   // Discounts reduce the merchandise subtotal, never the shipping fee.
-  const discountedSubtotal = Math.max(0, cartSubtotal - appliedDiscount)
+  // A discount is only used when it is still valid for the CURRENT cart: after
+  // a quantity/contents change the amount is stale until the revalidation
+  // response lands, so during that window it is hidden and the subtotal/total
+  // are computed WITHOUT it — never "new subtotal + old discount/total".
+  const discountIsStale =
+    validatedFingerprintRef.current !== "" &&
+    validatedFingerprintRef.current !== cartContentsFingerprint(cart) &&
+    (appliedDiscount > 0 || appliedDiscountCode !== "")
+  const displayDiscount = discountIsStale ? 0 : appliedDiscount
+  const discountedSubtotal = Math.max(0, cartSubtotal - displayDiscount)
   const orderTotal = discountedSubtotal + finalShippingFee
   const amountToFreeShipping =
     shippingCalc && !shippingCalc.is_free_shipping && shippingCalc.amount_to_free_shipping != null
@@ -139,6 +204,18 @@ export default function CheckoutPage() {
     value: CheckoutFormValues[K],
   ) => setFormData((current) => ({ ...current, [field]: value }))
 
+  // Read the cart's fingerprint for "is this discount still current?" checks.
+  // With the real Zustand store this reads the live cart SYNCHRONOUSLY (so a
+  // verification resolving before a passive effect flush still sees the newest
+  // quantity). Some test harnesses stub the store with a static fixture that
+  // has no getState — fall back to the rendered cart in that case (which is
+  // identical because the fixture never changes during the test).
+  const liveCartFingerprint = () => {
+    const store = useCartStore as unknown as { getState?: () => { cart: CartItem[] } }
+    const cartForFingerprint = store.getState ? store.getState().cart : cart
+    return cartContentsFingerprint(cartForFingerprint)
+  }
+
   interface VerifyCouponResponse {
   valid: boolean
   code: string
@@ -149,15 +226,59 @@ export default function CheckoutPage() {
   message: string
 }
 
-const handleApplyDiscount = async () => {
-  const code = formData.discountCode.trim().toUpperCase()
+const applyCode = useCallback(async (
+  rawCode: string,
+  { silent = false }: { silent?: boolean } = {},
+) => {
+  const code = rawCode.trim().toUpperCase()
   if (!code) {
-    toast.error("Please enter a discount code.")
+    if (!silent) toast.error("Please enter a discount code.")
     return
   }
-  if (discountLoading) return
+  if (discountLoadingRef.current) {
+    // A verification is already in flight. A silent revalidation of the
+    // currently-active discount code that reaches here is remembered so it
+    // re-runs against the latest cart as soon as the current request finishes
+    // — otherwise a cart change during an in-flight request would never be
+    // re-verified and the displayed discount could go stale. Keyed off the
+    // active flow (auto-welcome OR last accepted code) so the very first
+    // in-flight welcome verification is also covered.
+    if (silent) {
+      const active = activeAutoWelcomeRef.current || appliedCodeRef.current
+      if (active && code === active) {
+        pendingRevalidateRef.current = code
+      }
+    }
+    return
+  }
 
-  setDiscountLoading(true)
+  // A manual coupon (different from the saved welcome code) stops the
+  // automatic welcome flow so it can never overwrite the manual coupon.
+  const visitorId = readCookie(VISITOR_COOKIE) || undefined
+  const manualSaved = loadWelcomeCoupon(readCookie(VISITOR_COOKIE)) || null
+  if (!silent && manualSaved && code !== manualSaved) {
+    activeAutoWelcomeRef.current = ""
+  }
+
+  discountLoadingRef.current = true
+  const seq = ++verifySeqRef.current
+  // Snapshot the cart this verification was dispatched for, and whether the
+  // request belongs to the active automatic welcome flow. If the cart changes
+  // while the request is in flight, its response is stale and must not update
+  // the visible discount (or show toasts) — the queued revalidation in
+  // `finally` re-verifies against the latest cart instead.
+  const startFingerprint = cartContentsFingerprint(cart)
+  // True when this verification (welcome OR manual) was dispatched for a cart
+  // older than the one currently in the store (the cart changed mid-flight).
+  // The current cart is read SYNCHRONOUSLY from the Zustand store at response
+  // time — not from a passively-updated ref — so a verification that resolves
+  // before React's effect flush still sees the live cart. A stale response
+  // must never update the visible discount because it belongs to a
+  // superseded cart — the revalidation queued in `finally` re-verifies the
+  // LATEST cart instead.
+  const isStale = () =>
+    startFingerprint !== "" &&
+    startFingerprint !== liveCartFingerprint()
   try {
     // Send the actual cart line detail (product/variant/total) so the
     // preview is consistent with the server-side order-creation pricing:
@@ -168,29 +289,102 @@ const handleApplyDiscount = async () => {
       variant_id: item.variantId != null ? Number(item.variantId) : undefined,
       total_price: Number((item.price * item.quantity).toFixed(2)),
     }))
-    const visitorId = readCookie(VISITOR_COOKIE) || undefined
     const result = await api.post<VerifyCouponResponse, { code: string; subtotal: number; items: typeof items; visitor_id?: string }>(
       "/discounts/public/verify-coupon",
       { code, subtotal: cartSubtotal, items, ...(visitorId ? { visitor_id: visitorId } : {}) },
       { auth: false },
     )
+    // A newer verification (higher sequence) has already been issued, so this
+    // response is for a superseded cart state — never let it overwrite state.
+    if (seq !== verifySeqRef.current) return
+    // A verification whose cart changed while it was in flight is STALE: never
+    // update the visible discount or show toasts for it (e.g. "invalid" for the
+    // old cart) — an older response must never clobber discount state computed
+    // for a newer quantity. Applies to welcome AND manual codes.
+    if (isStale()) return
+    // Accepted response: this discount is now valid for the LIVE current cart.
+    // Recording the fingerprint here (with the state update) is what lets the
+    // render pass below detect a subsequent quantity change as "stale" until
+    // the follow-up revalidation response lands.
+    validatedFingerprintRef.current = liveCartFingerprint()
+    setDiscountRefreshTick((t) => t + 1)
     if (result.valid) {
       setAppliedDiscount(result.discount_amount)
       setAppliedDiscountCode(result.code || code)
-      toast.success(result.message || `${code} applied.`)
+      appliedCodeRef.current = result.code || code
+      if (!silent) toast.success(result.message || `${code} applied.`)
     } else {
       setAppliedDiscount(0)
       setAppliedDiscountCode("")
-      toast.error(result.message || "That discount code is not valid.")
+      appliedCodeRef.current = ""
+      if (!silent) toast.error(result.message || "That discount code is not valid.")
     }
   } catch {
-    setAppliedDiscount(0)
-    setAppliedDiscountCode("")
-    toast.error("Could not verify the discount code right now. Please try again.")
+    if (!isStale() && seq === verifySeqRef.current) {
+      validatedFingerprintRef.current = liveCartFingerprint()
+      setAppliedDiscount(0)
+      setAppliedDiscountCode("")
+      appliedCodeRef.current = ""
+      if (!silent) toast.error("Could not verify the discount code right now. Please try again.")
+    }
   } finally {
-    setDiscountLoading(false)
+    discountLoadingRef.current = false
+    // If a silent revalidation was queued while a request was in flight, run it
+    // now for the LATEST cart so the shown discount always matches the cart.
+    // Keyed off the active flow (auto-welcome OR last accepted manual code) and
+    // guarded so a code that was invalidated is not re-verified afterwards.
+    const queued = pendingRevalidateRef.current
+    if (queued) {
+      pendingRevalidateRef.current = null
+      const active = activeAutoWelcomeRef.current || appliedCodeRef.current
+      if (active && queued === active) {
+        void applyCodeRef.current?.(queued, { silent: true })
+      }
+    }
   }
+}, [cart, cartSubtotal])
+
+const handleApplyDiscount = () => {
+  void applyCode(formData.discountCode)
 }
+
+  // Keep the latest applyCode reachable for the auto-apply effect below so
+  // that effect can run only on cart changes without stale closures.
+  useEffect(() => {
+    applyCodeRef.current = applyCode
+  }, [applyCode])
+
+  // Auto-apply the saved welcome coupon once on mount, and re-verify the
+  // CURRENTLY ACTIVE discount code (welcome OR manual) on every cart-content
+  // change so the shown discount always tracks the latest quantity. Runs again
+  // whenever the cart fingerprint changes; autoAppliedRef guarantees exactly
+  // one initial welcome verification. Silent revalidation covers both flows:
+  //  - auto-welcome: re-verify the saved welcome code while its flow is active
+  //  - manual code: re-verify the last accepted non-welcome code (previously
+  //    this was never refreshed after a quantity change and could stay stale)
+  const fingerprint = cartContentsFingerprint(cart)
+  useEffect(() => {
+    const visitor = readCookie(VISITOR_COOKIE)
+    const saved = loadWelcomeCoupon(visitor) || null
+    if (cart.length === 0) return
+    if (!autoAppliedRef.current) {
+      autoAppliedRef.current = true
+      // The automatic welcome flow is now active. Setting this separately from
+      // appliedCodeRef means a cart change during the very first (still
+      // in-flight) verification still triggers a revalidation of the LATEST
+      // cart — even though appliedCodeRef has not been populated yet.
+      activeAutoWelcomeRef.current = saved || ""
+      if (saved && !appliedCodeRef.current) {
+        setFormData((current) => ({ ...current, discountCode: saved }))
+        void applyCodeRef.current?.(saved, {})
+      }
+      return
+    }
+    const active = activeAutoWelcomeRef.current || appliedCodeRef.current
+    if (!active) return
+    void applyCodeRef.current?.(active, { silent: true })
+  }, [fingerprint, cart.length])
+
 
   const fieldAriaProps = (key: CheckoutFieldKey) => ({
     "aria-invalid": fieldErrors[key] ? ("true" as const) : undefined,
@@ -261,6 +455,11 @@ const handleApplyDiscount = async () => {
         // Best-effort persistence; the in-memory confirmation still shows.
       }
       clearCart()
+      // A successful order means the first-time welcome offer is spent; drop
+      // the saved coupon reference so it is not auto-filled next time. (The
+      // backend authoritatively consumes/expires the welcome coupon server-side
+      // in the same transaction as the order.)
+      clearWelcomeCoupon()
     } catch (error) {
       setSubmitError(resolveSubmitErrorMessage(error))
     } finally {
@@ -473,7 +672,14 @@ const handleApplyDiscount = async () => {
             <div className="space-y-3 px-5 py-5 text-sm sm:px-6">
               <div className="flex justify-between"><span className="text-neutral-600">Subtotal</span><strong>Rs.{cartSubtotal.toLocaleString("en-PK")}</strong></div>
               <div className="flex justify-between"><span className="flex items-center gap-1 text-neutral-600">Shipping <Question className="h-4 w-4" /></span><strong>{shippingCalc ? (finalShippingFee ? `Rs.${finalShippingFee.toLocaleString("en-PK")}` : "Free") : "…"}</strong></div>
-              {appliedDiscount ? <div className="flex justify-between text-green-700"><span>Discount</span><strong>-Rs.{appliedDiscount}</strong></div> : null}
+              {(appliedDiscount > 0 || appliedDiscountCode) && discountIsStale ? (
+                <div className="flex justify-between text-neutral-500">
+                  <span className="flex items-center gap-1">Discount <SpinnerIcon className="h-3.5 w-3.5 animate-spin" /></span>
+                  <strong>Recalculating…</strong>
+                </div>
+              ) : appliedDiscount ? (
+                <div className="flex justify-between text-green-700"><span>Discount</span><strong>-Rs.{appliedDiscount.toLocaleString("en-PK")}</strong></div>
+              ) : null}
               {amountToFreeShipping != null && amountToFreeShipping > 0 ? (
                 <p className="rounded-[10px] bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
                   Add Rs.{amountToFreeShipping.toLocaleString("en-PK")} more to get FREE shipping.

@@ -256,6 +256,11 @@ async def generate_leopard_cn_api(request: Request, db: AsyncSession = Depends(g
             weight = "500"
             pieces = "1"
 
+            # Shipper/company info (the business shipping — never the
+            # customer/consignee). Source of truth is the admin-configured
+            # default_shipper; empty fields fall back to 'self' in the client.
+            _shipper = await leopard_service.get_leopard_default_shipper(db)
+
             # Call the real Leopards bookPacket API
             book_payload = {
                 "order_id": order_number,
@@ -265,6 +270,10 @@ async def generate_leopard_cn_api(request: Request, db: AsyncSession = Depends(g
                 "consignee_email": "",
                 "consignee_address": consignee_address,
                 "destination_city": destination_city,
+                "shipper_name": _shipper.get("name") or "",
+                "shipper_phone": _shipper.get("phone") or "",
+                "shipper_email": _shipper.get("email") or "",
+                "shipper_address": _shipper.get("address") or "",
                 "special_instructions": "N/A",
                 "weight": weight,
                 "weight_grams": 500,
@@ -703,6 +712,11 @@ async def _auto_book_leopards(db: AsyncSession, order: Order, shipping_settings)
         return
     cod_amount = str(order.total_price or 0) if order.payment_status == PaymentStatus.pending else "0"
 
+    # Shipper/company info (the business shipping — never the customer/
+    # consignee). Source of truth is the admin-configured default_shipper;
+    # empty fields fall back to 'self' in the client.
+    _shipper = await leopard_service.get_leopard_default_shipper(db)
+
     book_payload = {
         "order_id": order.order_number,
         "cod_amount": cod_amount,
@@ -713,6 +727,10 @@ async def _auto_book_leopards(db: AsyncSession, order: Order, shipping_settings)
         "destination_city": destination_city,
         # Admin shipper address acts as the origin city on the waybill.
         "origin_city": getattr(shipping_settings, "sender_city", None) or "self",
+        "shipper_name": _shipper.get("name") or "",
+        "shipper_phone": _shipper.get("phone") or "",
+        "shipper_email": _shipper.get("email") or "",
+        "shipper_address": _shipper.get("address") or "",
         "special_instructions": f"Return to: {getattr(shipping_settings, 'return_address', '') or 'N/A'}",
         "weight": "500",
         "pieces": 1,
@@ -1337,6 +1355,23 @@ async def create_order_public_api(request: Request, db: AsyncSession = Depends(g
             coupon_code=normalized if welcome_log is not None else None,
             commit=False,
         )
+
+    # The welcome coupon is a strict one-time offer for this visitor: consume
+    # any outstanding (not-yet-redeemed) welcome log on this brand-new order,
+    # regardless of whether the order itself used the welcome code. This stops
+    # a visitor who saved the welcome code but checked out with another/no
+    # coupon from reusing the saved welcome code on a later order. Idempotent
+    # with the redemption above, committed atomically with the order below
+    # (a rejected/duplicate/failed checkout rolls back and never consumes it).
+    from app.modules.discounts.service import consume_welcome_for_order
+
+    await consume_welcome_for_order(
+        db,
+        visitor_id=visitor_id,
+        user_email=email,
+        ip_address=None,
+        commit=False,
+    )
 
     new_order = Order(
         order_number=order_number,

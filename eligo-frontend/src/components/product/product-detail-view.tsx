@@ -54,13 +54,19 @@ export function ProductDetailView({ product, relatedProducts = [] }: ProductDeta
   const imageUrls = sortedImages.map((img) => img.url)
 
   const activeVariants = (product.variants || []).filter((v) => v.is_active)
-  const colors = activeVariants.map((v) => ({
-    name: v.title,
-    class: `bg-[${getColorHex(v.title)}]`,
-    hex: getColorHex(v.title),
-    variantId: v.id,
-    isCanonical: v.id === firstVariant?.id,
-  }))
+  const colors = activeVariants.map((v) => {
+    // Prefer the ACTUAL color value stored on the variant (set in the admin
+    // panel / color metaobject). Fall back to the title-based heuristic only
+    // when no real color hex has been stored.
+    const hex = v.color_hex?.trim() || getColorHex(v.title)
+    return {
+      name: v.title,
+      class: `bg-[${hex}]`,
+      hex,
+      variantId: v.id,
+      isCanonical: v.id === firstVariant?.id,
+    }
+  })
 
   const [activeColor, setActiveColor] = useState(colors[0]?.name || "")
   const [galleryImages] = useState<string[]>(imageUrls.length > 0 ? imageUrls : [])
