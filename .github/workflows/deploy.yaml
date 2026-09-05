@@ -1,114 +1,218 @@
-# name: CD Pipeline - Deploy to AWS CloudPanel
+name: Deploy Eligo Leather Stack to AWS EC2
 
-# on:
-#   workflow_run:
-#     workflows: ["CI/CD Pipeline"]
-#     types:
-#       - completed
-#     branches:
-#       - main
-#       - stage-for-deploy
+on:
+  push:
+    branches:
+      # - main              # ⚠️ MANUALLY EDIT THIS: Your main branch
+      - stage-for-deploy  # ⚠️ MANUALLY EDIT THIS: Your staging branch
 
-#   workflow_dispatch:
-#     inputs:
-#       tag:
-#         description: "Existing release tag to redeploy (rollback)"
-#         required: false
+# One deploy at a time: cancels stale runs if two pushes happen minutes apart
+concurrency:
+  group: deploy-aws-eligo
+  cancel-in-progress: true
 
-# concurrency:
-#   group: aws-cloudpanel-production
-#   cancel-in-progress: false
+env:
+  VM_IP: ${{ secrets.SSH_HOST }}       # ⚠️ AWS Server IP: 3.224.66.68
+  VM_USER: ${{ secrets.SSH_USER }}     # ⚠️ AWS Server User: eligouser
+  
+  # ── Port Isolation on AWS Server ──
+  API_PORT: 8000         # ⚠️ MANUALLY EDIT THIS: AWS Host port for FastAPI Backend (e.g. 8000)
+  FRONTEND_PORT: 3000    # ⚠️ MANUALLY EDIT THIS: AWS Host port for Storefront UI (e.g. 3000)
+  ADMIN_PORT: 3001       # ⚠️ MANUALLY EDIT THIS: AWS Host port for Admin UI (e.g. 3001)
 
-# permissions:
-#   contents: write
+  # ── Public URLs ──
+  # ⚠️ MANUALLY EDIT THIS: Replace with your domain names or free sslip.io URLs
+  UI_URL: https://3-224-66-68.sslip.io
+  ADMIN_URL: https://admin.3-224-66-68.sslip.io
+  API_URL: https://api.3-224-66-68.sslip.io
 
-# jobs:
-#   build-artifact:
-#     name: Build Production Artifact
-#     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-#     runs-on: ubuntu-latest
-#     outputs:
-#       tag: ${{ steps.meta.outputs.tag }}
+jobs:
+  # ============================================================
+  # JOB 1: BUILD AND PUSH DOCKER IMAGES TO REGISTRY
+  # ============================================================
+  build-and-push:
+    name: Build and Push Images (AWS)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Needed to push Docker images to GitHub Container Registry (ghcr.io)
 
-#     steps:
-#       - name: Checkout Repository
-#         uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-#       - name: Setup Node.js
-#         uses: actions/setup-node@v4
-#         with:
-#           node-version: "22"
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-#       - name: Generate Release Tag
-#         id: meta
-#         run: echo "tag=$(date +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
 
-#       - name: Build Storefront Frontend
-#         working-directory: eligo-frontend
-#         run: |
-#           npm ci
-#           npm run build
+      # ── 1. Build and Push Storefront (Frontend) ──
+      - name: Build and Push Storefront UI
+        uses: docker/build-push-action@v6
+        with:
+          context: ./eligo-frontend
+          push: true
+          # ⚠️ MANUALLY EDIT THIS: Change 'your-github-username' to your exact GitHub user or organization
+          tags: ghcr.io/${{ github.repository_owner }}/eligo-frontend:latest
+          cache-from: type=gha,scope=ui-production
+          cache-to: type=gha,scope=ui-production,mode=max
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ env.API_URL }}/api/v1
+            NEXT_PUBLIC_APP_URL=${{ env.UI_URL }}
 
-#       - name: Build Admin Frontend
-#         working-directory: admin-frontend
-#         run: |
-#           npm ci
-#           npm run build
+      # ── 2. Build and Push FastAPI Backend ──
+      - name: Build and Push Backend API
+        uses: docker/build-push-action@v6
+        with:
+          context: ./eligo-backend
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/eligo-backend:latest
+          cache-from: type=gha,scope=api-production
+          cache-to: type=gha,scope=api-production,mode=max
 
-#       - name: Setup uv & Prepare Backend
-#         uses: astral-sh/setup-uv@v5
-#         with:
-#           python-version: "3.13"
+      # ── 3. Build and Push Admin Frontend ──
+      - name: Build and Push Admin UI
+        uses: docker/build-push-action@v6
+        with:
+          context: ./admin-frontend
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/admin-frontend:latest
+          cache-from: type=gha,scope=admin-production
+          cache-to: type=gha,scope=admin-production,mode=max
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ env.API_URL }}/api/v1
+            NEXT_PUBLIC_APP_URL=${{ env.ADMIN_URL }}
 
-#       - name: Install Production Backend Deps
-#         working-directory: eligo-backend
-#         run: uv sync --no-dev
+  # ============================================================
+  # JOB 2: DEPLOY STACK TO AWS EC2 SERVER VIA SSH
+  # ============================================================
+  deploy-to-vm:
+    name: Deploy to AWS EC2 Server
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
 
-#       - name: Package Release Tarball
-#         run: |
-#           tar -czf "${{ steps.meta.outputs.tag }}.tar.gz" \
-#             --exclude='.git' \
-#             --exclude='.github' \
-#             --exclude='.venv' \
-#             eligo-backend \
-#             eligo-frontend \
-#             admin-frontend \
-#             package.json
+      - name: Deploy Stack over SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            # ⚠️ MANUALLY EDIT THIS: Isolated directory on your AWS server where docker-compose lives
+            DEPLOY_DIR="/home/${{ secrets.SSH_USER }}/eligo-leather"
+            mkdir -p $DEPLOY_DIR
+            cd $DEPLOY_DIR
 
-#       - name: Publish GitHub Release Artifact
-#         env:
-#           GH_TOKEN: ${{ github.token }}
-#         run: |
-#           gh release create "${{ steps.meta.outputs.tag }}" \
-#             "${{ steps.meta.outputs.tag }}.tar.gz" \
-#             --title "${{ steps.meta.outputs.tag }}" \
-#             --notes "Production build triggered after CI pass on commit ${{ github.sha }}"
+            # ── Free up disk space preemptively on AWS server ──
+            sudo docker system prune -f || true
+            sudo docker image prune -a -f || true
+            sudo journalctl --vacuum-time=1d || true
 
-#   deploy-aws:
-#     name: Deploy to AWS CloudPanel
-#     needs: build-artifact
-#     runs-on: ubuntu-latest
-#     environment: production
+            # ── Write docker-compose.yml dynamically on AWS Server using echo ──
+            echo "version: '3.8'" > docker-compose.yml
+            echo "services:" >> docker-compose.yml
+            
+            # 1. FastAPI Backend Service
+            echo "  backend:" >> docker-compose.yml
+            echo "    image: ghcr.io/${{ github.repository_owner }}/eligo-backend:latest" >> docker-compose.yml
+            echo "    container_name: eligo-backend-prod" >> docker-compose.yml
+            echo "    ports:" >> docker-compose.yml
+            echo "      - \"${{ env.API_PORT }}:8000\"" >> docker-compose.yml
+            echo "    env_file: /home/${{ secrets.SSH_USER }}/shared/.env" >> docker-compose.yml
+            echo "    restart: always" >> docker-compose.yml
+            echo "    deploy:" >> docker-compose.yml
+            echo "      resources:" >> docker-compose.yml
+            echo "        limits:" >> docker-compose.yml
+            echo "          memory: 1G" >> docker-compose.yml
+            echo "    networks:" >> docker-compose.yml
+            echo "      - eligo-network" >> docker-compose.yml
+            echo "" >> docker-compose.yml
+            
+            # 2. Next.js Storefront Service
+            echo "  frontend:" >> docker-compose.yml
+            echo "    image: ghcr.io/${{ github.repository_owner }}/eligo-frontend:latest" >> docker-compose.yml
+            echo "    container_name: eligo-frontend-prod" >> docker-compose.yml
+            echo "    ports:" >> docker-compose.yml
+            echo "      - \"${{ env.FRONTEND_PORT }}:3000\"" >> docker-compose.yml
+            echo "    env_file: /home/${{ secrets.SSH_USER }}/shared/.env" >> docker-compose.yml
+            echo "    restart: always" >> docker-compose.yml
+            echo "    deploy:" >> docker-compose.yml
+            echo "      resources:" >> docker-compose.yml
+            echo "        limits:" >> docker-compose.yml
+            echo "          memory: 1G" >> docker-compose.yml
+            echo "    networks:" >> docker-compose.yml
+            echo "      - eligo-network" >> docker-compose.yml
+            echo "" >> docker-compose.yml
 
-#     steps:
-#       - name: Deploy via SSH to AWS CloudPanel Server
-#         env:
-#           TAG: ${{ github.event.inputs.tag || needs.build-artifact.outputs.tag }}
-#           GH_TOKEN: ${{ github.token }}
-#         run: |
-#           mkdir -p ~/.ssh
-#           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
-#           chmod 600 ~/.ssh/id_ed25519
-#           echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+            # 3. Next.js Admin Panel Service
+            echo "  admin:" >> docker-compose.yml
+            echo "    image: ghcr.io/${{ github.repository_owner }}/admin-frontend:latest" >> docker-compose.yml
+            echo "    container_name: eligo-admin-prod" >> docker-compose.yml
+            echo "    ports:" >> docker-compose.yml
+            echo "      - \"${{ env.ADMIN_PORT }}:3000\"" >> docker-compose.yml
+            echo "    env_file: /home/${{ secrets.SSH_USER }}/shared/.env" >> docker-compose.yml
+            echo "    restart: always" >> docker-compose.yml
+            echo "    deploy:" >> docker-compose.yml
+            echo "      resources:" >> docker-compose.yml
+            echo "        limits:" >> docker-compose.yml
+            echo "          memory: 1G" >> docker-compose.yml
+            echo "    networks:" >> docker-compose.yml
+            echo "      - eligo-network" >> docker-compose.yml
+            echo "" >> docker-compose.yml
 
-#           gh release download "$TAG" -R ${{ github.repository }} -p '*.tar.gz' -O app.tar.gz
+            # 4. Redis Service
+            echo "  redis:" >> docker-compose.yml
+            echo "    image: redis:7-alpine" >> docker-compose.yml
+            echo "    container_name: eligo-redis-prod" >> docker-compose.yml
+            echo "    restart: always" >> docker-compose.yml
+            echo "    deploy:" >> docker-compose.yml
+            echo "      resources:" >> docker-compose.yml
+            echo "        limits:" >> docker-compose.yml
+            echo "          memory: 256M" >> docker-compose.yml
+            echo "    networks:" >> docker-compose.yml
+            echo "      - eligo-network" >> docker-compose.yml
+            echo "" >> docker-compose.yml
 
-#           scp app.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/
+            # Docker Networks
+            echo "networks:" >> docker-compose.yml
+            echo "  eligo-network:" >> docker-compose.yml
+            echo "    name: eligo-network-prod" >> docker-compose.yml
+            echo "    driver: bridge" >> docker-compose.yml
 
-#           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} bash -s <<EOF
-#             set -euo pipefail
-#             mkdir -p ~/releases/$TAG
-#             tar -xzf /tmp/app.tar.gz -C ~/releases/$TAG
-#             rm /tmp/app.tar.gz
-#             ~/deploy.sh $TAG
-#           EOF
+            # ── 1. Stop old containers AND force-remove by name ──
+            sudo docker compose -p eligo-prod down --remove-orphans || true
+            sudo docker rm -f eligo-backend-prod eligo-frontend-prod eligo-admin-prod eligo-redis-prod || true
+
+            # ── 2. Free up disk space ──
+            sudo docker image prune -f
+
+            # ── 3. Pull latest images and restart stack on AWS ──
+            sudo docker compose -p eligo-prod pull || sudo docker-compose pull
+            sudo docker compose -p eligo-prod up -d --force-recreate --remove-orphans || sudo docker-compose up -d --force-recreate --remove-orphans
+
+            # ── 4. Wait for backend health — poll / endpoint (120s timeout) ──
+            echo "Waiting for backend to become healthy on AWS..."
+            MAX_WAIT=120
+            ELAPSED=0
+            until curl -sf http://localhost:${{ env.API_PORT }}/ > /dev/null 2>&1; do
+              if [ $ELAPSED -ge $MAX_WAIT ]; then
+                echo "FAILED: backend did not become healthy within ${MAX_WAIT}s"
+                sudo docker logs eligo-backend-prod --tail=80
+                exit 1
+              fi
+              sleep 3
+              ELAPSED=$((ELAPSED + 3))
+              echo "  ... still waiting (${ELAPSED}s)"
+            done
+            echo "Backend is healthy after ${ELAPSED}s. AWS Deployment complete."
+
+
+
+            
