@@ -151,14 +151,14 @@ export default function CheckoutPage() {
   // callbacks (React state updates are async and could be stale mid-flight).
   // A monotonic sequence discards stale responses, and a single pending-code
   // ref coalesces rapid cart changes into one follow-up revalidation that
-  // always uses the LATEST cart. validatedFingerprintRef remembers WHICH cart
+  // always uses the LATEST cart. validatedFingerprint remembers WHICH cart
   // the currently displayed discount was verified for: after a quantity /
   // contents change the old amount is hidden until the revalidation response
   // lands, so the UI never shows "new subtotal + old discount (or total)".
   const discountLoadingRef = useRef(false)
   const verifySeqRef = useRef(0)
   const pendingRevalidateRef = useRef<string | null>(null)
-  const validatedFingerprintRef = useRef("")
+  const [validatedFingerprint, setValidatedFingerprint] = useState("")
 
   const placeOrderInProgress = loading || orderComplete
   useNavigationLock(placeOrderInProgress, { warnOnUnload: loading })
@@ -188,8 +188,8 @@ export default function CheckoutPage() {
   // response lands, so during that window it is hidden and the subtotal/total
   // are computed WITHOUT it — never "new subtotal + old discount/total".
   const discountIsStale =
-    validatedFingerprintRef.current !== "" &&
-    validatedFingerprintRef.current !== cartContentsFingerprint(cart) &&
+    validatedFingerprint !== "" &&
+    validatedFingerprint !== cartContentsFingerprint(cart) &&
     (appliedDiscount > 0 || appliedDiscountCode !== "")
   const displayDiscount = discountIsStale ? 0 : appliedDiscount
   const discountedSubtotal = Math.max(0, cartSubtotal - displayDiscount)
@@ -210,11 +210,11 @@ export default function CheckoutPage() {
   // quantity). Some test harnesses stub the store with a static fixture that
   // has no getState — fall back to the rendered cart in that case (which is
   // identical because the fixture never changes during the test).
-  const liveCartFingerprint = () => {
+  const liveCartFingerprint = useCallback(() => {
     const store = useCartStore as unknown as { getState?: () => { cart: CartItem[] } }
     const cartForFingerprint = store.getState ? store.getState().cart : cart
     return cartContentsFingerprint(cartForFingerprint)
-  }
+  }, [cart])
 
   interface VerifyCouponResponse {
   valid: boolean
@@ -306,7 +306,7 @@ const applyCode = useCallback(async (
     // Recording the fingerprint here (with the state update) is what lets the
     // render pass below detect a subsequent quantity change as "stale" until
     // the follow-up revalidation response lands.
-    validatedFingerprintRef.current = liveCartFingerprint()
+    setValidatedFingerprint(liveCartFingerprint())
     setDiscountRefreshTick((t) => t + 1)
     if (result.valid) {
       setAppliedDiscount(result.discount_amount)
@@ -321,7 +321,7 @@ const applyCode = useCallback(async (
     }
   } catch {
     if (!isStale() && seq === verifySeqRef.current) {
-      validatedFingerprintRef.current = liveCartFingerprint()
+      setValidatedFingerprint(liveCartFingerprint())
       setAppliedDiscount(0)
       setAppliedDiscountCode("")
       appliedCodeRef.current = ""
@@ -342,7 +342,7 @@ const applyCode = useCallback(async (
       }
     }
   }
-}, [cart, cartSubtotal])
+}, [cart, cartSubtotal, liveCartFingerprint])
 
 const handleApplyDiscount = () => {
   void applyCode(formData.discountCode)

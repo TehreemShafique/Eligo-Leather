@@ -1,0 +1,114 @@
+# name: CD Pipeline - Deploy to AWS CloudPanel
+
+# on:
+#   workflow_run:
+#     workflows: ["CI/CD Pipeline"]
+#     types:
+#       - completed
+#     branches:
+#       - main
+#       - stage-for-deploy
+
+#   workflow_dispatch:
+#     inputs:
+#       tag:
+#         description: "Existing release tag to redeploy (rollback)"
+#         required: false
+
+# concurrency:
+#   group: aws-cloudpanel-production
+#   cancel-in-progress: false
+
+# permissions:
+#   contents: write
+
+# jobs:
+#   build-artifact:
+#     name: Build Production Artifact
+#     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+#     runs-on: ubuntu-latest
+#     outputs:
+#       tag: ${{ steps.meta.outputs.tag }}
+
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@v4
+
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: "22"
+
+#       - name: Generate Release Tag
+#         id: meta
+#         run: echo "tag=$(date +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+#       - name: Build Storefront Frontend
+#         working-directory: eligo-frontend
+#         run: |
+#           npm ci
+#           npm run build
+
+#       - name: Build Admin Frontend
+#         working-directory: admin-frontend
+#         run: |
+#           npm ci
+#           npm run build
+
+#       - name: Setup uv & Prepare Backend
+#         uses: astral-sh/setup-uv@v5
+#         with:
+#           python-version: "3.13"
+
+#       - name: Install Production Backend Deps
+#         working-directory: eligo-backend
+#         run: uv sync --no-dev
+
+#       - name: Package Release Tarball
+#         run: |
+#           tar -czf "${{ steps.meta.outputs.tag }}.tar.gz" \
+#             --exclude='.git' \
+#             --exclude='.github' \
+#             --exclude='.venv' \
+#             eligo-backend \
+#             eligo-frontend \
+#             admin-frontend \
+#             package.json
+
+#       - name: Publish GitHub Release Artifact
+#         env:
+#           GH_TOKEN: ${{ github.token }}
+#         run: |
+#           gh release create "${{ steps.meta.outputs.tag }}" \
+#             "${{ steps.meta.outputs.tag }}.tar.gz" \
+#             --title "${{ steps.meta.outputs.tag }}" \
+#             --notes "Production build triggered after CI pass on commit ${{ github.sha }}"
+
+#   deploy-aws:
+#     name: Deploy to AWS CloudPanel
+#     needs: build-artifact
+#     runs-on: ubuntu-latest
+#     environment: production
+
+#     steps:
+#       - name: Deploy via SSH to AWS CloudPanel Server
+#         env:
+#           TAG: ${{ github.event.inputs.tag || needs.build-artifact.outputs.tag }}
+#           GH_TOKEN: ${{ github.token }}
+#         run: |
+#           mkdir -p ~/.ssh
+#           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+#           chmod 600 ~/.ssh/id_ed25519
+#           echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+#           gh release download "$TAG" -R ${{ github.repository }} -p '*.tar.gz' -O app.tar.gz
+
+#           scp app.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/
+
+#           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} bash -s <<EOF
+#             set -euo pipefail
+#             mkdir -p ~/releases/$TAG
+#             tar -xzf /tmp/app.tar.gz -C ~/releases/$TAG
+#             rm /tmp/app.tar.gz
+#             ~/deploy.sh $TAG
+#           EOF
