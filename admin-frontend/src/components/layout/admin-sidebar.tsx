@@ -24,6 +24,7 @@ import {
   Key,
 } from "@phosphor-icons/react"
 import { clsx } from "clsx"
+import { getStoredUser } from "@/lib/api"
 
 function NavItem({
   href,
@@ -100,6 +101,22 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export function AdminSidebar() {
   const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
+
+  const user = getStoredUser() as {
+    email?: string
+    full_name?: string | null
+    is_admin?: boolean
+    user_type?: string
+    domain?: string | null
+  } | null
+  const isAdmin = !!user?.is_admin
+  const domain = user?.domain ?? null
+  const isPosDomain = domain === "point_of_sale" || user?.user_type === "pos"
+  const displayName = user?.full_name || user?.email || "Admin"
+  const displayEmail = user?.email || "No email"
+  const initials = user?.full_name
+    ? user.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : user?.email?.slice(0, 2).toUpperCase() || "AD"
 
   useEffect(() => {
     setMounted(true)
@@ -298,12 +315,14 @@ export function AdminSidebar() {
             )
           })}
 
-          <NavItem
-            href="/discounts"
-            icon={Percent}
-            label="Discounts"
-            active={pathname.startsWith("/discounts")}
-          />
+          {!isPosDomain && (
+            <NavItem
+              href="/discounts"
+              icon={Percent}
+              label="Discounts"
+              active={pathname.startsWith("/discounts")}
+            />
+          )}
 
           {/* Online Store */}
           <div>
@@ -360,6 +379,7 @@ export function AdminSidebar() {
       </div>
 
       {/* Bottom Settings & User Account Section */}
+      {!isPosDomain && (
       <div className="p-3 border-t border-[#d2d2d2] space-y-2 bg-[#e6e6e6]">
         <div>
           <button
@@ -388,7 +408,9 @@ export function AdminSidebar() {
           >
             <div className="min-h-0 pl-4 space-y-0.5 max-h-72 overflow-y-auto">
               <SubItem href="/settings/general" label="General" active={pathname === "/settings/general"} target="_blank" />
-              <SubItem href="/settings/organization-account" label="Users" active={pathname.startsWith("/settings/organization-account")} target="_blank" />
+              {isAdmin && (
+                <SubItem href="/settings/organization-account" label="Users" active={pathname.startsWith("/settings/organization-account")} target="_blank" />
+              )}
               <SubItem href="/settings/payments" label="Payments" active={pathname === "/settings/payments"} target="_blank" />
               <SubItem href="/settings/checkout" label="Checkout" active={pathname === "/settings/checkout"} target="_blank" />
               <SubItem href="/settings/customer_accounts" label="Customer accounts" active={pathname === "/settings/customer_accounts"} target="_blank" />
@@ -409,14 +431,15 @@ export function AdminSidebar() {
           className="group flex items-center gap-2.5 p-2 rounded-xl bg-white hover:bg-amber-50 border border-gray-200 hover:border-amber-300 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
         >
           <div className="w-8 h-8 rounded-lg bg-amber-800 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
-            BH
+            {initials}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-xs font-bold text-gray-900 group-hover:text-amber-800 truncate transition-colors">Bilal Hussain Abbasi</span>
-            <span className="text-[10px] text-gray-500 truncate">eligoleather9@gmail.com</span>
+            <span className="text-xs font-bold text-gray-900 group-hover:text-amber-800 truncate transition-colors">{displayName}</span>
+            <span className="text-[10px] text-gray-500 truncate">{displayEmail}</span>
           </div>
         </Link>
       </div>
+      )}
     </aside>
   )
 }

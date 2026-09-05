@@ -85,7 +85,8 @@ export async function apiFetch<T = unknown>(
     headers["Content-Type"] = "application/json"
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`
+  const res = await fetch(url, { ...options, headers })
 
   if (res.status === 401 || res.status === 403) {
     clearAuthToken()
@@ -113,15 +114,29 @@ export async function login(email: string, password: string) {
   return data
 }
 
+export interface StoredUser {
+  id: number
+  email: string
+  full_name: string | null
+  is_admin: boolean
+  is_active: boolean
+  user_type?: string
+  role_id?: number | null
+  domain?: string | null
+  created_at: string
+}
+
+export async function pinLogin(code: string, email: string) {
+  const data = await apiFetch<{ access_token: string; token_type: string }>("/api/v1/auth/pin-login", {
+    method: "POST",
+    body: JSON.stringify({ code, email }),
+  })
+  setAuthToken(data.access_token)
+  return data
+}
+
 export async function fetchCurrentUser() {
-  const data = await apiFetch<{
-    id: number
-    email: string
-    full_name: string | null
-    is_admin: boolean
-    is_active: boolean
-    created_at: string
-  }>("/api/v1/auth/me")
-  setStoredUser(data)
+  const data = await apiFetch<StoredUser>("/api/v1/auth/me")
+  setStoredUser({ ...data })
   return data
 }

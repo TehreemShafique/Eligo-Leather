@@ -17,8 +17,15 @@ import {
   Fingerprint,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { getStoredUser } from "@/lib/api"
 
 export default function AdminPersonalAccountSecurityPage() {
+  const user = getStoredUser() as { email?: string; full_name?: string | null } | null
+  const displayName = user?.full_name || user?.email || "Admin"
+  const displayEmail = user?.email || ""
+  const initials = user?.full_name
+    ? user.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : user?.email?.slice(0, 2).toUpperCase() || "AD"
   const [secondaryEmail, setSecondaryEmail] = useState("bilal.talib25@gmail.com")
   const [is2faOn, setIs2faOn] = useState(true)
 
@@ -71,11 +78,11 @@ export default function AdminPersonalAccountSecurityPage() {
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-sky-400 text-sky-950 font-bold text-lg flex items-center justify-center shadow-2xs">
-              BH
+              {initials}
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Bilal Hussain Abbasi</h1>
-              <span className="text-xs text-gray-500">eligoleather9@gmail.com &bull; Store Administrator</span>
+              <h1 className="text-2xl font-bold text-gray-900">{displayName}</h1>
+              <span className="text-xs text-gray-500">{displayEmail} &bull; Store Administrator</span>
             </div>
           </div>
 

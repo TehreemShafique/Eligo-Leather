@@ -2,15 +2,17 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Lock, EnvelopeSimple, Eye, EyeSlash, ArrowRight, ShieldCheck } from "@phosphor-icons/react"
+import { Lock, EnvelopeSimple, Eye, EyeSlash, ArrowRight, ShieldCheck, Key, Password } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import { login, fetchCurrentUser, getAuthToken } from "@/lib/api"
+import { login, pinLogin, fetchCurrentUser, getAuthToken } from "@/lib/api"
 
 export default function AdminLoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [code, setCode] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [pinMode, setPinMode] = useState(false)
   const [loading, setLoading] = useState(false)
   const [hasToken] = useState(() => !!getAuthToken())
 
@@ -22,6 +24,28 @@ export default function AdminLoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (pinMode) {
+      if (!email || !code) {
+        toast.error("Please fill in both email and your 4-digit PIN.")
+        return
+      }
+      setLoading(true)
+      try {
+        await pinLogin(code, email)
+        const user = await fetchCurrentUser()
+        toast.success(`Welcome back, ${user.full_name || user.email}!`)
+        router.push("/")
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Login failed"
+        if (msg !== "Unauthorized") {
+          toast.error(msg)
+        }
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     if (!email || !password) {
       toast.error("Please fill in both email and password.")
       return
@@ -83,31 +107,58 @@ export default function AdminLoginPage() {
             </div>
           </div>
 
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide">
-                Password
-              </label>
+          {pinMode ? (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide">
+                  Collaborator PIN
+                </label>
+              </div>
+              <div className="relative flex items-center">
+                <Key className="w-4 h-4 text-gray-400 absolute left-3.5" />
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  pattern="[0-9]{4}"
+                  required
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="Enter 4-digit code"
+                  className="w-full h-11 pl-10 pr-4 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-800/30 focus:border-amber-800 focus:bg-white transition-all"
+                />
+              </div>
+              <p className="text-[10px] text-gray-400 pt-1">
+                Sign in as a staff member using your active collaborator code.
+              </p>
             </div>
-            <div className="relative flex items-center">
-              <Lock className="w-4 h-4 text-gray-400 absolute left-3.5" />
-              <input
-                type={showPassword ? "text" : "password"}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                className="w-full h-11 pl-10 pr-10 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-800/30 focus:border-amber-800 focus:bg-white transition-all"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 text-gray-400 hover:text-gray-700 cursor-pointer p-1"
-              >
-                {showPassword ? <EyeSlash className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+          ) : (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide">
+                  Password
+                </label>
+              </div>
+              <div className="relative flex items-center">
+                <Lock className="w-4 h-4 text-gray-400 absolute left-3.5" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="w-full h-11 pl-10 pr-10 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-800/30 focus:border-amber-800 focus:bg-white transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 text-gray-400 hover:text-gray-700 cursor-pointer p-1"
+                >
+                  {showPassword ? <EyeSlash className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           <button
             type="submit"
@@ -121,12 +172,32 @@ export default function AdminLoginPage() {
               </span>
             ) : (
               <span className="flex items-center gap-2">
-                <span>Sign In</span>
+                <span>{pinMode ? "Sign in with PIN" : "Sign In"}</span>
                 <ArrowRight className="w-4 h-4" />
               </span>
             )}
           </button>
         </form>
+
+        <div className="text-center pt-2 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => setPinMode(!pinMode)}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 hover:text-amber-900 hover:underline underline-offset-2 cursor-pointer transition-colors"
+          >
+            {pinMode ? (
+              <>
+                <Password className="w-4 h-4" />
+                <span>Sign in with email & password instead</span>
+              </>
+            ) : (
+              <>
+                <Key className="w-4 h-4" />
+                <span>Quick staff login with collaborator PIN</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       <footer className="mt-8 text-center text-xs text-gray-400 font-medium">

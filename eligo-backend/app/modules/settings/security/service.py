@@ -37,3 +37,14 @@ async def revoke_collaborator_code(db: AsyncSession, code_id: int) -> Collaborat
     await db.commit()
     await db.refresh(code)
     return code
+
+
+async def validate_collaborator_code(db: AsyncSession, code: str) -> CollaboratorCodes | None:
+    """Return the active collaborator code matching the supplied 4-digit PIN."""
+    result = await db.execute(
+        select(CollaboratorCodes).where(
+            CollaboratorCodes.code == code.strip(),
+            CollaboratorCodes.is_active == True,  # noqa: E712
+        )
+    )
+    return result.scalar_one_or_none()

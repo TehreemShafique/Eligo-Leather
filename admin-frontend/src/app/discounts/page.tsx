@@ -22,6 +22,7 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { useFormDirty } from "@/components/unsaved-changes"
+import PermissionGuard from "@/components/auth/permission-guard"
 
 interface DiscountRecord {
   id: number
@@ -278,7 +279,8 @@ export default function AdminDiscountsPage() {
   })
 
   return (
-    <div className="space-y-4 font-sans text-gray-900 pb-12">
+    <PermissionGuard feature="discounts">
+      <div className="space-y-4 font-sans text-gray-900 pb-12">
       {/* Top Header Bar matching Pic 1 */}
       <div className="flex items-center justify-between pb-1">
         <div className="flex items-center gap-2">
@@ -561,6 +563,7 @@ export default function AdminDiscountsPage() {
           <span className="hover:underline cursor-pointer">Learn more about discounts</span>
         </div>
       </div>
-    </div>
+      </div>
+    </PermissionGuard>
   )
 }

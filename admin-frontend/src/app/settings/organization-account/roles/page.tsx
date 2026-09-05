@@ -7,6 +7,7 @@ import { ShieldCheck } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/layout/page-header"
+import PermissionGuard from "@/components/auth/permission-guard"
 
 const API = `${API_BASE}/api/v1/settings/roles/list-roles`
 
@@ -54,11 +55,12 @@ export default function AdminSettingsRolesPage() {
   useEffect(() => { fetchRoles() }, [fetchRoles])
 
   return (
-    <div className="space-y-6 font-sans max-w-5xl mx-auto">
-      <PageHeader
-        title="Roles"
-        icon={<ShieldCheck className="w-5 h-5" />}
-      />
+    <PermissionGuard feature="users">
+      <div className="space-y-6 font-sans max-w-5xl mx-auto">
+        <PageHeader
+          title="Roles"
+          icon={<ShieldCheck className="w-5 h-5" />}
+        />
 
       {/* Roles Directory Table */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
@@ -96,5 +98,6 @@ export default function AdminSettingsRolesPage() {
         </div>
       </div>
     </div>
+    </PermissionGuard>
   )
 }

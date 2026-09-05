@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { CreditCard, Plus, PencilSimple, X, Check, Gift, CurrencyCircleDollar, WarningCircle } from "@phosphor-icons/react"
 import { PageHeader } from "@/components/layout/page-header"
 import { useFormDirty } from "@/components/unsaved-changes"
+import PermissionGuard from "@/components/auth/permission-guard"
 
 const PAYMENT_API = `${API_BASE}/api/v1/settings/payment`
 
@@ -219,10 +220,11 @@ export default function AdminSettingsPaymentsPage() {
   }
 
   return (
-    <div className="space-y-6 font-sans max-w-5xl mx-auto">
-      <PageHeader title="Payments" icon={<CreditCard className="w-5 h-5" />} />
+    <PermissionGuard feature="settings_store">
+      <div className="space-y-6 font-sans max-w-5xl mx-auto">
+        <PageHeader title="Payments" icon={<CreditCard className="w-5 h-5" />} />
 
-      <div className="space-y-6 text-xs">
+        <div className="space-y-6 text-xs">
         {/* 1. Manual Payment Methods Card */}
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
@@ -621,6 +623,7 @@ export default function AdminSettingsPaymentsPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </PermissionGuard>
   )
 }

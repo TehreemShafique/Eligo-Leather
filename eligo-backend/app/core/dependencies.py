@@ -46,7 +46,9 @@ async def get_current_user(credentials=Depends(oauth2_scheme), db: AsyncSession=
     except JWTError:
         raise credential_exception
 
-    result = await db.execute(Select(User).where(User.email == email))
+    result = await db.execute(
+        Select(User).where(User.email == email).options(selectinload(User.role))
+    )
     user = result.scalar_one_or_none()
 
     if user is None:

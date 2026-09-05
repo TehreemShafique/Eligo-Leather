@@ -3,10 +3,11 @@
 import { API_BASE } from "@/lib/api"
 
 import { useState, useEffect, useCallback } from "react"
-import { Key, ShieldCheck, DownloadSimple, ClockCounterClockwise, Trash, ArrowsClockwise } from "@phosphor-icons/react"
+import { Key, DownloadSimple, ClockCounterClockwise } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/layout/page-header"
+import PermissionGuard from "@/components/auth/permission-guard"
 
 const API = `${API_BASE}/api/v1/settings/security`
 
@@ -15,13 +16,6 @@ interface ActivityLog {
   event: string
   resource_type: string
   actor_user_id: number | null
-  created_at: string
-}
-
-interface CollaboratorCode {
-  id: number
-  code: string
-  is_active: boolean
   created_at: string
 }
 
@@ -40,25 +34,11 @@ function formatTimestamp(iso: string) {
 
 export default function AdminSettingsSecurityPage() {
   const [activeTab, setActiveTab] = useState<"security" | "activity">("security")
-  const [loading, setLoading] = useState(true)
   const [logsLoading, setLogsLoading] = useState(false)
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
-  const [collaboratorCodes, setCollaboratorCodes] = useState<CollaboratorCode[]>([])
 
   const mostRecentLog = activityLogs.length > 0 ? activityLogs[0] : null
-
-  const fetchSecurityData = useCallback(async () => {
-    try {
-      setLoading(true)
-      const res = await fetch(`${API}/collaborator-codes`)
-      if (res.ok) setCollaboratorCodes(await res.json())
-    } catch {
-      toast.error("Failed to load collaborator codes.")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -72,43 +52,14 @@ export default function AdminSettingsSecurityPage() {
     }
   }, [])
 
-  useEffect(() => { fetchSecurityData() }, [fetchSecurityData])
   useEffect(() => { if (activeTab === "activity") fetchLogs() }, [activeTab, fetchLogs])
 
-  const handleGenerateCode = async () => {
-    try {
-      const res = await fetch(`${API}/collaborator-codes`, { method: "POST" })
-      if (!res.ok) {
-        toast.error("Failed to generate collaborator code.")
-        return
-      }
-      const newCode: CollaboratorCode = await res.json()
-      setCollaboratorCodes((prev) => [newCode, ...prev])
-      toast.success(`Generated new collaborator request code: ${newCode.code}`)
-    } catch {
-      toast.error("Network error while generating code.")
-    }
-  }
-
-  const handleRevokeCode = async (codeId: number) => {
-    try {
-      const res = await fetch(`${API}/collaborator-codes/${codeId}`, { method: "DELETE" })
-      if (!res.ok) {
-        toast.error("Failed to revoke collaborator code.")
-        return
-      }
-      setCollaboratorCodes((prev) => prev.filter((c) => c.id !== codeId))
-      toast.success("Collaborator code revoked.")
-    } catch {
-      toast.error("Network error while revoking code.")
-    }
-  }
-
   return (
-    <div className="space-y-6 font-sans max-w-5xl mx-auto">
-      <PageHeader
-        title="Security & User Activity Logs"
-        icon={<Key className="w-5 h-5" />}
+    <PermissionGuard feature="security_logs">
+      <div className="space-y-6 font-sans max-w-5xl mx-auto">
+        <PageHeader
+          title="Security & User Activity Logs"
+          icon={<Key className="w-5 h-5" />}
         actions={
           <>
             <button
@@ -161,58 +112,6 @@ export default function AdminSettingsSecurityPage() {
               )}
             </div>
           </div>
-
-          {/* Collaborators Card */}
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div>
-                <h2 className="text-sm font-bold text-gray-900">Collaborator Access</h2>
-                <p className="text-xs text-gray-500">Allow external developers or agency partners to request access to your store using a 4-digit code.</p>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="p-6 text-center text-xs text-gray-500">Loading collaborator codes…</div>
-            ) : collaboratorCodes.length === 0 ? (
-              <div className="p-6 text-center text-xs text-gray-500">
-                <span>No active collaborator codes.</span>
-                <div className="mt-3">
-                  <button
-                    onClick={handleGenerateCode}
-                    className="px-3.5 py-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-xl font-bold text-gray-800 inline-flex items-center gap-2"
-                  >
-                    <ArrowsClockwise className="w-4 h-4 text-amber-800" />
-                    <span>Generate first code</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              collaboratorCodes.map((cc) => (
-                <div key={cc.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div>
-                    <span className="font-bold text-gray-900 uppercase tracking-wide block">Collaborator Request Code</span>
-                    <span className="text-2xl font-mono font-bold text-amber-800 tracking-wider">{cc.code}</span>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={handleGenerateCode}
-                      className="px-3.5 py-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-xl font-bold text-gray-800 inline-flex items-center gap-2"
-                    >
-                      <ArrowsClockwise className="w-4 h-4 text-amber-800" />
-                      <span>Generate new code</span>
-                    </button>
-                    <button
-                      onClick={() => handleRevokeCode(cc.id)}
-                      className="p-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl border border-rose-200"
-                    >
-                      <Trash className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
         </div>
       ) : (
         /* Detailed User Activity Logs Audit Table */
@@ -258,6 +157,7 @@ export default function AdminSettingsSecurityPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </PermissionGuard>
   )
 }

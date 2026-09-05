@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
+from app.modules.auth.model import UserType
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -15,6 +16,11 @@ class User_out(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class MeOut(User_out):
+    user_type: UserType = UserType.pos
+    role_id: int | None = None
+    domain: str | None = None
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -24,3 +30,7 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+class PinLoginRequest(BaseModel):
+    code: str
+    email: EmailStr
