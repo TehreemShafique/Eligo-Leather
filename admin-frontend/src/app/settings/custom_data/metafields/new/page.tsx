@@ -9,159 +9,10 @@ import {
   Info,
   Check,
   X,
-  TextB,
-  TextItalic,
-  TextUnderline,
-  ListBullets,
-  ListNumbers,
-  Link as LinkIcon,
-  Code,
-  TextAlignLeft,
-  TextAlignCenter,
-  TextAlignRight,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
-
-// MS-Word Style WYSIWYG Editor Component for Metafield Description
-function DescriptionWysiwygEditor({
-  value,
-  onChange,
-}: {
-  value: string
-  onChange: (val: string) => void
-}) {
-  const [isCodeView, setIsCodeView] = useState(false)
-
-  const exec = (command: string, val?: string) => {
-    document.execCommand(command, false, val)
-  }
-
-  return (
-    <div className="border border-gray-300 rounded-xl overflow-hidden bg-white shadow-2xs">
-      {/* Ribbon Toolbar */}
-      <div className="p-2 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center gap-1.5 text-xs text-gray-700 font-sans shadow-2xs select-none">
-        <button
-          type="button"
-          onClick={() => exec("bold")}
-          className="p-1.5 hover:bg-gray-200 rounded font-bold cursor-pointer transition-colors"
-          title="Bold (Ctrl+B)"
-        >
-          <TextB className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => exec("italic")}
-          className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors"
-          title="Italic (Ctrl+I)"
-        >
-          <TextItalic className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => exec("underline")}
-          className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors"
-          title="Underline (Ctrl+U)"
-        >
-          <TextUnderline className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <div className="w-px h-5 bg-gray-300 mx-0.5" />
-
-        <button
-          type="button"
-          onClick={() => exec("justifyLeft")}
-          className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors"
-          title="Align Left"
-        >
-          <TextAlignLeft className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => exec("justifyCenter")}
-          className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors"
-          title="Align Center"
-        >
-          <TextAlignCenter className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => exec("justifyRight")}
-          className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors"
-          title="Align Right"
-        >
-          <TextAlignRight className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <div className="w-px h-5 bg-gray-300 mx-0.5" />
-
-        <button
-          type="button"
-          onClick={() => exec("insertUnorderedList")}
-          className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors"
-          title="Bulleted List"
-        >
-          <ListBullets className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => exec("insertOrderedList")}
-          className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors"
-          title="Numbered List"
-        >
-          <ListNumbers className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            const url = prompt("Enter Link URL:", "https://eligoleather.com")
-            if (url) exec("createLink", url)
-          }}
-          className="p-1.5 hover:bg-gray-200 rounded cursor-pointer transition-colors"
-          title="Insert Link"
-        >
-          <LinkIcon className="w-4 h-4 text-gray-900" />
-        </button>
-
-        <div className="w-px h-5 bg-gray-300 mx-0.5" />
-
-        <button
-          type="button"
-          onClick={() => setIsCodeView(!isCodeView)}
-          className={`p-1.5 rounded ml-auto cursor-pointer transition-colors ${
-            isCodeView ? "bg-amber-200 text-amber-950 font-bold" : "hover:bg-gray-200"
-          }`}
-          title="Toggle HTML Code View"
-        >
-          <Code className="w-4 h-4 text-gray-900" />
-        </button>
-      </div>
-
-      {/* Editor Surface */}
-      {!isCodeView ? (
-        <div
-          contentEditable
-          suppressContentEditableWarning={true}
-          dangerouslySetInnerHTML={{ __html: value || "Provide instructions for staff when entering this field..." }}
-          onInput={(e) => onChange(e.currentTarget.innerHTML)}
-          className="p-3 text-xs font-sans text-gray-900 focus:outline-hidden min-h-[70px] leading-relaxed [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4"
-        />
-      ) : (
-        <textarea
-          rows={3}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full p-3 text-xs font-mono bg-gray-900 text-amber-400 focus:outline-hidden"
-        />
-      )}
-    </div>
-  )
-}
+import { LexicalEditor } from "@/components/ui/lexical-editor"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 function NewMetafieldFormContent() {
   const router = useRouter()
@@ -180,7 +31,6 @@ function NewMetafieldFormContent() {
     locations: "location",
     pages: "page",
     blog_posts: "blog post",
-    markets: "market",
     shop: "shop",
   }
 
@@ -195,6 +45,15 @@ function NewMetafieldFormContent() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>(["Leather Wallets", "Belts"])
   const [storefrontApiAccess, setStorefrontApiAccess] = useState(true)
 
+  const { reset } = useFormDirty({
+    name,
+    cardinality,
+    selectedType,
+    description,
+    selectedCategories,
+    storefrontApiAccess,
+  })
+
   // Category Modal State
   const [categoryModalOpen, setCategoryModalOpen] = useState(false)
 
@@ -205,6 +64,7 @@ function NewMetafieldFormContent() {
     }
 
     toast.success(`${singularResourceLabel.charAt(0).toUpperCase() + singularResourceLabel.slice(1)} metafield definition "${name}" created successfully!`)
+    reset()
     setTimeout(() => {
       router.push("/settings/custom_data")
     }, 400)
@@ -312,9 +172,10 @@ function NewMetafieldFormContent() {
         {/* Description Field with WYSIWYG Toolbar */}
         <div className="space-y-1.5">
           <label className="block font-bold text-gray-900 text-xs">Description (Rich Text Toolbar Enabled)</label>
-          <DescriptionWysiwygEditor
+          <LexicalEditor
             value={description}
             onChange={setDescription}
+            minHeight="70px"
           />
         </div>
       </div>

@@ -1,19 +1,30 @@
 import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
-  // Explicitly disable Gzip compression as requested
-  compress: false,
+  // Enable Gzip/Brotli compression for text-based responses
+  compress: true,
   images: {
-    unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**",
+      },
+      {
+        protocol: "http",
+        hostname: "**",
+      },
+    ],
   },
   async headers() {
     return [
       {
         source: "/:path*",
         headers: [
+          // Admin portal is fully private (every page requires auth); live
+          // order/inventory state must never be cached by browsers or CDNs.
           {
             key: "Cache-Control",
-            value: "public, max-age=60, s-maxage=3600, stale-while-revalidate=86400",
+            value: "private, no-store",
           },
           {
             key: "X-Server-Response-Time-Target",

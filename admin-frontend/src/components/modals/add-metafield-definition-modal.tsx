@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState } from "react"
 import {
   X,
@@ -152,7 +154,7 @@ export function AddMetafieldDefinitionModal({
 
     // Save to PostgreSQL Backend DB
     try {
-      await fetch("http://127.0.0.1:8000/api/v1/metaobject-definitions/", {
+      await fetch(`${API_BASE}/api/v1/metaobject-definitions/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

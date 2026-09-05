@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
@@ -16,14 +18,17 @@ import {
   Truck,
   CaretDown,
   Trash,
+  PencilSimple,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
+import PermissionGuard from "@/components/auth/permission-guard"
 
 interface DiscountRecord {
   id: number
   title: string
   subtitle: string
-  status: "Active" | "Expired" | "Deactivated"
+  status: "Active" | "Expired" | "Deactivated" | "Disabled"
   method: "Code" | "Automatic"
   eligibility: string
   type: string
@@ -38,16 +43,19 @@ export default function AdminDiscountsPage() {
   const [welcomeActive, setWelcomeActive] = useState(true)
   const [welcomePct, setWelcomePct] = useState("5")
   const [savingWelcome, setSavingWelcome] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
 
-  // Welcome Discount Claimed Logs (tracked by Email / IP)
-  const [welcomeLogs] = useState([
-    { id: 1, email: "m.ali@example.com", ip: "39.45.18.92", code: "WELCOMES", date: "Feb 11, 2026, 14:20" },
-    { id: 2, email: "zainab.k@example.com", ip: "111.68.99.14", code: "WELCOMES", date: "Feb 11, 2026, 11:05" },
-    { id: 3, email: "usman.l@example.com", ip: "182.180.44.201", code: "WELCOMES", date: "Feb 10, 2026, 19:40" },
-  ])
+  const { reset } = useFormDirty(
+    { welcomeActive, welcomePct },
+    dataLoaded
+  )
+
+  // Welcome Discount Claimed Logs (tracked by anonymized Visitor ID)
+  const [welcomeLogs, setWelcomeLogs] = useState<any[]>([])
 
   // Discounts list state (Type 2: Store Promo Discounts in DB)
   const [discounts, setDiscounts] = useState<DiscountRecord[]>([])
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   // Fetch BOTH types of discounts directly from Database
   useEffect(() => {
@@ -56,7 +64,7 @@ export default function AdminDiscountsPage() {
     // 1. Fetch Type 1: Welcome Discount Settings from DB
     const fetchWelcomeSettings = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/discounts/welcome")
+        const res = await fetch(`${API_BASE}/api/v1/discounts/welcome`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted) {
@@ -66,6 +74,8 @@ export default function AdminDiscountsPage() {
         }
       } catch (err) {
         console.log("Welcome discount API offline, using local fallback.")
+      } finally {
+        if (isMounted) setDataLoaded(true)
       }
     }
 
@@ -75,23 +85,25 @@ export default function AdminDiscountsPage() {
 
     fetchWelcomeSettings()
 
-    // 2. Fetch Type 2: Store Promo Discounts from DB & LocalStorage
-    const fetchDiscounts = async () => {
-      let localItems: DiscountRecord[] = []
+    // 2. Fetch Welcome Discount Claimed Logs from DB
+    const fetchWelcomeLogs = async () => {
       try {
-        const stored = localStorage.getItem("eligo_created_discounts")
-        if (stored) {
-          const parsed = JSON.parse(stored)
-          if (Array.isArray(parsed)) {
-            localItems = parsed
-          }
+        const res = await fetch(`${API_BASE}/api/v1/discounts/welcome/logs`)
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data) && isMounted) setWelcomeLogs(data)
         }
-      } catch (e) {
-        console.log("localStorage read error", e)
+      } catch (err) {
+        console.log("Welcome discount logs API offline.", err)
       }
+    }
 
+    fetchWelcomeLogs()
+
+    // 3. Fetch Type 2: Store Promo Discounts (source of truth = database)
+    const fetchDiscounts = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/discounts/")
+        const res = await fetch(`${API_BASE}/api/v1/discounts/?limit=200`)
         if (res.ok) {
           const data = await res.json()
           if (Array.isArray(data)) {
@@ -99,34 +111,28 @@ export default function AdminDiscountsPage() {
               id: d.id,
               title: d.title || d.code || `Discount #${d.id}`,
               subtitle: d.code ? `${d.code} • ${d.title}` : d.title,
-              status: d.status === "Active" || d.status === "active" ? "Active" : (d.status === "Expired" ? "Expired" : "Deactivated"),
+              status: formatStatus(d.status),
               method: d.method === "Automatic" ? "Automatic" : "Code",
               eligibility: d.eligibility || "All customers",
               type: d.type || "Amount off order",
               used_count: d.used_count || 0,
             }))
-
-            const combined = [...localItems, ...mapped]
-            const uniqueMap = new Map()
-            combined.forEach((item) => {
-              const key = `${item.title}-${item.id}`
-              if (!uniqueMap.has(key)) {
-                uniqueMap.set(key, item)
-              }
-            })
             if (isMounted) {
-              setDiscounts(Array.from(uniqueMap.values()))
+              setDiscounts(mapped)
             }
-            return
           }
         }
       } catch (err) {
-        console.log("Discounts API offline, rendering local list.")
+        console.log("Discounts API offline, showing empty list.", err)
       }
+    }
 
-      if (isMounted) {
-        setDiscounts(localItems)
-      }
+    function formatStatus(s: string): DiscountRecord["status"] {
+      const norm = (s || "").toLowerCase()
+      if (norm === "active") return "Active"
+      if (norm === "expired") return "Expired"
+      if (norm === "disabled") return "Disabled"
+      return "Deactivated"
     }
 
     fetchDiscounts()
@@ -146,33 +152,31 @@ export default function AdminDiscountsPage() {
     const payload = {
       is_active: welcomeActive,
       discount_percentage: pctNum,
-      headline: `Welcome! Get ${pctNum}% OFF your 1st order!`,
-      coupon_code: `WELCOME${pctNum}`,
     }
 
     // Save to DB
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/discounts/welcome", {
+      const res = await fetch(`${API_BASE}/api/v1/discounts/welcome`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
 
       if (res.ok) {
-        toast.success(`Welcome Discount saved to database! Code: WELCOME${pctNum} (${pctNum}% OFF).`)
+        toast.success(`Welcome Discount saved to database! ${pctNum}% OFF, unique code per visitor.`)
       } else {
-        toast.success(`Welcome Discount saved! Code: WELCOME${pctNum} (${pctNum}% OFF).`)
+        toast.success(`Welcome Discount saved! ${pctNum}% OFF, unique code per visitor.`)
       }
     } catch (err) {
-      toast.success(`Welcome Discount saved! Code: WELCOME${pctNum} (${pctNum}% OFF).`)
+      toast.success(`Welcome Discount saved! ${pctNum}% OFF, unique code per visitor.`)
     } finally {
       localStorage.setItem("eligo_welcome_discount_settings", JSON.stringify({
         welcomeActive,
         welcomePct: pctNum,
-        couponCode: `WELCOME${pctNum}`,
         updatedAt: new Date().toISOString(),
       }))
       setSavingWelcome(false)
+      reset()
     }
   }
 
@@ -217,6 +221,53 @@ export default function AdminDiscountsPage() {
     }
   }
 
+  const reloadDiscounts = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/discounts/?limit=200`)
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data)) {
+          setDiscounts(
+            data.map((d: any) => ({
+              id: d.id,
+              title: d.title || d.code || `Discount #${d.id}`,
+              subtitle: d.code ? `${d.code} • ${d.title}` : d.title,
+              status: d.status === "Active" || d.status === "active" ? "Active" : (d.status === "Expired" ? "Expired" : (d.status === "Disabled" ? "Disabled" : "Deactivated")),
+              method: d.method === "Automatic" ? "Automatic" : "Code",
+              eligibility: d.eligibility || "All customers",
+              type: d.type || "Amount off order",
+              used_count: d.used_count || 0,
+            }))
+          )
+        }
+      }
+    } catch (err) {
+      console.log("Discounts reload error", err)
+    }
+  }
+
+  const handleDelete = async (id: number, title: string) => {
+    if (!window.confirm(`Delete discount "${title}"? This cannot be undone.`)) return
+    setDeletingId(id)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/discounts/${id}`, {
+        method: "DELETE",
+      })
+      if (res.ok || res.status === 204) {
+        toast.success(`Discount "${title}" deleted.`)
+        await reloadDiscounts()
+        setSelectedIds((prev) => prev.filter((sid) => sid !== id))
+      } else {
+        toast.error("Could not delete discount.")
+      }
+    } catch (err) {
+      console.error(err)
+      toast.error("Could not delete discount.")
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const filteredDiscounts = discounts.filter((d) => {
     if (!searchQuery.trim()) return true
     const q = searchQuery.toLowerCase()
@@ -228,7 +279,8 @@ export default function AdminDiscountsPage() {
   })
 
   return (
-    <div className="space-y-4 font-sans text-gray-900 pb-12">
+    <PermissionGuard feature="discounts">
+      <div className="space-y-4 font-sans text-gray-900 pb-12">
       {/* Top Header Bar matching Pic 1 */}
       <div className="flex items-center justify-between pb-1">
         <div className="flex items-center gap-2">
@@ -258,7 +310,7 @@ export default function AdminDiscountsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
           <h2 className="text-sm font-bold text-gray-900">Welcome Discount Settings</h2>
           <span className="px-3 py-1 bg-amber-50 text-amber-900 font-extrabold text-xs rounded-full border border-amber-300 self-start sm:self-auto font-mono">
-            Code: WELCOME{welcomePct} ({welcomePct}% OFF)
+            Unique code per visitor ({welcomePct}% OFF)
           </span>
         </div>
 
@@ -318,21 +370,28 @@ export default function AdminDiscountsPage() {
             <div className="flex items-center justify-between border-b border-amber-200 pb-2">
               <span className="font-bold text-gray-900 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-amber-800" />
-                <span>Claimed Welcome Discount Logs (Email / IP Tracked)</span>
+                <span>Claimed Welcome Discount Logs (anonymized Visitor ID)</span>
               </span>
               <span className="text-[10px] text-amber-900 font-mono font-extrabold">{welcomeLogs.length} Claimed</span>
             </div>
 
             <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-              {welcomeLogs.map((log) => (
-                <div key={log.id} className="p-2.5 bg-white rounded-xl border border-amber-200/80 flex items-center justify-between text-[11px]">
-                  <div>
-                    <span className="font-bold text-gray-900 block">{log.email}</span>
-                    <span className="text-gray-500 font-mono text-[10px]">IP: {log.ip}</span>
+              {welcomeLogs.map((log, idx) => (
+                <div key={log.id ?? idx} className="p-2.5 bg-white rounded-xl border border-amber-200/80 flex items-center justify-between text-[11px]">
+                  <div className="min-w-0">
+                    <span className="font-bold text-gray-900 block truncate">
+                      {log.email || log.visitor_id || `Visitor #${log.id}`}
+                    </span>
+                    <span className="text-gray-500 font-mono text-[10px] block truncate">
+                      {log.visitor_id ? `Visitor: ${log.visitor_id}` : ""}
+                      {log.ip_address ? `${log.visitor_id ? " • " : ""}IP: ${log.ip_address}` : ""}
+                    </span>
                   </div>
-                  <div className="text-right">
-                    <span className="font-bold text-emerald-800 font-mono text-xs block">{log.code}</span>
-                    <span className="text-gray-400 text-[10px]">{log.date}</span>
+                  <div className="text-right shrink-0">
+                    <span className="font-bold text-emerald-800 font-mono text-xs block">{log.coupon_code || `WELCOME${welcomePct}`}</span>
+                    <span className="text-gray-400 text-[10px]">
+                      {log.claimed_at ? new Date(log.claimed_at).toLocaleString() : ""}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -377,6 +436,7 @@ export default function AdminDiscountsPage() {
                 <th className="py-3 px-4 font-semibold text-gray-700 w-[18%]">Type</th>
                 <th className="py-3 px-4 font-semibold text-gray-700 w-[12%] text-center">Combinations</th>
                 <th className="py-3 px-4 font-semibold text-gray-700 w-[10%] text-right">Used</th>
+                <th className="py-3 px-4 font-semibold text-gray-700 w-[10%] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -399,7 +459,12 @@ export default function AdminDiscountsPage() {
 
                       {/* Title & Subtitle */}
                       <td className="py-3.5 px-4">
-                        <span className="font-bold text-gray-900 block text-xs">{d.title}</span>
+                        <Link
+                          href={`/discounts/${d.id}`}
+                          className="font-bold text-gray-900 block text-xs hover:text-amber-800 hover:underline"
+                        >
+                          {d.title}
+                        </Link>
                         <span className="text-[11px] text-gray-500 font-medium">{d.subtitle}</span>
                       </td>
 
@@ -418,6 +483,11 @@ export default function AdminDiscountsPage() {
                         {d.status === "Deactivated" && (
                           <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
                             Deactivated
+                          </span>
+                        )}
+                        {d.status === "Disabled" && (
+                          <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+                            Disabled
                           </span>
                         )}
                       </td>
@@ -452,12 +522,34 @@ export default function AdminDiscountsPage() {
 
                       {/* Used */}
                       <td className="py-3.5 px-4 text-right font-medium text-gray-900">{d.used_count}</td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          <Link
+                            href={`/discounts/${d.id}`}
+                            title="Edit discount"
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-amber-800 hover:bg-amber-50 transition-colors cursor-pointer"
+                          >
+                            <PencilSimple className="w-4 h-4" />
+                          </Link>
+                          <button
+                            type="button"
+                            title="Delete discount"
+                            disabled={deletingId === d.id}
+                            onClick={() => handleDelete(d.id, d.title)}
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-40"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   )
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-xs text-gray-500 font-medium">
+                  <td colSpan={9} className="p-8 text-center text-xs text-gray-500 font-medium">
                     No promo discounts created yet. Click "Create discount" to add one.
                   </td>
                 </tr>
@@ -471,6 +563,7 @@ export default function AdminDiscountsPage() {
           <span className="hover:underline cursor-pointer">Learn more about discounts</span>
         </div>
       </div>
-    </div>
+      </div>
+    </PermissionGuard>
   )
 }

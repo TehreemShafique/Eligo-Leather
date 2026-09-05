@@ -13,6 +13,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     func,
+    true,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -141,6 +142,14 @@ class ShippingSettings(Base):
     )
     allow_split_shipments: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Storewide shipping charge (PKR) charged when the order subtotal is
+    # below free_shipping_threshold; 0 otherwise. Single source of truth for
+    # checkout display AND authoritative recalculation at order creation.
+    shipping_charge: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("250"), server_default="250")
+    free_shipping_threshold: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("4000"), server_default="4000"
+    )
+
     sender_name: Mapped[str | None] = mapped_column(String, nullable=True)
     sender_address: Mapped[str | None] = mapped_column(String, nullable=True)
     sender_city: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -148,6 +157,17 @@ class ShippingSettings(Base):
     sender_country: Mapped[str | None] = mapped_column(String, nullable=True)
     sender_postal_code: Mapped[str | None] = mapped_column(String, nullable=True)
     sender_phone: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Return address shown on waybills. Stored separately from the shipper
+    # address; when return_same_as_sender is true the shipper values are used.
+    return_same_as_sender: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    return_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    return_phone: Mapped[str | None] = mapped_column(String, nullable=True)
+    return_address: Mapped[str | None] = mapped_column(String, nullable=True)
+    return_city: Mapped[str | None] = mapped_column(String, nullable=True)
+    return_province: Mapped[str | None] = mapped_column(String, nullable=True)
+    return_postal_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    return_country: Mapped[str | None] = mapped_column(String, nullable=True)
 
     packing_slip_show_sku: Mapped[bool] = mapped_column(Boolean, default=True)
     packing_slip_show_variants: Mapped[bool] = mapped_column(Boolean, default=True)

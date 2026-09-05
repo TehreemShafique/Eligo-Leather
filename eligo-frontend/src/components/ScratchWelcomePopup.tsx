@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Sparkle, X, Check, Copy, Tag, Gift } from "@phosphor-icons/react"
+import { Check, Copy, Tag, Gift, X } from "@phosphor-icons/react"
 
 interface ScratchWelcomePopupProps {
   discountPercentage?: number
@@ -9,14 +9,16 @@ interface ScratchWelcomePopupProps {
   isOpen?: boolean
   onClose?: () => void
   onApplyCoupon?: (code: string) => void
+  onSaveCoupon?: (code: string) => void
 }
 
 export default function ScratchWelcomePopup({
-  discountPercentage: defaultDiscount = 5,
-  couponCode: defaultCode = "WELCOME5",
+  discountPercentage = 5,
+  couponCode = "",
   isOpen = true,
   onClose,
   onApplyCoupon,
+  onSaveCoupon,
 }: ScratchWelcomePopupProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isScratching, setIsScratching] = useState(false)
@@ -25,31 +27,8 @@ export default function ScratchWelcomePopup({
   const [copied, setCopied] = useState(false)
   const [showModal, setShowModal] = useState(isOpen)
 
-  // Dynamic Admin Settings (Loaded from localStorage or fallback default)
-  const [discountPercentage, setDiscountPercentage] = useState(defaultDiscount)
-  const [couponCode, setCouponCode] = useState(defaultCode)
-
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("eligo_welcome_discount_settings")
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (parsed.welcomeActive === false) {
-          setShowModal(false)
-          return
-        }
-        if (parsed.welcomePct) {
-          setDiscountPercentage(Number(parsed.welcomePct))
-          setCouponCode(parsed.couponCode || `WELCOME${parsed.welcomePct}`)
-        }
-      }
-    } catch (e) {
-      // Fallback defaults remain intact
-    }
-  }, [])
-
-  useEffect(() => {
-    setShowModal(isOpen)
+    queueMicrotask(() => setShowModal(isOpen))
   }, [isOpen])
 
   // Initialize Canvas Scratch Surface
@@ -144,7 +123,11 @@ export default function ScratchWelcomePopup({
   const handleCopy = () => {
     navigator.clipboard.writeText(couponCode)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    // Save the coupon reference and close instantly so the customer does not
+    // have to remember/re-type it at checkout.
+    if (onSaveCoupon) onSaveCoupon(couponCode)
+    setShowModal(false)
+    if (onClose) onClose()
   }
 
   if (!showModal) return null
@@ -221,19 +204,21 @@ export default function ScratchWelcomePopup({
               <button
                 type="button"
                 onClick={handleCopy}
-                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold text-xs rounded-xl border border-gray-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                className="flex-1 py-3 rounded-[5px] bg-white border border-amber-800 text-amber-800 hover:bg-amber-800 hover:text-white text-sm font-semibold font-['Manrope'] shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
-                {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-amber-800" />}
+                {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                 <span>{copied ? "Copied!" : "Copy Code"}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => {
+                  if (onSaveCoupon) onSaveCoupon(couponCode)
                   if (onApplyCoupon) onApplyCoupon(couponCode)
+                  else handleCopy()
                   setShowModal(false)
                 }}
-                className="flex-1 py-2.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                className="flex-1 py-3 rounded-[5px] bg-amber-800 hover:bg-amber-900 text-white text-sm font-semibold font-['Manrope'] shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <Tag className="w-4 h-4" />
                 <span>Apply to Cart ({discountPercentage}% OFF)</span>

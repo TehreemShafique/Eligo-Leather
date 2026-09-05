@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Users, Plus, MagnifyingGlass, DotsThree, Trash } from "@phosphor-icons/react"
@@ -32,7 +34,7 @@ export default function AdminSegmentsPage() {
     let isMounted = true
     const fetchSegments = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/segments/")
+        const res = await fetch(`${API_BASE}/api/v1/segments/`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted && Array.isArray(data) && data.length > 0) {
@@ -69,7 +71,7 @@ export default function AdminSegmentsPage() {
 
   const handleDeleteSegment = async (id: number) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/segments/${id}`, { method: "DELETE" })
+      const res = await fetch(`${API_BASE}/api/v1/segments/${id}`, { method: "DELETE" })
       if (res.ok || res.status === 204) {
         setSegments((prev) => prev.filter((s) => s.id !== id))
         toast.success("Segment deleted from database.")

@@ -1,10 +1,15 @@
 import enum
 from app.db.base import Base
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Boolean, ForeignKey, Numeric, func, Text, DateTime, Integer
+from sqlalchemy import String, Boolean, ForeignKey, Numeric, func, Text, DateTime, Integer, Index
 from sqlalchemy import Enum as SAEnum
+
+# ==== Timestamps ====
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 # ==== Enums ====
 
@@ -23,6 +28,8 @@ class FulfillmentStatus(str, enum.Enum):
 
 class DeliveryStatus(str, enum.Enum):
     pending = "pending"
+    booked = "booked"
+    picked_up = "picked_up"
     in_transit = "in_transit"
     out_for_delivery = "out_for_delivery"
     delivered = "delivered"
@@ -60,6 +67,7 @@ class RecoveryStatus(str, enum.Enum):
 
 class AuditEventType(str, enum.Enum):
     order_created = "order_created"
+    customer_confirmed = "customer_confirmed"
     payment_updated = "payment_updated"
     fulfillment_updated = "fulfillment_updated"
     delivery_updated = "delivery_updated"
@@ -85,16 +93,37 @@ class AuditEventType(str, enum.Enum):
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        # Enforce at the PostgreSQL level that a given checkout request can
+        # only ever produce one order (idempotency). Duplicate submissions —
+        # double-clicks, browser/network retries — hit the unique index instead
+        # of creating a second order / double-deducting stock. NULL allows
+        # legacy orders that were never issued an idempotency key.
+        Index("ix_orders_idempotency_key", "idempotency_key", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     order_number: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True)
+    # Client-supplied, DB-unique checkout/order request identifier used to
+    # make order creation idempotent (see POST /api/v1/orders/create-order).
+    idempotency_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Storefront visitor cookie (``eligo_visitor_id``) captured at checkout so
+    # anonymous visitors can be matched for duplicate-order detection and the
+    # one-time welcome discount can be tied to the order that redeemed it.
+    visitor_id: Mapped[str | None] = mapped_column(String, nullable=True)
     # location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
 
     # Timestamps
     fulfill_by: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Customer phone-confirmation gate: null = not yet confirmed by phone,
+    # set = admin confirmed after speaking with the customer. Only confirmed
+    # orders move to the courier workflow.
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     channel: Mapped[str] = mapped_column(String, default="Online Store")
     currency: Mapped[str] = mapped_column(String(3), default="PKR")
@@ -104,7 +133,11 @@ class Order(Base):
     shipping_cost: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     tax: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     total_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
+    # Promo-code amount (server-computed at order creation).
+    discount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     paid_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
+    # "COD" for cash on delivery storefront orders; None for legacy orders.
+    payment_method: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Statuses
     payment_status: Mapped[PaymentStatus] = mapped_column(SAEnum(PaymentStatus), default=PaymentStatus.pending)
@@ -122,9 +155,19 @@ class Order(Base):
     shipping_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     billing_address: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Notes & metadata
-    customer_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Structured delivery-address snapshot taken at order creation so later
+    # edits to the customer profile or shipping settings never rewrite the
+    # history of existing orders.
+    shipping_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_phone: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_address_line1: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shipping_city: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_province: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_postal_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    shipping_country: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Metadata (customer_note / internal_note columns were removed)
     tags: Mapped[str | None] = mapped_column(String, nullable=True)
     destination: Mapped[str | None] = mapped_column(String, nullable=True)
     po_number: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -135,8 +178,8 @@ class Order(Base):
 
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     customer = relationship("Customer", back_populates="orders")
@@ -145,6 +188,38 @@ class Order(Base):
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     audit_logs = relationship("OrderAuditLog", back_populates="order", cascade="all, delete-orphan")
     notes = relationship("OrderNote", back_populates="order", cascade="all, delete-orphan")
+
+    @property
+    def customer_name(self) -> str | None:
+        # Prefer the order's own checkout snapshot (``shipping_name``) so each
+        # order always reports the name it was placed with, even when a shared
+        # customer record is later edited or the same email is reused with a
+        # different name on a later order. Falls back to the linked profile.
+        if self.shipping_name:
+            return self.shipping_name
+        if self.customer is None:
+            return None
+        parts = [self.customer.first_name or "", self.customer.last_name or ""]
+        name = " ".join(p for p in parts if p).strip()
+        return name or self.customer.email
+
+    @property
+    def customer_email(self) -> str | None:
+        # Prefer the order's own checkout email snapshot (``shipping_email``) so
+        # each order always contacts the address it was placed with, even when a
+        # shared customer record's email is later edited. Falls back to the
+        # linked profile.
+        if self.shipping_email:
+            return self.shipping_email
+        return self.customer.email if self.customer else None
+
+    @property
+    def customer_phone(self) -> str | None:
+        # Prefer the order's own checkout snapshot so each order keeps the
+        # contact number used at purchase time.
+        if self.shipping_phone:
+            return self.shipping_phone
+        return self.customer.phone if self.customer else None
 
 
 class OrderItem(Base):
@@ -178,8 +253,8 @@ class OrderNote(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     is_customer_visible: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     order = relationship("Order", back_populates="notes")
 
@@ -194,7 +269,7 @@ class OrderAuditLog(Base):
     actor_name: Mapped[str | None] = mapped_column(String, nullable=True)
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     order = relationship("Order", back_populates="audit_logs")
 
@@ -234,8 +309,8 @@ class DraftOrder(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     customer = relationship("Customer")
     items = relationship("DraftOrderItem", back_populates="draft_order", cascade="all, delete-orphan")
@@ -294,8 +369,8 @@ class AbandonedCheckout(Base):
     ip_address: Mapped[str | None] = mapped_column(String, nullable=True)
     browser_info: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     customer = relationship("Customer")
     items = relationship("AbandonedCheckoutItem", back_populates="checkout", cascade="all, delete-orphan")
@@ -343,8 +418,8 @@ class LeopardShipment(Base):
     current_status: Mapped[str | None] = mapped_column(String, nullable=True)
     raw_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
 
 class LeopardLoadSheet(Base):
@@ -366,7 +441,7 @@ class LeopardLoadSheet(Base):
     total_packets: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_cod: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class LeopardLog(Base):
@@ -381,4 +456,4 @@ class LeopardLog(Base):
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     date: Mapped[str] = mapped_column(String, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

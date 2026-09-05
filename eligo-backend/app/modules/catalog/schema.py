@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.modules.catalog.model import (
     ProductStatus, ProductCategory, SalesChannel,
     WeightUnit, PurchaseOrderStatus, TransferStatus, GiftCardStatus,
+    CollectionType,
 )
 
 
@@ -16,6 +17,7 @@ class VariantCreate(BaseModel):
     title: str
     color_name: str | None = None
     color_hex: str | None = None
+    metaobject_entry_id: int | None = None
     is_canonical: bool = False
     image_url: str | None = None
     sku: str | None = None
@@ -35,6 +37,7 @@ class VariantUpdate(BaseModel):
     title: str | None = None
     color_name: str | None = None
     color_hex: str | None = None
+    metaobject_entry_id: int | None = None
     is_canonical: bool | None = None
     image_url: str | None = None
     sku: str | None = None
@@ -56,6 +59,7 @@ class VariantOut(BaseModel):
     title: str
     color_name: str | None = None
     color_hex: str | None = None
+    metaobject_entry_id: int | None = None
     is_canonical: bool = False
     image_url: str | None = None
     sku: str | None = None
@@ -157,6 +161,8 @@ class ProductUpdate(BaseModel):
     tags: str | None = None
     categories: str | None = None
     category_list: list[str] = []
+    variants: list[VariantCreate] | None = None
+    images: list[ProductImageCreate] | None = None
 
 
 class ProductOut(BaseModel):
@@ -219,11 +225,12 @@ class CollectionCreate(BaseModel):
     image_url: str | None = None
     conditions: str | None = None
     channels: str | None = None
-    theme_template: str = "Default collection"
+    collection_type: CollectionType = CollectionType.wallets
     seo_title: str | None = Field(None, max_length=70)
     seo_description: str | None = Field(None, max_length=160)
     meta_description: str | None = None
     url_handle: str | None = None
+    parent_id: int | None = None
 
 
 class CollectionUpdate(BaseModel):
@@ -232,11 +239,12 @@ class CollectionUpdate(BaseModel):
     image_url: str | None = None
     conditions: str | None = None
     channels: str | None = None
-    theme_template: str | None = None
+    collection_type: CollectionType | None = None
     seo_title: str | None = Field(None, max_length=70)
     seo_description: str | None = Field(None, max_length=160)
     meta_description: str | None = None
     url_handle: str | None = None
+    parent_id: int | None = None
 
 
 class CollectionOut(BaseModel):
@@ -246,11 +254,13 @@ class CollectionOut(BaseModel):
     image_url: str | None
     conditions: str | None
     channels: str | None
-    theme_template: str
+    collection_type: CollectionType
     seo_title: str | None
     seo_description: str | None
     meta_description: str | None = None
     url_handle: str | None
+    parent_id: int | None = None
+    products_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -506,6 +516,97 @@ class GiftCardOut(BaseModel):
     customer_id: int | None
     status: GiftCardStatus
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ===========================================================================
+# Gift Card Product Image
+# ===========================================================================
+
+class GiftCardProductImageCreate(BaseModel):
+    url: str
+    alt_text: str | None = None
+    position: int = 0
+
+
+class GiftCardProductImageOut(BaseModel):
+    id: int
+    gift_card_product_id: int
+    url: str
+    alt_text: str | None = None
+    position: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ===========================================================================
+# Gift Card Product
+# ===========================================================================
+
+class GiftCardProductCreate(BaseModel):
+    code: str | None = None
+    title: str
+    description: str | None = None
+    status: ProductStatus = ProductStatus.draft
+    base_price: Decimal = Decimal("0")
+    compare_at_price: Decimal = Decimal("0")
+    seo_title: str | None = Field(None, max_length=70)
+    seo_description: str | None = Field(None, max_length=160)
+    meta_description: str | None = None
+    url_handle: str | None = None
+    product_ids: str | None = None
+    images: list[GiftCardProductImageCreate] = []
+
+
+class GiftCardProductUpdate(BaseModel):
+    code: str | None = None
+    title: str | None = None
+    description: str | None = None
+    status: ProductStatus | None = None
+    base_price: Decimal | None = None
+    compare_at_price: Decimal | None = None
+    seo_title: str | None = Field(None, max_length=70)
+    seo_description: str | None = Field(None, max_length=160)
+    meta_description: str | None = None
+    url_handle: str | None = None
+    product_ids: str | None = None
+
+
+class GiftCardProductOut(BaseModel):
+    id: int
+    code: str | None = None
+    title: str
+    description: str | None
+    status: ProductStatus
+    base_price: Decimal
+    compare_at_price: Decimal
+    seo_title: str | None
+    seo_description: str | None
+    meta_description: str | None = None
+    url_handle: str | None
+    product_ids: str | None = None
+    images: list[GiftCardProductImageOut] = []
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GiftCardProductListOut(BaseModel):
+    id: int
+    code: str | None = None
+    title: str
+    status: ProductStatus
+    base_price: Decimal
+    compare_at_price: Decimal
+    seo_title: str | None
+    url_handle: str | None
+    product_ids: str | None = None
+    image_url: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

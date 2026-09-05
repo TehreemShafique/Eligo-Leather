@@ -45,23 +45,23 @@ async def test_get_current_user_returns_user(db_session):
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_invalid_token_raises_404(db_session):
+async def test_get_current_user_invalid_token_raises_401(db_session):
     with pytest.raises(HTTPException) as exc:
         await get_current_user(
             credentials=_FakeCredentials("not-a-jwt"), db=db_session
         )
-    assert exc.value.status_code == 404
+    assert exc.value.status_code == 401
     assert exc.value.detail == "Credentials are not valid"
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_unknown_email_raises_404(db_session):
+async def test_get_current_user_unknown_email_raises_401(db_session):
     token = create_access_token({"sub": "nobody@example.com"})
     with pytest.raises(HTTPException) as exc:
         await get_current_user(
             credentials=_FakeCredentials(token), db=db_session
         )
-    assert exc.value.status_code == 404
+    assert exc.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -73,7 +73,7 @@ async def test_get_current_user_admin_requires_session(db_session):
         await get_current_user(
             credentials=_FakeCredentials(token), db=db_session
         )
-    assert exc.value.status_code == 404
+    assert exc.value.status_code == 401
 
     jti = decode_access_token(token)["jti"]
     db_session.add(UserSession(user_id=admin.id, token_id=jti))
@@ -97,7 +97,7 @@ async def test_get_current_user_admin_revoked_session_raises(db_session):
         await get_current_user(
             credentials=_FakeCredentials(token), db=db_session
         )
-    assert exc.value.status_code == 404
+    assert exc.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -112,7 +112,7 @@ async def test_require_admin_rejects_non_admin(db_session):
     user = await _seed_user(db_session, "staff@example.com")
     with pytest.raises(HTTPException) as exc:
         await require_admin(user)
-    assert exc.value.status_code == 404
+    assert exc.value.status_code == 403
     assert exc.value.detail == "User is Not admin"
 
 
@@ -139,5 +139,5 @@ async def test_require_discount_manager_rejects_pos_role(db_session):
 
     with pytest.raises(HTTPException) as exc:
         await require_discount_manager(user, db_session)
-    assert exc.value.status_code == 404
+    assert exc.value.status_code == 403
     assert exc.value.detail == "User is not allowed to manage discounts"

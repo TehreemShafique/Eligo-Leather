@@ -1,6 +1,21 @@
+import sys
 import time
+from pathlib import Path
+
+# Windows servers launched with piped/redirected stdout default to a legacy
+# codepage (cp1252); any print containing emoji then crashes the endpoint
+# with UnicodeEncodeError (e.g. the Leopards webhook logger). Force UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # nosec B110
+            pass
+
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.db import models_registry 
 from app.modules.auth.router import router as auth_router
 from app.modules.orders.router import router as orders_router, public_webhook_router as orders_webhook_router
@@ -14,14 +29,10 @@ from app.modules.catalog.router import (
     purchase_order_router,
     transfer_router,
     gift_card_router,
+    gift_card_product_router,
 )
 from app.modules.companies.router import router as companies_router
 from app.modules.segments.router import router as segments_router
-from app.modules.growth.router import (
-    growth_router,
-    attribution_router,
-    campaign_router,
-)
 from app.modules.discounts.router import router as discounts_router, public_discounts_router
 from app.modules.content.router import (
     content_router,
@@ -31,25 +42,33 @@ from app.modules.content.router import (
     menus_router,
     url_redirects_router,
     blog_posts_router,
-    blog_comments_router,
     pages_router,
-)
-from app.modules.markets.router import (
-    markets_overview_router,
-    market_router,
-    market_catalog_router,
-    rollout_router,
-)
-from app.modules.analytics.router import (
-    analytics_router,
-    reports_router,
-    explorations_router,
-    live_view_router,
+    storefront_metaobject_router,
 )
 from app.modules.settings.router import router as settings_router
+from app.modules.settings.checkout.router import public_checkout_router
+from app.modules.settings.shipping_and_delivery.router import public_shipping_router
 from app.modules.store.router import router as store_router
+from app.db.session import AsyncSessionLocal
+from app.modules.settings.notifications.service import seed_defaults
+from app.modules.settings.checkout.service import seed_default_config
+from app.modules.settings.shipping_and_delivery.service import seed_defaults as seed_shipping_defaults
 
 app = FastAPI(title="Eligo Backend")
+
+# Serve uploaded media (product images etc.) written by /api/v1/files/upload.
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+_STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+
+@app.on_event("startup")
+async def _seed_defaults():
+    async with AsyncSessionLocal() as db:
+        await seed_defaults(db)
+        await seed_default_config(db)
+        await seed_shipping_defaults(db)
+    print("[startup] Defaults seeded (notifications, checkout, shipping)")
 
 # High Performance Timing & HTTP Cache-Control Middleware (< 0.6s TTFB guarantee)
 @app.middleware("http")
@@ -60,18 +79,28 @@ async def add_performance_and_cache_headers(request: Request, call_next):
     
     # Server response execution time tracking header
     response.headers["X-Response-Time"] = f"{process_time:.4f}s"
-    
-    # Cache Control Header for GET endpoints (Excluding auth and leopard real-time endpoints)
-    if request.method == "GET" and not request.url.path.startswith("/api/v1/auth") and not "/leopard" in request.url.path:
-        response.headers["Cache-Control"] = "public, max-age=60, s-maxage=3600, stale-while-revalidate=86400"
-    elif "/leopard" in request.url.path:
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
 
-    # Explicitly ensure Gzip compression is NOT applied
-    if "Content-Encoding" in response.headers and "gzip" in response.headers["Content-Encoding"]:
-        del response.headers["Content-Encoding"]
+    # API responses are dynamic/live data (orders, inventory, admin state)
+    # and must never be cached by browsers or shared caches.
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    elif request.method == "GET" and request.url.path.startswith("/static/"):
+        # Public media uploads (product images, blog covers) — mutable but
+        # rarely change, so allow browser/CDN caching with revalidation.
+        response.headers["Cache-Control"] = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800"
+    elif request.method == "GET":
+        # Public read-only endpoints (health checks etc.).
+        response.headers["Cache-Control"] = "public, max-age=60, s-maxage=3600, stale-while-revalidate=86400"
+    else:
+        # Mutating or stateful requests — never cache.
+        response.headers["Cache-Control"] = "no-store"
 
     return response
+
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1000,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -93,11 +122,9 @@ app.include_router(inventory_router, prefix="/api/v1")
 app.include_router(purchase_order_router, prefix="/api/v1")
 app.include_router(transfer_router, prefix="/api/v1")
 app.include_router(gift_card_router, prefix="/api/v1")
+app.include_router(gift_card_product_router, prefix="/api/v1")
 app.include_router(companies_router, prefix="/api/v1")
 app.include_router(segments_router, prefix="/api/v1")
-app.include_router(growth_router, prefix="/api/v1")
-app.include_router(attribution_router, prefix="/api/v1")
-app.include_router(campaign_router, prefix="/api/v1")
 app.include_router(discounts_router, prefix="/api/v1")
 app.include_router(public_discounts_router, prefix="/api/v1")
 app.include_router(content_router, prefix="/api/v1")
@@ -107,17 +134,11 @@ app.include_router(files_router, prefix="/api/v1")
 app.include_router(menus_router, prefix="/api/v1")
 app.include_router(url_redirects_router, prefix="/api/v1")
 app.include_router(blog_posts_router, prefix="/api/v1")
-app.include_router(blog_comments_router, prefix="/api/v1")
 app.include_router(pages_router, prefix="/api/v1")
-app.include_router(markets_overview_router, prefix="/api/v1")
-app.include_router(market_router, prefix="/api/v1")
-app.include_router(market_catalog_router, prefix="/api/v1")
-app.include_router(rollout_router, prefix="/api/v1")
-app.include_router(analytics_router, prefix="/api/v1")
-app.include_router(reports_router, prefix="/api/v1")
-app.include_router(explorations_router, prefix="/api/v1")
-app.include_router(live_view_router, prefix="/api/v1")
+app.include_router(storefront_metaobject_router, prefix="/api/v1")
 app.include_router(settings_router, prefix="/api/v1")
+app.include_router(public_checkout_router, prefix="/api/v1")
+app.include_router(public_shipping_router, prefix="/api/v1")
 app.include_router(store_router, prefix="/api/v1")
 
 @app.get("/")

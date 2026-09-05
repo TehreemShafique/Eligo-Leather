@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
@@ -27,19 +29,9 @@ interface CustomerRow {
 
 export default function AdminCustomersPage() {
   const [searchQuery, setSearchQuery] = useState("")
+
   const [selectedIds, setSelectedIds] = useState<number[]>([])
-  const [customers, setCustomers] = useState<CustomerRow[]>([
-    {
-      id: 1,
-      displayName: "sajidwatto155@gmail.com",
-      name: "Sajid Watto",
-      email: "sajidwatto155@gmail.com",
-      subscriptionStatus: "not_subscribed",
-      location: "Pakistan",
-      ordersCount: 0,
-      amountSpent: "Rs 0.00",
-    },
-  ])
+  const [customers, setCustomers] = useState<CustomerRow[]>([])
   const [loading, setLoading] = useState(false)
 
   // Safe backend fetch with try/catch to prevent React overlay error
@@ -47,10 +39,10 @@ export default function AdminCustomersPage() {
     let isMounted = true
     const fetchCustomers = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/customers/")
+        const res = await fetch(`${API_BASE}/api/v1/customers/`)
         if (res.ok) {
           const data = await res.json()
-          if (isMounted && Array.isArray(data) && data.length > 0) {
+          if (isMounted && Array.isArray(data)) {
             const mapped: CustomerRow[] = data.map((c: any) => {
               const fullName = [c.first_name, c.last_name].filter(Boolean).join(" ")
               const hasEmail = Boolean(c.email && c.email.trim().length > 0)
@@ -78,17 +70,11 @@ export default function AdminCustomersPage() {
               }
             })
 
-            // Merge DB data with defaults while avoiding duplicates
-            setCustomers((prev) => {
-              const combined = [...mapped, ...prev]
-              const unique = Array.from(new Map(combined.map((item) => [item.displayName, item])).values())
-              return unique
-            })
+            setCustomers(mapped)
           }
         }
       } catch (err) {
-        // Silently catch fetch failures so UI never crashes with TypeError
-        console.log("Backend offline, rendering initial customer catalog.")
+        console.log("Backend offline, rendering empty customer catalog.")
       }
     }
 

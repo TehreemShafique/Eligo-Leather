@@ -53,16 +53,15 @@ async def _seed_order(db_session, order_number="ORD-SEED", **kwargs):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: create_order passes location_id to Order() (service.py:56) but Order has no location_id column",
-)
 async def test_create_order_computes_totals(db_session):
     data = OrderCreate(
         order_number="ORD-1001",
         channel="Online Store",
         shipping_cost=Decimal("5.00"),
         tax=Decimal("1.00"),
+        shipping_name="Ali Raza",
+        shipping_email="ali@example.com",
+        shipping_phone="03001234567",
         items=[
             OrderItemCreate(
                 product_name="Leather Belt",
@@ -76,6 +75,9 @@ async def test_create_order_computes_totals(db_session):
     assert order.subtotal == Decimal("20.00")
     assert order.total_price == Decimal("26.00")
     assert len(order.items) == 1
+    assert order.shipping_name == "Ali Raza"
+    assert order.shipping_email == "ali@example.com"
+    assert order.shipping_phone == "03001234567"
 
 
 # ---------------------------------------------------------------------------
@@ -349,15 +351,13 @@ async def test_add_and_remove_draft_order_item(db_session):
     assert await service.remove_draft_order_item(db_session, 9999, 1) is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: convert_draft_to_order passes location_id=None to Order() (service.py:558) but Order has no location_id column",
-)
 async def test_convert_draft_to_order(db_session):
     draft = await service.create_draft_order(
         db_session,
         DraftOrderCreate(
             draft_number="DRAFT-C",
+            customer_email="draft@example.com",
+            customer_phone="03001234567",
             items=[DraftOrderItemCreate(product_name="Belt", unit_price=Decimal("10.00"))],
         ),
     )
@@ -365,6 +365,35 @@ async def test_convert_draft_to_order(db_session):
     assert order is not None
     assert order.order_number == "ORD-CONVERTED"
     assert order.channel == "Draft Order"
+    assert order.shipping_email == "draft@example.com"
+    assert order.shipping_phone == "03001234567"
+
+
+async def test_convert_draft_to_order_falls_back_to_customer_profile(db_session):
+    from app.modules.customers.model import Customer
+
+    customer = Customer(
+        email="profile@example.com",
+        first_name="Sara",
+        last_name="Ahmed",
+        phone="03121234567",
+    )
+    db_session.add(customer)
+    await db_session.flush()
+
+    draft = await service.create_draft_order(
+        db_session,
+        DraftOrderCreate(
+            draft_number="DRAFT-PROFILE",
+            customer_id=customer.id,
+            items=[DraftOrderItemCreate(product_name="Belt", unit_price=Decimal("10.00"))],
+        ),
+    )
+    order = await service.convert_draft_to_order(db_session, draft.id, "ORD-PROFILE")
+    assert order is not None
+    assert order.shipping_email == "profile@example.com"
+    assert order.shipping_phone == "03121234567"
+    assert order.shipping_name == "Sara Ahmed"
 
 
 # ---------------------------------------------------------------------------

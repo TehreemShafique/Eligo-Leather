@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File as FileParam
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -6,6 +7,12 @@ from app.core.dependencies import require_admin
 
 from app.modules.settings.apps import service
 from app.modules.settings.apps.adapters import AdapterError
+from app.modules.content.service import convert_image_to_webp, save_upload
+from app.modules.settings.apps.reviews import (
+    create_review as db_create_review,
+    list_reviews as db_list_reviews,
+    review_summary as db_review_summary,
+)
 from app.modules.settings.apps.model import AppStatus
 from app.modules.settings.apps.schema import (
     AppActionRequest,
@@ -126,3 +133,145 @@ async def run_app_action(
 #   async def track_shipment(app_code: str, tracking_number: str, db=Depends(get_db)):
 #       return await service.run_action(app_code, "track_shipment", {"tracking_number": tracking_number}, db)
 # =====================================================================
+
+
+# =====================================================================
+# PUBLIC STOREFRONT ROUTER (no auth) - Supabase product reviews
+# ---------------------------------------------------------------------
+# Customers can read APPROVED reviews and submit new (pending) ones.
+# Approval/moderation stays admin-only via the action endpoint above.
+# =====================================================================
+
+REVIEWS_APP_CODE = "supabase_reviews"
+
+
+class PublicReviewCreate(BaseModel):
+    external_id: str | None = Field(
+        default=None, description="Product id/handle the review belongs to"
+    )
+    reviewer_name: str = Field(min_length=1, max_length=120)
+    reviewer_email: str | None = Field(default=None, max_length=200)
+    rating: int = Field(ge=1, le=5)
+    title: str | None = Field(default=None, max_length=200)
+    body: str = Field(min_length=1, max_length=4000)
+    images: list[str] = Field(
+        default_factory=list,
+        description="Public URLs of photos the customer uploaded for this review.",
+    )
+
+
+public_router = APIRouter(prefix="/apps", tags=["Apps - Storefront"])
+
+
+def _ensure_reviews_app(app_code: str) -> None:
+    if app_code != REVIEWS_APP_CODE:
+        raise HTTPException(status_code=404, detail="App not found")
+
+
+@public_router.get("/{app_code}/public/reviews/summary")
+async def public_review_summary(
+    app_code: str,
+    product_id: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Average star rating + review count computed from APPROVED reviews.
+
+    Reviews are read from the store's own database. When product_id is
+    provided it returns a single summary for that product; otherwise it
+    returns one summary per product across all approved reviews.
+    """
+    _ensure_reviews_app(app_code)
+    result = await db_review_summary(db, product_id)
+    if product_id:
+        if isinstance(result, dict):
+            return result
+        return {"product_id": str(product_id), "average_rating": 0, "review_count": 0}
+    return result or []
+
+
+@public_router.get("/{app_code}/public/reviews")
+async def public_list_reviews(
+    app_code: str,
+    product_id: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=12, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    """Approved reviews only - pending/rejected rows never reach the storefront."""
+    _ensure_reviews_app(app_code)
+    return await db_list_reviews(
+        db, product_id=product_id, status="approved", page=page, per_page=per_page
+    )
+
+
+@public_router.post("/{app_code}/public/reviews/upload")
+async def public_upload_review_photos(
+    app_code: str,
+    files: list[UploadFile] = FileParam(default=[]),
+):
+    """Upload one or more customer review photos (no auth).
+
+    Each image is converted to WebP and stored under /static/uploads; the
+    returned array of public URLs is then submitted with the review so the
+    admin and the storefront can display the customer's photos.
+    """
+    _ensure_reviews_app(app_code)
+    if app_code != REVIEWS_APP_CODE:
+        raise HTTPException(status_code=404, detail="App not found")
+    if not files:
+        return {"success": True, "urls": [], "message": "No files provided"}
+
+    MAX_FILES = 6
+    if len(files) > MAX_FILES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many images. Maximum is {MAX_FILES}.",
+        )
+
+    urls: list[str] = []
+    for file in files[:MAX_FILES]:
+        if file.size and file.size > 8 * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Image is too large: {file.filename}.",
+            )
+        content = await file.read()
+        if not content:
+            continue
+        try:
+            webp_bytes, webp_filename, _ = convert_image_to_webp(
+                content, file.filename or "review.png"
+            )
+            urls.append(save_upload(webp_bytes, webp_filename, folder="reviews"))
+        except Exception:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not process image: {file.filename}.",
+            )
+
+    if not urls:
+        raise HTTPException(status_code=400, detail="No valid images were uploaded.")
+
+    return {"success": True, "urls": urls}
+
+
+@public_router.post("/{app_code}/public/reviews", status_code=status.HTTP_201_CREATED)
+async def public_create_review(
+    app_code: str,
+    data: PublicReviewCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Customer-submitted review; stored as pending for admin moderation."""
+    _ensure_reviews_app(app_code)
+    return await db_create_review(
+        db,
+        {
+            "external_id": data.external_id,
+            "reviewer_name": data.reviewer_name,
+            "reviewer_email": data.reviewer_email or "",
+            "rating": data.rating,
+            "title": data.title or "",
+            "body": data.body,
+            "images": data.images or [],
+        },
+    )

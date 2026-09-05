@@ -141,7 +141,7 @@ async def test_collection_defaults(db_session):
     db_session.add(collection)
     await db_session.commit()
     await db_session.refresh(collection)
-    assert collection.theme_template == "Default collection"
+    assert collection.collection_type == "wallets"
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, String, Text, func
+from sqlalchemy import JSON, DateTime, Integer, String, Text, func
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -54,3 +54,44 @@ class StoreIntegration(Base):
     @property
     def has_credentials(self) -> bool:
         return bool(self.api_credentials)
+
+
+class ReviewStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class Review(Base):
+    """Customer product review stored directly in the eligo-backend database.
+
+    Customers submit reviews with an optional set of photo URLs (stored on
+    disk under /static/uploads). New reviews land as 'pending' until an admin
+    approves them via the Settings -> Apps -> Supabase Reviews moderation UI.
+    Only 'approved' reviews are returned to the storefront.
+    """
+
+    __tablename__ = "reviews"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    product_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    reviewer_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    reviewer_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    images: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    status: Mapped[ReviewStatus] = mapped_column(
+        SAEnum(ReviewStatus, name="review_status"),
+        default=ReviewStatus.pending,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

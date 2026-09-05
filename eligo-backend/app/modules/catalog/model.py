@@ -46,6 +46,13 @@ class WeightUnit(str, enum.Enum):
     oz = "oz"
 
 
+class CollectionType(str, enum.Enum):
+    wallets = "wallets"
+    belts = "belts"
+    cases = "cases"
+    keychains = "keychains"
+
+
 class CollectionRuleCondition(str, enum.Enum):
     tag = "tag"
     title = "title"
@@ -115,6 +122,12 @@ class Product(Base):
     tags: Mapped[str | None] = mapped_column(String, nullable=True)
     categories: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    @property
+    def category_list(self) -> list[str]:
+        if not self.categories:
+            return []
+        return [c.strip() for c in self.categories.split(",") if c.strip()]
+
     variants = relationship(
         "ProductVariant", back_populates="product",
         cascade="all, delete-orphan",
@@ -151,6 +164,14 @@ class ProductVariant(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     color_name: Mapped[str | None] = mapped_column(String, nullable=True)
     color_hex: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Links the variant to a reusable metaobject entry (e.g. a Color entry
+    # whose `code` was used to build the variant SKU: base SKU + "-" + code).
+    # Nullable so existing variants without a metaobject link keep working.
+    metaobject_entry_id: Mapped[int | None] = mapped_column(
+        ForeignKey("metaobject_entries.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     is_canonical: Mapped[bool] = mapped_column(Boolean, default=False)
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     sku: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
@@ -169,6 +190,9 @@ class ProductVariant(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     product = relationship("Product", back_populates="variants")
+    metaobject_entry = relationship(
+        "MetaobjectEntry", foreign_keys=[metaobject_entry_id],
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
@@ -223,18 +247,41 @@ class Collection(Base):
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     conditions: Mapped[str | None] = mapped_column(Text, nullable=True)
     channels: Mapped[str | None] = mapped_column(Text, nullable=True)
-    theme_template: Mapped[str] = mapped_column(String, default="Default collection")
+    collection_type: Mapped[str] = mapped_column(
+        SAEnum(CollectionType, name="collection_type"),
+        default=CollectionType.wallets,
+    )
     seo_title: Mapped[str | None] = mapped_column(String(70), nullable=True)
     seo_description: Mapped[str | None] = mapped_column(String(160), nullable=True)
     meta_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     url_handle: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
 
+    # Optional parent collection powering the storefront category tree
+    # (top-level row = collection, child rows = its categories).
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("collections.id", ondelete="SET NULL"), nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
-        onupdate=func.now(),
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
+
+
+# ===========================================================================
+# Product <-> Collection link
+# ===========================================================================
+
+class ProductCollection(Base):
+    __tablename__ = "product_collections"
+
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), primary_key=True,
+    )
+    collection_id: Mapped[int] = mapped_column(
+        ForeignKey("collections.id", ondelete="CASCADE"), primary_key=True,
     )
 
 
@@ -441,6 +488,67 @@ class GiftCard(Base):
         SAEnum(GiftCardStatus, name="gift_card_status"),
         default=GiftCardStatus.enabled,
     )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+
+
+# ===========================================================================
+# Gift Card Product (product listing for gift cards)
+# ===========================================================================
+
+class GiftCardProduct(Base):
+    __tablename__ = "gift_card_products"
+    __table_args__ = (
+        Index("ix_gift_card_products_url_handle", "url_handle"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    code: Mapped[str | None] = mapped_column(String, nullable=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        SAEnum(ProductStatus, name="gift_card_product_status"),
+        default=ProductStatus.draft,
+    )
+    base_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    compare_at_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    seo_title: Mapped[str | None] = mapped_column(String(70), nullable=True)
+    seo_description: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    meta_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    url_handle: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    product_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    images = relationship(
+        "GiftCardProductImage", back_populates="gift_card_product",
+        cascade="all, delete-orphan",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class GiftCardProductImage(Base):
+    __tablename__ = "gift_card_product_images"
+    __table_args__ = (
+        Index("ix_gc_product_images_gc_product_id", "gift_card_product_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    gift_card_product_id: Mapped[int] = mapped_column(
+        ForeignKey("gift_card_products.id", ondelete="CASCADE"), nullable=False,
+    )
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    alt_text: Mapped[str | None] = mapped_column(String, nullable=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+    gift_card_product = relationship("GiftCardProduct", back_populates="images")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),

@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -27,6 +29,7 @@ import {
   X,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useUnsavedChanges, useFormDirty } from "@/components/unsaved-changes"
 
 interface CustomerRow {
   id: number
@@ -42,6 +45,7 @@ interface CustomerRow {
 
 export default function NewSegmentPage() {
   const router = useRouter()
+  const { confirmLeave } = useUnsavedChanges()
 
   // Input states
   const [segmentName, setSegmentName] = useState("")
@@ -110,12 +114,14 @@ export default function NewSegmentPage() {
     },
   ])
 
+  const { reset } = useFormDirty({ segmentName, sqlQuery })
+
   // Fetch live customer records safely
   useEffect(() => {
     let isMounted = true
     const fetchCustomers = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/customers/")
+        const res = await fetch(`${API_BASE}/api/v1/customers/`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted && Array.isArray(data) && data.length > 0) {
@@ -192,10 +198,8 @@ export default function NewSegmentPage() {
       })
       return
     }
-    router.push(`/customers/merge?id1=${selectedIds[0]}&id2=${selectedIds[1]}`)
+    confirmLeave(() => router.push(`/customers/merge?id1=${selectedIds[0]}&id2=${selectedIds[1]}`))
   }
-
-  // Bulk Tag Add Action (DB Persistent)
   const handleSaveTagsToSelected = async () => {
     if (selectedTagsToApply.length === 0) {
       toast.error("Please select at least one tag.")
@@ -206,7 +210,7 @@ export default function NewSegmentPage() {
     try {
       await Promise.all(
         selectedIds.map((id) =>
-          fetch(`http://127.0.0.1:8000/api/v1/customers/${id}`, {
+          fetch(`${API_BASE}/api/v1/customers/${id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tags: tagsStr }),
@@ -230,7 +234,7 @@ export default function NewSegmentPage() {
     try {
       await Promise.all(
         selectedIds.map((id) =>
-          fetch(`http://127.0.0.1:8000/api/v1/customers/${id}`, {
+          fetch(`${API_BASE}/api/v1/customers/${id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tags: "" }),
@@ -303,7 +307,7 @@ export default function NewSegmentPage() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/segments/", {
+      const res = await fetch(`${API_BASE}/api/v1/segments/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -311,13 +315,16 @@ export default function NewSegmentPage() {
 
       if (res.ok) {
         toast.success(`Segment "${nameToSave}" saved to database!`)
+        reset()
         router.push("/customers/segments")
       } else {
         toast.success(`Segment "${nameToSave}" created!`)
+        reset()
         router.push("/customers/segments")
       }
     } catch (err) {
       toast.success(`Segment "${nameToSave}" created!`)
+      reset()
       router.push("/customers/segments")
     } finally {
       setSaving(false)
@@ -346,7 +353,7 @@ export default function NewSegmentPage() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/segments/", {
+      const res = await fetch(`${API_BASE}/api/v1/segments/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -355,15 +362,18 @@ export default function NewSegmentPage() {
       if (res.ok) {
         toast.success(`Duplicated segment "${duplicateName}" saved to DB!`)
         setSegmentName(duplicateName)
+        reset()
         router.push("/customers/segments")
       } else {
         toast.success(`Segment duplicated as "${duplicateName}"!`)
         setSegmentName(duplicateName)
+        reset()
         router.push("/customers/segments")
       }
     } catch (err) {
       toast.success(`Segment duplicated as "${duplicateName}"!`)
       setSegmentName(duplicateName)
+      reset()
       router.push("/customers/segments")
     } finally {
       setDuplicating(false)
@@ -409,7 +419,7 @@ export default function NewSegmentPage() {
   const handleDeleteSegment = () => {
     setMoreActionsOpen(false)
     toast.info("Segment deleted.")
-    router.push("/customers/segments")
+    confirmLeave(() => router.push("/customers/segments"))
   }
 
   return (

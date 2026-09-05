@@ -10,8 +10,10 @@ from app.db.base import Base
 
 
 class NotificationEventType(str, enum.Enum):
+    order_placed = "order_placed"
     order_confirmation = "order_confirmation"
     order_shipped = "order_shipped"
+    order_out_for_delivery = "order_out_for_delivery"
     order_delivered = "order_delivered"
     order_cancelled = "order_cancelled"
     return_requested = "return_requested"
@@ -30,6 +32,8 @@ class NotificationChannel(str, enum.Enum):
 class DispatchStatus(str, enum.Enum):
     success = "success"
     failed = "failed"
+    unavailable = "unavailable"
+    skipped = "skipped"
 
 
 class SenderConfig(Base):
@@ -163,6 +167,20 @@ class DispatchRule(Base):
     )
 
 
+class NotificationSetting(Base):
+    """Per-type enable/disable toggle for automatic notifications."""
+
+    __tablename__ = "notification_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    notification_type: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class NotificationLog(Base):
     """Audit trail of every email / webhook dispatch attempt."""
 
@@ -180,6 +198,15 @@ class NotificationLog(Base):
         SAEnum(DispatchStatus, name="dispatch_status"), default=DispatchStatus.success
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    template_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    provider: Mapped[str | None] = mapped_column(String, nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    customer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("customers.id", ondelete="SET NULL"), nullable=True
+    )
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

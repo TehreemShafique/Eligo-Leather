@@ -2,8 +2,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.settings.apps import adapters
-from app.modules.settings.apps.crypto import decrypt_credentials, encrypt_credentials
+from app.modules.settings.apps.crypto import encrypt_credentials
 from app.modules.settings.apps.model import AppStatus, StoreIntegration
+from app.modules.settings.apps.reviews import (
+    create_review,
+    list_reviews,
+    review_summary,
+    update_review_status as set_review_status,
+    delete_review as remove_review,
+)
 from app.modules.settings.apps.schema import AppDefinition, AppInstall, AppUpdate
 
 # =====================================================================
@@ -64,18 +71,6 @@ APP_DEFINITIONS: list[dict] = [
     #     ],
     #     "config_fields": [],
     # },
-    {
-        "code": "resend_email",
-        "name": "Resend Email",
-        "category": "email",
-        "description": "Simple email API for transactional mail.",
-        "actions": ["send_email"],
-        "credential_fields": [
-            {"name": "api_key", "label": "API Key", "type": "password"},
-            {"name": "from_email", "label": "From Email", "type": "text"},
-        ],
-        "config_fields": [],
-    },
     # ------------------------------------------------------------------
     # Payments
     # ------------------------------------------------------------------
@@ -151,7 +146,13 @@ APP_DEFINITIONS: list[dict] = [
         "name": "Supabase Reviews",
         "category": "reviews",
         "description": "Collect and display product reviews.",
-        "actions": ["fetch_reviews", "post_review"],
+        "actions": [
+            "fetch_reviews",
+            "post_review",
+            "update_review_status",
+            "delete_review",
+            "review_summary",
+        ],
         "credential_fields": [
             {"name": "api_token", "label": "API Token", "type": "password"},
             {"name": "shop_domain", "label": "Shop Domain", "type": "text"},
@@ -277,14 +278,70 @@ async def uninstall(app_code: str, db: AsyncSession) -> bool:
 
 
 async def run_action(app_code: str, action: str, payload: dict, db: AsyncSession) -> dict:
-    row = await get_installed(app_code, db)
     definition = get_definition(app_code)
 
-    if not definition or not row:
-        raise ValueError(f"App not installed or unknown: {app_code}")
+    if not definition:
+        raise ValueError(f"Unknown or unsupported app: {app_code}")
     if action not in definition["actions"]:
         raise ValueError(f"App '{app_code}' does not support action '{action}'")
 
-    credentials = decrypt_credentials(row.api_credentials)
-    result = await adapters.run(app_code, action, credentials, row.settings or {}, payload)
+    # Reviews are stored in the store's own database (no third-party provider
+    # and no credentials), so they work even if the app has not been
+    # "installed" — customers can always submit and admins can always moderate.
+    if app_code == "supabase_reviews":
+        return await _run_reviews_action(action, payload, db)
+
+    row = await get_installed(app_code, db)
+    if not row:
+        raise ValueError(f"App not installed or unknown: {app_code}")
+
+    result = await adapters.run(app_code, action, payload)
     return {"success": result.get("success", True), "action": action, "data": result}
+
+
+async def _run_reviews_action(
+    action: str, payload: dict, db: AsyncSession
+) -> dict:
+    """Local (self-hosted) review actions backed by the `reviews` table."""
+    if action == "fetch_reviews":
+        reviews = await list_reviews(
+            db,
+            product_id=payload.get("external_id") or payload.get("product_id"),
+            status=payload.get("status"),
+            page=int(payload.get("page", 1) or 1),
+            per_page=int(payload.get("per_page", 50) or 50),
+        )
+        return {
+            "success": True,
+            "action": action,
+            "data": {"success": True, "reviews": reviews},
+        }
+    if action == "post_review":
+        result = await create_review(db, payload)
+        return {"success": True, "action": action, "data": result}
+    if action == "review_summary":
+        summary = await review_summary(
+            db,
+            product_id=payload.get("external_id") or payload.get("product_id"),
+        )
+        if isinstance(summary, dict):
+            return {"success": True, "action": action, "data": summary}
+        return {"success": True, "action": action, "data": {"summaries": summary}}
+    if action == "update_review_status":
+        review_id = payload.get("review_id")
+        status = payload.get("status")
+        if review_id is None or status not in ("approved", "rejected", "pending"):
+            raise ValueError("review_id and status ('approved'|'rejected'|'pending') are required")
+        result = await set_review_status(db, int(review_id), status)
+        if result is None:
+            raise ValueError("Review not found")
+        return {"success": True, "action": action, "data": result}
+    if action == "delete_review":
+        review_id = payload.get("review_id")
+        if review_id is None:
+            raise ValueError("review_id is required")
+        deleted = await remove_review(db, int(review_id))
+        if not deleted:
+            raise ValueError("Review not found")
+        return {"success": True, "action": action, "data": {"success": True}}
+    raise ValueError(f"App 'supabase_reviews' does not support action '{action}'")

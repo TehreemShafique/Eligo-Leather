@@ -1,6 +1,9 @@
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict, EmailStr
+from typing import Annotated
+from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.modules.orders.model import (
     PaymentStatus, FulfillmentStatus, DeliveryStatus, DeliveryMethod,
@@ -17,9 +20,9 @@ class OrderItemCreate(BaseModel):
     product_name: str
     sku: str | None = None
     variant_title: str | None = None
-    quantity: int = 1
-    unit_price: Decimal
-    total_price: Decimal | None = None
+    quantity: Annotated[int, Field(ge=1, le=99)] = 1
+    unit_price: Annotated[Decimal, Field(ge=0)]
+    total_price: Annotated[Decimal | None, Field(ge=0)] = None
     requires_shipping: bool = True
     is_gift_card: bool = False
 
@@ -80,10 +83,11 @@ class OrderCreate(BaseModel):
     po_number: str | None = None
     shipping_address: str | None = None
     billing_address: str | None = None
-    customer_note: str | None = None
-    internal_note: str | None = None
     tracking_company: str | None = None
     tracking_number: str | None = None
+    shipping_name: str | None = None
+    shipping_email: str | None = None
+    shipping_phone: str | None = None
     items: list[OrderItemCreate] = []
 
 
@@ -100,8 +104,6 @@ class OrderUpdate(BaseModel):
     po_number: str | None = None
     shipping_address: str | None = None
     billing_address: str | None = None
-    customer_note: str | None = None
-    internal_note: str | None = None
     tracking_company: str | None = None
     tracking_number: str | None = None
     paid_amount: Decimal | None = None
@@ -113,16 +115,23 @@ class OrderOut(BaseModel):
     id: int
     order_number: str
     customer_id: int | None
-    location_id: int | None
+    customer_name: str | None = None
+    customer_email: str | None = None
+    customer_phone: str | None = None
+    # The Order model has no locations feature yet; kept optional so ORM
+    # serialization does not crash with AttributeError -> 500.
+    location_id: int | None = None
     fulfill_by: datetime | None
     cancelled_at: datetime | None
     closed_at: datetime | None
+    confirmed_at: datetime | None = None
     channel: str
     currency: str
     subtotal: Decimal
     shipping_cost: Decimal
     tax: Decimal
     total_price: Decimal
+    discount: Decimal = Decimal("0")
     paid_amount: Decimal
     payment_status: PaymentStatus
     fulfillment_status: FulfillmentStatus
@@ -134,8 +143,6 @@ class OrderOut(BaseModel):
     tracking_number: str | None
     shipping_address: str | None
     billing_address: str | None
-    customer_note: str | None
-    internal_note: str | None
     tags: str | None
     destination: str | None
     po_number: str | None
@@ -152,7 +159,9 @@ class OrderListOut(BaseModel):
     id: int
     order_number: str
     customer_id: int | None
+    customer_name: str | None = None
     fulfill_by: datetime | None
+    confirmed_at: datetime | None = None
     channel: str
     total_price: Decimal
     payment_status: PaymentStatus
@@ -163,6 +172,26 @@ class OrderListOut(BaseModel):
     created_at: datetime
     items: list[OrderItemOut] = []
     model_config = ConfigDict(from_attributes=True)
+
+
+# ========== Order Confirmation ==========
+
+class OrderConfirmationEmailStatus(str, Enum):
+    sent = "sent"                 # customer has an email and the dispatch succeeded
+    failed = "failed"             # customer has an email, send was attempted, SMTP failed
+    unavailable = "unavailable"   # customer has no email address
+    skipped = "skipped"           # email exists but intentionally not sent (disabled/missing)
+
+
+class ConfirmOrderResponse(BaseModel):
+    order_id: int
+    order_number: str
+    confirmed_at: datetime | None
+    already_confirmed: bool
+    email_status: OrderConfirmationEmailStatus = OrderConfirmationEmailStatus.skipped
+    email_message: str | None = None
+    courier_booked: bool
+    courier_error: str | None = None
 
 
 # ========== Export ==========

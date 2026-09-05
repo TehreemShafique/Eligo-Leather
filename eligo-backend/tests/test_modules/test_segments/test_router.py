@@ -15,9 +15,10 @@ async def _mk_segment(db_session, **kwargs):
 # Segment CRUD
 # ===========================================================================
 
-async def test_requires_auth(client):
+async def test_public_access(client):
     resp = await client.get("/api/v1/segments/")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 async def test_create_segment(client, auth_headers):

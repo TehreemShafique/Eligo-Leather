@@ -23,7 +23,7 @@ async def test_routes_require_auth(client):
 
 async def test_routes_require_admin(client, auth_headers):
     resp = await client.get(f"{BASE}/summary", headers=auth_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 403
     assert resp.json()["detail"] == "User is Not admin"
 
 

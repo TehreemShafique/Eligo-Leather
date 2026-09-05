@@ -1,13 +1,25 @@
 """Tests for app.modules.settings.notifications.service"""
 
 from copy import deepcopy
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import select
 
+from app.modules.customers.model import Customer
+from app.modules.orders.model import (
+    DeliveryMethod,
+    DeliveryStatus,
+    FulfillmentStatus,
+    LabelStatus,
+    Order,
+    PaymentStatus,
+    ReturnStatus,
+)
 from app.modules.settings.apps.crypto import decrypt_credentials
 from app.modules.settings.notifications import service
 from app.modules.settings.notifications.model import (
+    DispatchRule,
     DispatchStatus,
     EmailTemplate,
     NotificationChannel,
@@ -415,3 +427,626 @@ async def test_seed_defaults_is_idempotent(db_session):
     assert len(await service.list_rules(db_session)) == len(service.DEFAULT_RULES)
     rows = (await db_session.execute(select(SenderConfig))).scalars().all()
     assert len(rows) == 1
+
+
+async def test_order_placed_is_valid_event():
+    assert NotificationEventType.order_placed.value == "order_placed"
+    assert "order_placed" in {e.value for e in NotificationEventType}
+
+
+async def test_order_out_for_delivery_is_valid_event_and_seeded(db_session):
+    """The out-for-delivery event must exist, be a valid enum member, and be
+    seeded with an active customer email template + the correct subject."""
+    assert NotificationEventType.order_out_for_delivery.value == "order_out_for_delivery"
+    assert "order_out_for_delivery" in {e.value for e in NotificationEventType}
+
+    await service.seed_defaults(db_session)
+
+    template = await service.get_template_by_code("order_out_for_delivery", db_session)
+    assert template is not None
+    assert template.is_active is True
+    assert template.subject == "Your order {{ order_number }} is out for delivery today!"
+
+    result = await db_session.execute(
+        select(DispatchRule).where(
+            DispatchRule.event_type == NotificationEventType.order_out_for_delivery,
+        )
+    )
+    rule = result.scalar_one()
+    assert rule.recipient == "customer"
+    assert rule.is_active is True
+    assert rule.template_id == template.id
+
+
+async def test_seed_adds_missing_default_rule_individually(db_session):
+    """A DB that already has some dispatch rules must still receive a missing
+    default rule (e.g. the new order_placed rule) without duplicating rules."""
+    await service.seed_defaults(db_session)
+
+    # Simulate a database provisioned before order_placed existed: seed once,
+    # then delete every default rule (as if none had been created yet), then
+    # seed again and verify all defaults are back exactly once.
+    for r in await service.list_rules(db_session):
+        await db_session.delete(r)
+    await db_session.commit()
+    assert len(await service.list_rules(db_session)) == 0
+
+    await service.seed_defaults(db_session)
+
+    rules = await service.list_rules(db_session)
+    assert len(rules) == len(service.DEFAULT_RULES)
+    event_types = [r.event_type.value for r in rules]
+    assert event_types.count("order_placed") == 1
+    assert event_types.count("order_confirmation") == 1
+
+
+async def test_seed_leaves_existing_customized_rules_alone(db_session):
+    """Seeding must never overwrite or duplicate a rule an admin customized
+    (same event/channel/recipient but a different template)."""
+    await service.seed_defaults(db_session)
+
+    # Point the existing order_confirmation customer rule at a custom template.
+    from app.modules.settings.notifications.model import DispatchRule
+
+    custom = EmailTemplate(
+        code="custom_confirmation",
+        name="Custom",
+        subject="Custom subject",
+        html_body="<p>custom</p>",
+    )
+    db_session.add(custom)
+    await db_session.commit()
+
+    result = await db_session.execute(
+        select(DispatchRule).where(
+            DispatchRule.event_type == "order_confirmation",
+            DispatchRule.recipient == "customer",
+        )
+    )
+    existing_rule = result.scalar_one()
+    existing_rule.template_id = custom.id
+    await db_session.commit()
+
+    await service.seed_defaults(db_session)
+
+    result = await db_session.execute(
+        select(DispatchRule).where(
+            DispatchRule.event_type == "order_confirmation",
+            DispatchRule.recipient == "customer",
+        )
+    )
+    rules = result.scalars().all()
+    assert len(rules) == 1
+    assert rules[0].template_id == custom.id
+    total = len(await service.list_rules(db_session))
+    assert total == len(service.DEFAULT_RULES)
+
+
+# ---------------------------------------------------------------------------
+# Order-confirmation template upgrade (phone-confirmation wording)
+# ---------------------------------------------------------------------------
+
+
+def _confirmation_default():
+    return next(
+        (t for t in service.BUILT_IN_TEMPLATES if t["code"] == "order_confirmation"), None
+    )
+
+
+async def test_upgrade_converts_exact_old_builtin_to_new_default(db_session):
+    """An untouched built-in default (exact old fingerprint) is upgraded."""
+    old_default = _confirmation_default()
+    assert old_default is not None
+    # Reproduce the historical pre-workflow default so we can verify upgrade.
+    from app.modules.settings.notifications.model import EmailTemplate
+
+    template = EmailTemplate(
+        code="order_confirmation",
+        name="Order Confirmation",
+        subject=service.OLD_ORDER_CONFIRMATION_SUBJECT,
+        html_body=service.OLD_ORDER_CONFIRMATION_BODY,
+        is_built_in=True,
+    )
+    db_session.add(template)
+    await db_session.commit()
+
+    upgraded = await service._upgrade_default_order_confirmation_template(db_session)
+    assert upgraded is True
+
+    await db_session.refresh(template)
+    assert template.subject == old_default["subject"]
+    assert template.html_body == old_default["html_body"]
+    assert service.OLD_ORDER_CONFIRMATION_BODY not in template.html_body
+
+
+async def test_upgrade_leaves_customized_template_untouched(db_session):
+    """An admin-customized order_confirmation template is never overwritten."""
+    custom_subject = "Custom Order #{{ order_number }}"
+    custom_body = "<p>My own confirmation copy {{ order_number }}</p>"
+    from app.modules.settings.notifications.model import EmailTemplate
+
+    template = EmailTemplate(
+        code="order_confirmation",
+        name="My Custom",
+        subject=custom_subject,
+        html_body=custom_body,
+        is_built_in=False,
+    )
+    db_session.add(template)
+    await db_session.commit()
+
+    upgraded = await service._upgrade_default_order_confirmation_template(db_session)
+    assert upgraded is False
+
+    await db_session.refresh(template)
+    assert template.subject == custom_subject
+    assert template.html_body == custom_body
+
+
+async def test_upgrade_is_idempotent_on_already_new_template(db_session):
+    """An already-upgraded (new default) template is left untouched and the
+    function reports no upgrade happened."""
+    new_default = _confirmation_default()
+    from app.modules.settings.notifications.model import EmailTemplate
+
+    template = EmailTemplate(
+        code="order_confirmation",
+        name=new_default["name"],
+        subject=new_default["subject"],
+        html_body=new_default["html_body"],
+        is_built_in=True,
+    )
+    db_session.add(template)
+    await db_session.commit()
+
+    upgraded = await service._upgrade_default_order_confirmation_template(db_session)
+    assert upgraded is False
+
+    await db_session.refresh(template)
+    assert template.subject == new_default["subject"]
+    assert template.html_body == new_default["html_body"]
+
+
+async def test_upgrade_missing_template_is_noop(db_session):
+    """No order_confirmation row => no upgrade, no crash."""
+    upgraded = await service._upgrade_default_order_confirmation_template(db_session)
+    assert upgraded is False
+
+
+# ---------------------------------------------------------------------------
+# Email dispatch outcome markers (sent / failed / unavailable / skipped)
+# ---------------------------------------------------------------------------
+
+
+async def _email_rule(db_session, event="order_confirmation", template=None):
+    return await service.create_rule(
+        DispatchRuleCreate(
+            event_type=NotificationEventType(event),
+            channel=NotificationChannel.email,
+            recipient="customer",
+            template_id=template.id if template else None,
+        ),
+        db_session,
+    )
+
+
+async def test_dispatch_email_unavailable_when_no_recipient(db_session):
+    """No customer email => unavailable, not a failure."""
+    await service.get_sender_config(db_session)
+    rule = await _email_rule(db_session)
+    outcome = await service._dispatch_email(
+        db_session, "order_confirmation", rule, {"email": None, "customer_email": ""}
+    )
+    assert outcome == "unavailable"
+
+
+async def test_dispatch_email_skipped_when_sender_disabled(db_session):
+    await service.update_sender_config(SenderConfigUpdate(is_enabled=False), db_session)
+    rule = await _email_rule(db_session)
+    outcome = await service._dispatch_email(
+        db_session, "order_confirmation", rule, {"email": "c@example.com"}
+    )
+    assert outcome == "skipped"
+
+
+async def test_dispatch_email_skipped_when_template_missing(db_session):
+    await service.get_sender_config(db_session)
+    # Rule without a template and no template by that code exists.
+    rule = await _email_rule(db_session, template=None)
+    outcome = await service._dispatch_email(
+        db_session, "order_confirmation", rule, {"email": "c@example.com"}
+    )
+    assert outcome == "skipped"
+
+
+async def test_dispatch_email_failed_on_smtp_error(db_session, monkeypatch):
+    await service.get_sender_config(db_session)
+    template = await service.create_template(
+        EmailTemplateCreate(
+            code="order_confirmation", name="C", subject="Sub", html_body="<p>x</p>"
+        ),
+        db_session,
+    )
+    rule = await _email_rule(db_session, template=template)
+
+    async def _boom(config, to, subject, html_body):
+        raise RuntimeError("SMTP down")
+
+    monkeypatch.setattr(service, "_send_email", _boom)
+    outcome = await service._dispatch_email(
+        db_session, "order_confirmation", rule, {"email": "c@example.com"}
+    )
+    assert outcome == "failed"
+
+    logs = await service.list_logs(db_session)
+    assert len(logs) == 1
+    assert logs[0].status == DispatchStatus.failed
+
+
+async def test_dispatch_email_sent_on_success(db_session, monkeypatch):
+    await service.get_sender_config(db_session)
+    template = await service.create_template(
+        EmailTemplateCreate(
+            code="order_confirmation", name="C", subject="Sub", html_body="<p>x</p>"
+        ),
+        db_session,
+    )
+    rule = await _email_rule(db_session, template=template)
+
+    async def _ok(config, to, subject, html_body):
+        return {"provider": "smtp", "provider_message_id": None}
+
+    monkeypatch.setattr(service, "_send_email", _ok)
+    outcome = await service._dispatch_email(
+        db_session, "order_confirmation", rule, {"email": "c@example.com"}
+    )
+    assert outcome == "sent"
+
+    logs = await service.list_logs(db_session)
+    assert len(logs) == 1
+    assert logs[0].status == DispatchStatus.success
+
+
+# ---------------------------------------------------------------------------
+# Manual confirmation dispatcher: explicit customer-rule selection
+# ---------------------------------------------------------------------------
+
+
+async def _seed_customer_with_order(
+    db_session,
+    *,
+    email="c@example.com",
+    first_name="Ali",
+    last_name="Raza",
+    shipping_name=None,
+    shipping_email="__snapshot__",
+):
+    if shipping_email == "__snapshot__":
+        shipping_email = email
+    customer = Customer(
+        first_name=first_name,
+        last_name=last_name,
+        email=email,
+        phone="03001234567",
+        email_subscription=True,
+        sms_subscription=True,
+        whatsapp_subscription=False,
+        total_orders=0,
+        amount_spent=Decimal("0"),
+        tax_exempt=False,
+        deletable=False,
+        mergeable=False,
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    order = Order(
+        order_number="CN-9001",
+        customer_id=customer.id,
+        channel="Online Store",
+        currency="PKR",
+        shipping_name=shipping_name,
+        shipping_email=shipping_email,
+        subtotal=Decimal("2500.00"),
+        shipping_cost=Decimal("250.00"),
+        tax=Decimal("0.00"),
+        total_price=Decimal("2750.00"),
+        discount=Decimal("0.00"),
+        paid_amount=Decimal("0.00"),
+        payment_status=PaymentStatus.pending,
+        fulfillment_status=FulfillmentStatus.unfulfilled,
+        delivery_status=DeliveryStatus.pending,
+        delivery_method=DeliveryMethod.standard,
+        return_status=ReturnStatus.none,
+        label_status=LabelStatus.not_generated,
+    )
+    db_session.add(order)
+    await db_session.commit()
+    return customer, order
+
+
+async def _confirmation_template(db_session):
+    return await service.create_template(
+        EmailTemplateCreate(
+            code="order_confirmation", name="C", subject="Sub", html_body="<p>x</p>"
+        ),
+        db_session,
+    )
+
+
+async def _confirmation_rule(db_session, *, recipient="customer", active=True, template=None):
+    rule = await service.create_rule(
+        DispatchRuleCreate(
+            event_type=NotificationEventType.order_confirmation,
+            channel=NotificationChannel.email,
+            recipient=recipient,
+            template_id=template.id if template else None,
+        ),
+        db_session,
+    )
+    if not active:
+        rule.is_active = False
+        await db_session.commit()
+    return rule
+
+
+async def test_confirmation_rule_selection_uses_customer_rule(db_session, monkeypatch):
+    """A customer rule is used and the email goes to the customer."""
+    await service.get_sender_config(db_session)
+    await _confirmation_template(db_session)
+    customer, order = await _seed_customer_with_order(db_session)
+    await _confirmation_rule(db_session, recipient="customer")
+
+    sent_to = []
+
+    async def _record(config, to, subject, html_body):
+        sent_to.append(to)
+        return {"provider": "smtp", "provider_message_id": None}
+
+    monkeypatch.setattr(service, "_send_email", _record)
+    outcome = await service.dispatch_order_confirmation_email(db_session, order.id)
+    assert outcome == "sent"
+    assert sent_to == [customer.email]
+
+    logs = await service.list_logs(db_session)
+    assert len(logs) == 1
+    assert logs[0].recipient == customer.email
+
+
+async def test_confirmation_rule_selection_prefers_customer_over_admin(db_session, monkeypatch):
+    """When customer + admin rules exist, the customer rule wins; the admin
+    rule (which would also resolve) is explicitly never touched."""
+    await service.get_sender_config(db_session)
+    template = await _confirmation_template(db_session)
+    customer, order = await _seed_customer_with_order(db_session)
+    await _confirmation_rule(db_session, recipient="customer", template=template)
+    await _confirmation_rule(db_session, recipient="admin", template=template)
+
+    sent_to = []
+
+    async def _record(config, to, subject, html_body):
+        sent_to.append(to)
+        return {"provider": "smtp", "provider_message_id": None}
+
+    monkeypatch.setattr(service, "_send_email", _record)
+    outcome = await service.dispatch_order_confirmation_email(db_session, order.id)
+    assert outcome == "sent"
+    assert sent_to == [customer.email]
+
+    logs = await service.list_logs(db_session)
+    assert len(logs) == 1
+    assert logs[0].recipient == customer.email
+
+
+async def test_confirmation_rule_selection_skips_when_only_admin_and_literal_rules(db_session):
+    """Only admin/literal rules exist -> skipped, no email sent, no log."""
+    await service.get_sender_config(db_session)
+    template = await _confirmation_template(db_session)
+    _, order = await _seed_customer_with_order(db_session)
+    await _confirmation_rule(db_session, recipient="admin", template=template)
+    await _confirmation_rule(db_session, recipient="internal@example.com", template=template)
+
+    outcome = await service.dispatch_order_confirmation_email(db_session, order.id)
+    assert outcome == "skipped"
+    assert await service.list_logs(db_session) == []
+
+
+async def test_confirmation_rule_selection_unavailable_without_customer_email(db_session, monkeypatch):
+    """Customer has no email -> unavailable, and no unrelated rule runs."""
+    await service.get_sender_config(db_session)
+    template = await _confirmation_template(db_session)
+    _, order = await _seed_customer_with_order(db_session, email=None)
+    await _confirmation_rule(db_session, recipient="customer", template=template)
+    await _confirmation_rule(db_session, recipient="admin", template=template)
+
+    called = []
+
+    async def _record(config, to, subject, html_body):
+        called.append(to)
+        raise AssertionError("no email may be attempted without a customer email")
+
+    monkeypatch.setattr(service, "_send_email", _record)
+    outcome = await service.dispatch_order_confirmation_email(db_session, order.id)
+    assert outcome == "unavailable"
+    assert called == []
+    assert await service.list_logs(db_session) == []
+
+
+async def test_confirmation_rule_selection_skips_inactive_customer_rule(db_session):
+    """An inactive customer rule -> skipped, nothing sent or logged."""
+    await service.get_sender_config(db_session)
+    template = await _confirmation_template(db_session)
+    _, order = await _seed_customer_with_order(db_session)
+    await _confirmation_rule(db_session, recipient="customer", active=False, template=template)
+
+    outcome = await service.dispatch_order_confirmation_email(db_session, order.id)
+    assert outcome == "skipped"
+    assert await service.list_logs(db_session) == []
+
+
+# ---------------------------------------------------------------------------
+# Checkout name snapshot takes precedence over the shared customer profile
+# ---------------------------------------------------------------------------
+
+async def test_notification_payload_prefers_order_shipping_name():
+    """The notification payload uses the order's checkout ``shipping_name``
+    (e.g. a gift recipient) rather than the shared customer profile name."""
+    customer = Customer(
+        first_name="John",
+        last_name="Doe",
+        email="john@example.com",
+    )
+    order = Order(
+        order_number="CN-9002",
+        customer=customer,
+        channel="Online Store",
+        currency="PKR",
+        shipping_name="Jane Smith",
+        subtotal=Decimal("2500.00"),
+        shipping_cost=Decimal("250.00"),
+        tax=Decimal("0.00"),
+        total_price=Decimal("2750.00"),
+        discount=Decimal("0.00"),
+        paid_amount=Decimal("0.00"),
+        payment_status=PaymentStatus.pending,
+        fulfillment_status=FulfillmentStatus.unfulfilled,
+        delivery_status=DeliveryStatus.pending,
+        delivery_method=DeliveryMethod.standard,
+        return_status=ReturnStatus.none,
+        label_status=LabelStatus.not_generated,
+    )
+    customer_name = service._customer_display_name(order, customer)
+    assert customer_name == "Jane Smith"
+
+    payload = service._build_order_notification_payload(order, customer_name)
+    assert payload["customer_name"] == "Jane Smith"
+
+
+async def test_notification_payload_falls_back_to_profile_name():
+    """Without a checkout ``shipping_name``, the shared profile name is used."""
+    order = Order(
+        order_number="CN-9003",
+        customer=None,
+        channel="Online Store",
+        currency="PKR",
+        shipping_name=None,
+        subtotal=Decimal("2500.00"),
+        shipping_cost=Decimal("250.00"),
+        tax=Decimal("0.00"),
+        total_price=Decimal("2750.00"),
+        discount=Decimal("0.00"),
+        paid_amount=Decimal("0.00"),
+        payment_status=PaymentStatus.pending,
+        fulfillment_status=FulfillmentStatus.unfulfilled,
+        delivery_status=DeliveryStatus.pending,
+        delivery_method=DeliveryMethod.standard,
+        return_status=ReturnStatus.none,
+        label_status=LabelStatus.not_generated,
+    )
+    customer = Customer(
+        first_name="John",
+        last_name="Doe",
+        email="john@example.com",
+    )
+    assert service._customer_display_name(order, customer) == "John Doe"
+
+
+async def test_order_confirmation_email_greets_checkout_name(db_session, monkeypatch):
+    """End-to-end: confirmation email payload greets the checkout name even
+    when the shared customer profile carries a different name."""
+    await service.get_sender_config(db_session)
+    await service.create_template(
+        EmailTemplateCreate(
+            code="order_confirmation",
+            name="C",
+            subject="Hello {{ customer_name }}",
+            html_body="<p>Hi {{ customer_name }}, thanks for your order.</p>",
+        ),
+        db_session,
+    )
+    customer, order = await _seed_customer_with_order(
+        db_session,
+        first_name="John",
+        last_name="Doe",
+        shipping_name="Jane Smith",
+    )
+    await _confirmation_rule(db_session, recipient="customer")
+
+    rendered = {}
+
+    async def _record(config, to, subject, html_body):
+        rendered["subject"] = subject
+        rendered["html_body"] = html_body
+        return {"provider": "smtp", "provider_message_id": None}
+
+    monkeypatch.setattr(service, "_send_email", _record)
+    outcome = await service.dispatch_order_confirmation_email(db_session, order.id)
+    assert outcome == "sent"
+    assert "Jane Smith" in rendered["subject"]
+    assert "John Doe" not in rendered["subject"]
+    assert "Jane Smith" in rendered["html_body"]
+    assert "John Doe" not in rendered["html_body"]
+
+
+# ---------------------------------------------------------------------------
+# Order email snapshot survives a later Customer.email edit
+# ---------------------------------------------------------------------------
+
+async def test_customer_email_prefers_order_shipping_email_snapshot(db_session):
+    """Changing the linked Customer profile email must NOT change
+    `order.customer_email` when the order carries a checkout snapshot."""
+    customer, order = await _seed_customer_with_order(
+        db_session, email="original@example.com", shipping_email="checkout@example.com"
+    )
+    assert order.shipping_email == "checkout@example.com"
+    assert order.customer_email == "checkout@example.com"
+
+    customer.email = "changed@example.com"
+    await db_session.commit()
+
+    result = await db_session.execute(
+        select(Order).where(Order.id == order.id)
+    )
+    order = result.scalar_one()
+    assert order.customer_email == "checkout@example.com"
+
+
+async def test_order_confirmation_email_uses_snapshot_after_customer_email_edit(
+    db_session, monkeypatch
+):
+    """The confirmation dispatch still sends to the checkout snapshot address
+    even after the shared customer profile email is edited."""
+    await service.get_sender_config(db_session)
+    template = await service.create_template(
+        EmailTemplateCreate(
+            code="order_confirmation",
+            name="C",
+            subject="Sub",
+            html_body="<p>Hi {{ customer_name }}</p>",
+        ),
+        db_session,
+    )
+    customer, order = await _seed_customer_with_order(
+        db_session, email="original@example.com", shipping_email="checkout@example.com"
+    )
+    await _confirmation_rule(db_session, recipient="customer", template=template)
+
+    # Admin edits the customer profile email after the order was placed.
+    customer.email = "changed@example.com"
+    await db_session.commit()
+
+    sent_to = []
+    rendered = {}
+
+    async def _record(config, to, subject, html_body):
+        sent_to.append(to)
+        rendered.update(subject=subject, html_body=html_body)
+        return {"provider": "smtp", "provider_message_id": None}
+
+    monkeypatch.setattr(service, "_send_email", _record)
+    outcome = await service.dispatch_order_confirmation_email(db_session, order.id)
+    assert outcome == "sent"
+    assert sent_to == ["checkout@example.com"]
+    assert "changed@example.com" not in sent_to
+
+    logs = await service.list_logs(db_session)
+    assert logs[-1].recipient == "checkout@example.com"

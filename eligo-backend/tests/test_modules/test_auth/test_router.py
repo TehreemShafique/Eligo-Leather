@@ -89,11 +89,11 @@ async def test_me_requires_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_me_with_invalid_token_returns_404(client):
+async def test_me_with_invalid_token_returns_401(client):
     response = await client.get(
         "/api/v1/auth/me", headers={"Authorization": "Bearer not-a-real-token"}
     )
-    assert response.status_code == 404
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio

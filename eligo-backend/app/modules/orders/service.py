@@ -7,11 +7,13 @@ from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.modules.customers.model import Customer, CustomerAddress
+from app.modules.catalog.model import Product, ProductVariant
 from app.modules.orders.model import (
     Order, OrderItem, OrderNote, OrderAuditLog,
     DraftOrder, DraftOrderItem,
     AbandonedCheckout, AbandonedCheckoutItem,
-    PaymentStatus, FulfillmentStatus, ReturnStatus,
+    PaymentStatus, FulfillmentStatus, ReturnStatus, DeliveryStatus,
 )
 from app.modules.orders.schema import (
     OrderCreate, OrderUpdate, OrderNoteCreate,
@@ -54,7 +56,6 @@ async def create_order(db: AsyncSession, data: OrderCreate) -> Order:
     order = Order(
         order_number=data.order_number,
         customer_id=data.customer_id,
-        location_id=data.location_id,
         fulfill_by=data.fulfill_by,
         channel=data.channel,
         currency=data.currency,
@@ -68,8 +69,9 @@ async def create_order(db: AsyncSession, data: OrderCreate) -> Order:
         po_number=data.po_number,
         shipping_address=data.shipping_address,
         billing_address=data.billing_address,
-        customer_note=data.customer_note,
-        internal_note=data.internal_note,
+        shipping_name=data.shipping_name,
+        shipping_email=data.shipping_email,
+        shipping_phone=data.shipping_phone,
         tracking_company=data.tracking_company,
         tracking_number=data.tracking_number,
         items=[
@@ -97,26 +99,35 @@ async def create_order(db: AsyncSession, data: OrderCreate) -> Order:
     await db.commit()
     await db.refresh(order, attribute_names=["items", "audit_logs"])
 
-    try:
-        import asyncio
-        from app.modules.settings.notifications.service import background_dispatch_order_confirmation
-        asyncio.create_task(background_dispatch_order_confirmation(order.id))
-    except Exception:
-        pass
-
     return order
 
 
-async def get_order(db: AsyncSession, order_id: int) -> Order | None:
-    result = await db.execute(
+async def get_order(
+    db: AsyncSession, order_id: int | str
+) -> Order | None:
+    """Resolve an order by its numeric db id or by its human-friendly
+    ``order_number`` string (e.g. "12348")."""
+    query = (
         select(Order)
         .options(
             selectinload(Order.items),
             selectinload(Order.audit_logs),
             selectinload(Order.notes),
+            selectinload(Order.customer),
         )
-        .where(Order.id == order_id)
     )
+    if isinstance(order_id, str) and not order_id.isdigit():
+        query = query.where(Order.order_number == order_id)
+    else:
+        num = int(order_id)
+        query = query.where(
+            or_(
+                Order.id == num,
+                Order.order_number == str(num),
+                Order.order_number == f"#{num}",
+            )
+        )
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
@@ -131,11 +142,15 @@ async def list_orders(
     channel: str | None = None,
     skip: int = 0,
     limit: int = 50,
+    customer_id: int | None = None,
 ) -> list[Order]:
-    query = select(Order).options(selectinload(Order.items))
+    query = select(Order).options(selectinload(Order.items), selectinload(Order.customer))
 
     if is_archived is not None:
         query = query.where(Order.is_archived == is_archived)
+
+    if customer_id is not None:
+        query = query.where(Order.customer_id == customer_id)
 
     if payment_status is not None:
         query = query.where(Order.payment_status == payment_status)
@@ -201,6 +216,26 @@ async def archive_order(db: AsyncSession, order_id: int) -> Order | None:
 # Restock
 # ================================================================
 
+async def get_variant_commitments(db: AsyncSession) -> dict[int, int]:
+    """Committed units per variant id.
+
+    A unit is "committed" while it belongs to an order that is neither
+    cancelled (``orders.cancelled_at`` set) nor restocked. Available stock on
+    the storefront/admin side is ``on_hand - committed``.
+    """
+    result = await db.execute(
+        select(OrderItem.variant_id, func.coalesce(func.sum(OrderItem.quantity), 0))
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(
+            OrderItem.variant_id.isnot(None),
+            Order.cancelled_at.is_(None),
+            OrderItem.restocked.is_(False),
+        )
+        .group_by(OrderItem.variant_id)
+    )
+    return {int(variant_id): int(qty) for variant_id, qty in result.all()}
+
+
 async def restock_order_items(db: AsyncSession, order_id: int) -> Order | None:
     """Return cancelled/returned order items back to inventory."""
     order = await get_order(db, order_id)
@@ -208,10 +243,22 @@ async def restock_order_items(db: AsyncSession, order_id: int) -> Order | None:
         return None
 
     restocked_count = 0
+    variant_restock: dict[int, int] = {}
     for item in order.items:
         if not item.restocked and item.variant_id:
             item.restocked = True
             restocked_count += 1
+            variant_restock[int(item.variant_id)] = (
+                variant_restock.get(int(item.variant_id), 0) + item.quantity
+            )
+
+    if variant_restock:
+        variant_rows = (
+            await db.execute(select(ProductVariant).where(ProductVariant.id.in_(variant_restock.keys())))
+        ).scalars().all()
+        for variant in variant_rows:
+            if variant.inventory_tracked:
+                variant.inventory_quantity = (variant.inventory_quantity or 0) + variant_restock[variant.id]
 
     if restocked_count > 0:
         order.return_status = ReturnStatus.none
@@ -339,16 +386,17 @@ async def get_orders_analytics(
     db: AsyncSession,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
-    location_id: int | None = None,
 ) -> OrdersAnalyticsSummary:
-    query = select(Order).where(Order.is_archived == False)
+    query = (
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.is_archived == False)
+    )
 
     if date_from:
         query = query.where(Order.created_at >= date_from)
     if date_to:
         query = query.where(Order.created_at <= date_to)
-    if location_id:
-        query = query.where(Order.location_id == location_id)
 
     result = await db.execute(query)
     orders = list(result.scalars().all())
@@ -561,20 +609,43 @@ async def convert_draft_to_order(db: AsyncSession, draft_id: int, order_number: 
     if not draft:
         return None
 
+    # Preserve the customer contact snapshot onto the resulting order so a
+    # later edit to the shared Customer profile never rewrites this order's
+    # history. Prefer the draft's own fields, then fall back to the linked
+    # customer profile.
+    customer = None
+    if draft.customer_id:
+        customer = (
+            await db.execute(select(Customer).where(Customer.id == draft.customer_id))
+        ).scalar_one_or_none()
+    customer_name_parts = [
+        p for p in (
+            (getattr(customer, "first_name", None) or "") if customer else "",
+            (getattr(customer, "last_name", None) or "") if customer else "",
+        ) if p
+    ]
+    shipping_name = " ".join(customer_name_parts).strip() or (
+        getattr(customer, "email", None) if customer else None
+    )
+    shipping_email = draft.customer_email or (getattr(customer, "email", None) if customer else None)
+    shipping_phone = draft.customer_phone or (getattr(customer, "phone", None) if customer else None)
+
     order = Order(
         order_number=order_number,
         customer_id=draft.customer_id,
-        location_id=None,
         channel="Draft Order",
         currency=draft.currency,
         subtotal=draft.subtotal,
         shipping_cost=draft.shipping_cost,
         tax=draft.tax,
         total_price=draft.total_price,
+        discount=draft.discount,
         shipping_address=draft.shipping_address,
         billing_address=draft.billing_address,
-        internal_note=draft.note,
         tags=draft.tags,
+        shipping_name=shipping_name,
+        shipping_email=shipping_email,
+        shipping_phone=shipping_phone,
         items=[
             OrderItem(
                 product_id=item.product_id,
@@ -690,7 +761,7 @@ async def update_abandoned_checkout(
 async def send_recovery_email(
     db: AsyncSession, checkout_id: int, recovery_url: str | None = None
 ) -> AbandonedCheckout | None:
-    """Simulate sending a recovery email. In production, integrate with email service."""
+    """Send a recovery email via the notification dispatch engine."""
     checkout = await get_abandoned_checkout(db, checkout_id)
     if not checkout:
         return None
@@ -698,6 +769,22 @@ async def send_recovery_email(
     checkout.recovery_status = "email_sent"
     checkout.recovery_email_sent_at = datetime.now(timezone.utc)
     checkout.recovery_attempts += 1
+
+    from app.modules.settings.notifications.service import background_dispatch_event
+    try:
+        import asyncio
+        asyncio.create_task(background_dispatch_event("abandoned_checkout", {
+            "email": checkout.customer_email,
+            "customer_email": checkout.customer_email,
+            "customer_name": checkout.customer_name or "Valued Customer",
+            "order_number": checkout.checkout_reference,
+            "total_price": str(checkout.total_price),
+            "currency": checkout.currency or "PKR",
+            "recovery_url": recovery_url or "http://localhost:3000/cart",
+            "store_name": "Eligo Leather",
+        }))
+    except Exception:  # nosec B110
+        pass
 
     await db.commit()
     await db.refresh(checkout, attribute_names=["items"])
@@ -742,6 +829,12 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
             items = [payload]
 
     updated_orders = []
+    # Notifications are collected during the loop and dispatched only after the
+    # enclosing transaction commits successfully. This guarantees an email is
+    # never sent for a status/audit change that is later rolled back, and that
+    # each transitioned order's notification is sent exactly once.
+    pending_dispatches = []
+
     for entry in items:
         if not isinstance(entry, dict):
             continue
@@ -763,35 +856,124 @@ async def process_leopard_webhook_payload(db: AsyncSession, payload: dict) -> di
             cn_str = str(cn_number).strip()
             cn_clean = cn_str.replace("ID", "").strip()
 
+            # Upsert to leopard_shipments so it shows in the Order tab
+            from app.modules.orders.leopard_service import upsert_shipment_from_webhook
+            await upsert_shipment_from_webhook(db, cn_str, status_str, entry)
+
             result = await db.execute(
-                select(Order).where(
+                select(Order)
+                .options(selectinload(Order.customer))
+                .where(
                     or_(
                         Order.tracking_number == cn_str,
                         Order.tracking_number == f"ID{cn_clean}",
                         Order.tracking_number == cn_clean,
                     )
                 )
+                .with_for_update()
             )
             order = result.scalar_one_or_none()
             if order:
-                old_status = order.fulfillment_status
-                if "delivered" in status_str.lower():
-                    order.fulfillment_status = "Fulfilled (Delivered)"
-                elif "dispatch" in status_str.lower() or "transit" in status_str.lower():
-                    order.fulfillment_status = f"Fulfilled ({status_str})"
-                elif "return" in status_str.lower() or "cancel" in status_str.lower():
-                    order.fulfillment_status = f"Returned ({status_str})"
+                old_fulfillment = order.fulfillment_status
+                old_delivery = order.delivery_status
+                lower_status = status_str.lower()
+                if "delivered" in lower_status:
+                    order.fulfillment_status = FulfillmentStatus.fulfilled
+                elif "return" in lower_status or "cancel" in lower_status:
+                    order.fulfillment_status = FulfillmentStatus.unfulfilled
+                elif "dispatch" in lower_status or "transit" in lower_status:
+                    order.fulfillment_status = FulfillmentStatus.fulfilled
 
-                await _log_audit(
-                    db,
-                    order.id,
-                    "leopard_webhook_update",
-                    f"Leopard status updated from '{old_status}' to '{order.fulfillment_status}' via webhook.",
-                    actor_name="Leopard Courier Webhook",
-                    metadata_json=json.dumps(entry),
-                )
-                updated_orders.append({"order_id": order.id, "cn_number": cn_number, "status": status_str})
+                # Mirror the courier lifecycle onto the structured
+                # delivery_status so the storefront and admin track shipping
+                # separately from payment/fulfillment.
+                delivery_mapping = [
+                    (("out for delivery", "out-for-delivery"), DeliveryStatus.out_for_delivery),
+                    (("return",), DeliveryStatus.returned),
+                    (("undeliver", "refuse", "fail", "cancel"), DeliveryStatus.failed),
+                    (("deliver",), DeliveryStatus.delivered),
+                    (("picked", "pickup", "pick up"), DeliveryStatus.picked_up),
+                    (("book",), DeliveryStatus.booked),
+                    (("dispatch", "transit", "move", "shift", "on the way", "in process"), DeliveryStatus.in_transit),
+                ]
+                for keywords, target in delivery_mapping:
+                    if any(keyword in lower_status for keyword in keywords):
+                        order.delivery_status = target
+                        break
 
+                fulfilled_changed = order.fulfillment_status != old_fulfillment
+                delivery_changed = order.delivery_status != old_delivery
+                transitioned = fulfilled_changed or delivery_changed
+
+                if transitioned:
+                    await _log_audit(
+                        db,
+                        order.id,
+                        "leopard_webhook_update",
+                        f"Leopard status updated from '{old_fulfillment}' to '{order.fulfillment_status}' via webhook.",
+                        actor_name="Leopard Courier Webhook",
+                        metadata_json=json.dumps(entry),
+                    )
+                    updated_orders.append({"order_id": order.id, "cn_number": cn_number, "status": status_str})
+
+                # Only send a lifecycle email when the structured delivery_status
+                # genuinely transitioned to the corresponding end state. A mere
+                # fulfillment-status change (or a re-arrival of the same courier
+                # status) must not re-trigger a shipped/out-for-delivery/delivered
+                # notification.
+                if delivery_changed and order.delivery_status == DeliveryStatus.out_for_delivery:
+                    pending_dispatches.append(
+                        ("order_out_for_delivery", {
+                            "email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                            "order_number": order.order_number,
+                            "tracking_number": str(cn_number),
+                            "tracking_company": "Leopards Courier",
+                            "destination_city": order.shipping_city or order.destination or "",
+                            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+                            "total_price": str(order.total_price),
+                        })
+                    )
+                elif delivery_changed and order.delivery_status == DeliveryStatus.delivered:
+                    pending_dispatches.append(
+                        ("order_delivered", {
+                            "email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                            "order_number": order.order_number,
+                            "tracking_number": str(cn_number),
+                            "tracking_company": "Leopards Courier",
+                            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+                            "total_price": str(order.total_price),
+                        })
+                    )
+                elif delivery_changed and order.delivery_status == DeliveryStatus.in_transit:
+                    pending_dispatches.append(
+                        ("order_shipped", {
+                            "email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_email": getattr(order, "customer_email", None) or entry.get("email"),
+                            "customer_name": getattr(order, "customer_name", None) or "Valued Customer",
+                            "order_number": order.order_number,
+                            "tracking_number": str(cn_number),
+                            "tracking_company": "Leopards Courier",
+                            "currency": str(order.currency) if hasattr(order, "currency") else "PKR",
+                            "total_price": str(order.total_price),
+                        })
+                    )
+
+    # Commit all intended DB transitions (status changes + audit logs) before
+    # dispatching any notifications, so a rollback never leaks an email.
     await db.commit()
+
+    if pending_dispatches:
+        from app.modules.settings.notifications.service import background_dispatch_event
+        import asyncio
+        for event, payload in pending_dispatches:
+            try:
+                asyncio.create_task(background_dispatch_event(event, payload))
+            except Exception:  # nosec B110
+                pass
+
     return {"matched_updated": len(updated_orders), "updated": updated_orders}
 

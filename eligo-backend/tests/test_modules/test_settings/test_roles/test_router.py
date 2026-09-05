@@ -41,15 +41,13 @@ async def test_list_roles_empty_404(client, admin_headers):
     assert resp.json()["detail"] == "Roles are not found."
 
 
-async def test_list_roles_hits_user_count_bug(client, admin_headers, db_session):
-    """GET /api/v1/settings/roles/list-roles 500s once a role exists: the
-    service builds ``select(func.count(User.id).where(...))`` which has no
-    ``where`` method (see app/modules/settings/roles/services.py). This pins
-    the current behavior so the failure is visible instead of silently
-    passing."""
+async def test_list_roles_returns_seeded_roles(client, admin_headers, db_session):
     await services.seed_system_roles(db_session)
-    with pytest.raises(AttributeError):
-        await client.get("/api/v1/settings/roles/list-roles", headers=admin_headers)
+    resp = await client.get("/api/v1/settings/roles/list-roles", headers=admin_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == len(services.SYSTEM_ROLES)
+    assert all(role["user_count"] == 0 for role in body)
 
 
 # ---------------------------------------------------------------------------

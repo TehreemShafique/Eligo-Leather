@@ -52,6 +52,7 @@ export interface Order {
   shipping_cost: number
   tax: number
   total: number
+  discount?: number
   paid_amount: number
   balance_due: number
   payment_status: PaymentStatus
@@ -63,8 +64,6 @@ export interface Order {
   po_number?: string
   shipping_address?: string
   billing_address?: string
-  customer_note?: string
-  internal_note?: string
   tracking_company?: string
   tracking_number?: string
   risk_level?: string

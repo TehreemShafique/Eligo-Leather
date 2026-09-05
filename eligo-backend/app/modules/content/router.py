@@ -9,9 +9,12 @@ from app.modules.content.schema import (
     MetaobjectDefinitionUpdate,
     MetaobjectDefinitionOut,
     MetaobjectDefinitionWithEntries,
+    MetaobjectDefinitionWithFields,
+    MetaobjectDefinitionFieldOut,
     MetaobjectEntryCreate,
     MetaobjectEntryUpdate,
     MetaobjectEntryOut,
+    MetaobjectEntryWithValues,
     FileCreate,
     FileUpdate,
     FileOut,
@@ -28,11 +31,9 @@ from app.modules.content.schema import (
     BlogPostCreate,
     BlogPostUpdate,
     BlogPostOut,
-    BlogCommentCreate,
-    BlogCommentUpdate,
-    BlogCommentOut,
     PageCreate,
     PageUpdate,
+    PageBulkDelete,
     PageOut,
     ContentOverview,
 )
@@ -74,7 +75,7 @@ async def create_metaobject_definition(
     return await service.create_metaobject_definition(db, data)
 
 
-@metaobject_definition_router.get("/", response_model=list[MetaobjectDefinitionOut])
+@metaobject_definition_router.get("/", response_model=list[MetaobjectDefinitionWithFields])
 async def list_metaobject_definitions(
     search: str | None = Query(None),
     skip: int = Query(0, ge=0),
@@ -156,7 +157,7 @@ async def create_metaobject_entry(
     return await service.create_metaobject_entry(db, data)
 
 
-@metaobject_entry_router.get("/", response_model=list[MetaobjectEntryOut])
+@metaobject_entry_router.get("/", response_model=list[MetaobjectEntryWithValues])
 async def list_metaobject_entries(
     definition_id: int | None = Query(None),
     status_filter: str | None = Query(None, alias="status"),
@@ -177,7 +178,7 @@ async def list_metaobject_entries(
     )
 
 
-@metaobject_entry_router.get("/{entry_id}", response_model=MetaobjectEntryOut)
+@metaobject_entry_router.get("/{entry_id}", response_model=MetaobjectEntryWithValues)
 async def get_metaobject_entry(
     entry_id: int,
     db: AsyncSession = Depends(get_db),
@@ -191,7 +192,7 @@ async def get_metaobject_entry(
     return obj
 
 
-@metaobject_entry_router.patch("/{entry_id}", response_model=MetaobjectEntryOut)
+@metaobject_entry_router.patch("/{entry_id}", response_model=MetaobjectEntryWithValues)
 async def update_metaobject_entry(
     entry_id: int,
     data: MetaobjectEntryUpdate,
@@ -244,16 +245,23 @@ async def create_file(
 async def upload_file(
     file: UploadFile = FileParam(...),
     alt_text: str | None = Form(None),
+    folder: str = Query("general"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Upload any image format (PNG, JPG, GIF) - automatically converts to .webp format."""
+    """Upload any image format (PNG, JPG, GIF) - automatically converts to .webp format.
+
+    Use the ``folder`` query parameter to organise uploads in R2
+    (e.g. ``blogs``, ``products``, ``reviews``).  When R2 is not configured
+    the folder parameter is ignored and files are saved to local disk.
+    """
     content = await file.read()
     webp_bytes, webp_filename, mime_type = service.convert_image_to_webp(content, file.filename or "image.png")
+    url_path = service.save_upload(webp_bytes, webp_filename, folder=folder)
 
     file_data = FileCreate(
         filename=webp_filename,
         original_filename=file.filename or webp_filename,
-        url=f"/static/uploads/{webp_filename}",
+        url=url_path,
         mime_type=mime_type,
         size_bytes=len(webp_bytes),
         alt_text=alt_text or webp_filename,
@@ -614,84 +622,6 @@ async def delete_blog_post(
 
 
 # ===========================================================================
-# Blog Comments
-# ===========================================================================
-
-blog_comments_router = APIRouter(
-    prefix="/blog-comments",
-    tags=["Blog Comments"],
-    dependencies=[Depends(get_current_user)],
-)
-
-
-@blog_comments_router.post(
-    "/", response_model=BlogCommentOut, status_code=status.HTTP_201_CREATED,
-)
-async def create_blog_comment(
-    data: BlogCommentCreate,
-    db: AsyncSession = Depends(get_db),
-):
-    return await service.create_blog_comment(db, data)
-
-
-@blog_comments_router.get("/", response_model=list[BlogCommentOut])
-async def list_blog_comments(
-    post_id: int | None = Query(None),
-    status_filter: str | None = Query(None, alias="status"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
-):
-    return await service.list_blog_comments(
-        db, post_id=post_id, status=status_filter, skip=skip, limit=limit,
-    )
-
-
-@blog_comments_router.get("/{comment_id}", response_model=BlogCommentOut)
-async def get_blog_comment(
-    comment_id: int,
-    db: AsyncSession = Depends(get_db),
-):
-    obj = await service.get_blog_comment(db, comment_id)
-    if not obj:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Blog comment not found",
-        )
-    return obj
-
-
-@blog_comments_router.patch("/{comment_id}", response_model=BlogCommentOut)
-async def update_blog_comment(
-    comment_id: int,
-    data: BlogCommentUpdate,
-    db: AsyncSession = Depends(get_db),
-):
-    obj = await service.update_blog_comment(db, comment_id, data)
-    if not obj:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Blog comment not found",
-        )
-    return obj
-
-
-@blog_comments_router.delete(
-    "/{comment_id}", status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_blog_comment(
-    comment_id: int,
-    db: AsyncSession = Depends(get_db),
-):
-    deleted = await service.delete_blog_comment(db, comment_id)
-    if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Blog comment not found",
-        )
-
-
-# ===========================================================================
 # Pages Router
 # ===========================================================================
 
@@ -734,6 +664,12 @@ async def update_page(page_id: int, data: PageUpdate, db: AsyncSession = Depends
     if not obj:
         raise HTTPException(status_code=404, detail="Page not found")
     return obj
+
+
+@pages_router.post("/bulk-delete")
+async def bulk_delete_pages(data: PageBulkDelete, db: AsyncSession = Depends(get_db)):
+    deleted = await service.bulk_delete_pages(db, data.ids, data.handles)
+    return {"status": "success", "deleted": deleted}
 
 
 @pages_router.delete("/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -805,5 +741,53 @@ async def save_robots_txt_content(payload: dict, db: AsyncSession = Depends(get_
         from app.modules.content.schema import PageUpdate
         obj = await service.update_page(db, obj.id, PageUpdate(content=content_val))
     return {"status": "success", "content": obj.content}
+
+
+# ===========================================================================
+# Public Storefront Metaobject API (no auth required, no drafts)
+# ===========================================================================
+
+storefront_metaobject_router = APIRouter(
+    prefix="/storefront/metaobjects",
+    tags=["Storefront Metaobjects"],
+)
+
+
+@storefront_metaobject_router.get("/", response_model=list[MetaobjectDefinitionOut])
+async def list_storefront_definitions(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all active definitions available on storefront (no auth required)."""
+    return await service.list_storefront_definitions(db, skip=skip, limit=limit)
+
+
+@storefront_metaobject_router.get("/{type_key}", response_model=MetaobjectDefinitionWithFields)
+async def get_storefront_definition(
+    type_key: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a single definition by type_key (no auth required)."""
+    obj = await service.get_storefront_definition_by_type_key(db, type_key)
+    if not obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Definition not found or not available on storefront",
+        )
+    return obj
+
+
+@storefront_metaobject_router.get("/{type_key}/entries", response_model=list[MetaobjectEntryWithValues])
+async def list_storefront_entries(
+    type_key: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """List active entries for a definition (no auth required, no drafts)."""
+    return await service.list_storefront_entries(
+        db, type_key=type_key, skip=skip, limit=limit,
+    )
 
 

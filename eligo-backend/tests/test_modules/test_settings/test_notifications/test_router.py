@@ -1,11 +1,9 @@
 """Tests for app.modules.settings.notifications.router"""
 
 from copy import deepcopy
-from datetime import datetime, timezone
 
 import pytest
 
-import app.core.dependencies as dependencies
 from app.modules.settings.notifications import service
 
 _PRISTINE_DEFAULT_RULES = deepcopy(service.DEFAULT_RULES)
@@ -19,32 +17,13 @@ def _pristine_default_rules():
     yield
 
 
-@pytest.fixture(autouse=True)
-def _naive_utc_now(monkeypatch):
-    """SQLite drops timezone info, so the 2nd admin request of a test reads
-    ``UserSession.last_seen_at`` back as naive and get_current_user raises
-    ``TypeError`` subtracting an aware ``now``. Make ``now`` naive too."""
-
-    class _NaiveDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return datetime.now(timezone.utc).replace(tzinfo=None)
-
-    monkeypatch.setattr(dependencies, "datetime", _NaiveDatetime)
-
-
 # ---------------------------------------------------------------------------
-# Auth
+# Sender config (no auth required)
 # ---------------------------------------------------------------------------
 
-async def test_admin_routes_require_auth(client):
+async def test_sender_routes_public(client):
     resp = await client.get("/api/v1/settings/notifications/sender")
-    assert resp.status_code in (401, 403)
-
-
-async def test_admin_routes_reject_non_admin(client, auth_headers):
-    resp = await client.get("/api/v1/settings/notifications/sender", headers=auth_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------

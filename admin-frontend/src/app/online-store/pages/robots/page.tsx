@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -12,6 +14,7 @@ import {
   ArrowClockwise,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 const DEFAULT_ROBOTS_TXT = `# Eligo Leather Storefront robots.txt
 # Controls search engine crawler indexing (Googlebot, Bingbot, YandexBot)
@@ -34,6 +37,9 @@ export default function AdminRobotsTxtPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<string | null>(null)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty({ robotsContent }, dataLoaded)
 
   // Fetch current robots.txt from PostgreSQL DB
   useEffect(() => {
@@ -41,12 +47,13 @@ export default function AdminRobotsTxtPage() {
 
     const fetchRobotsTxt = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/pages/robots.txt/content")
+        const res = await fetch(`${API_BASE}/api/v1/pages/robots.txt/content`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted) {
             setRobotsContent(data.content || DEFAULT_ROBOTS_TXT)
             setLoading(false)
+            setDataLoaded(true)
             return
           }
         }
@@ -57,6 +64,7 @@ export default function AdminRobotsTxtPage() {
       if (isMounted) {
         setRobotsContent(DEFAULT_ROBOTS_TXT)
         setLoading(false)
+        setDataLoaded(true)
       }
     }
 
@@ -80,7 +88,7 @@ export default function AdminRobotsTxtPage() {
     setSaving(true)
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/pages/robots.txt/content", {
+      const res = await fetch(`${API_BASE}/api/v1/pages/robots.txt/content`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: robotsContent }),
@@ -90,6 +98,7 @@ export default function AdminRobotsTxtPage() {
         const dateStr = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
         setLastSaved(dateStr)
         toast.success("robots.txt updated in DB & live on storefront!")
+        reset()
       } else {
         toast.success("robots.txt saved!")
       }

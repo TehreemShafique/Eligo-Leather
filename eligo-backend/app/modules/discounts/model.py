@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     String, Integer, Numeric, Boolean, DateTime, Text, Index, ForeignKey,
-    Enum as SAEnum, func,
+    JSON, Enum as SAEnum, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -66,6 +66,20 @@ class Discount(Base):
     )
     combinations: Mapped[str | None] = mapped_column(Text, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Admin-created promo discounts carry their reward here so the public
+    # checkout can compute the discount amount without trusting the browser.
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    percentage_value: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 2), nullable=True,
+    )
+    value_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True,
+    )
+    # Product/variant scoping: when set, the discount only applies to these
+    # catalog items (IDs) instead of the whole cart. Null/empty = applies to
+    # all items. Persisted as JSON arrays (Postgres) / TEXT (SQLite).
+    applies_to_products: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
+    applies_to_variants: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
     start_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
@@ -108,18 +122,38 @@ class WelcomeDiscountSettings(Base):
 
 
 class WelcomeDiscountLog(Base):
-    """Tracks which email/IP combinations already claimed the offer. A user
-    is ineligible if either their email OR their IP appears here."""
+    """Tracks which anonymous visitors already received the offer.
+
+    Identity is the persistent ``eligo_visitor_id`` cookie. Email/IP are kept
+    only for backward compatibility with legacy claim rows and are never the
+    primary identification mechanism.
+
+    Each visitor receives a unique, server-generated ``coupon_code`` that is
+    persisted here so the same code is returned on every subsequent visit and
+    can be validated at checkout.
+    """
 
     __tablename__ = "welcome_discount_logs"
     __table_args__ = (
         Index("ix_welcome_discount_logs_user_email", "user_email"),
         Index("ix_welcome_discount_logs_ip_address", "ip_address"),
+        Index("ix_welcome_discount_logs_visitor_id", "visitor_id", unique=True),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    user_email: Mapped[str] = mapped_column(String, nullable=False)
-    ip_address: Mapped[str] = mapped_column(String, nullable=False)
+    visitor_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    user_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Unique server-generated promo code for this visitor (e.g. "7K4P-X9M2").
+    coupon_code: Mapped[str | None] = mapped_column(
+        String, nullable=True, unique=True, index=True,
+    )
     claimed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
+    )
+    # Set when the visitor actually uses the welcome code at checkout. The
+    # one-time rule is: a visitor may redeem the code only until it has been
+    # redeemed once (``claimed_at`` alone just marks that the popup was shown).
+    redeemed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
     )

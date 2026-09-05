@@ -9,5 +9,6 @@ async def test_root(client):
 
     assert response.status_code == 200
     assert response.json() == {
-        "message": "hello"
+        "message": "Eligo Backend API Engine Running",
+        "cache": "enabled",
     }

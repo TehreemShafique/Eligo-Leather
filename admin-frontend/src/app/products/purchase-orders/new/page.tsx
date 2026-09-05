@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, MagnifyingGlass, Plus, PencilSimple, X } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminNewPurchaseOrderPage() {
   const router = useRouter()
@@ -17,6 +18,16 @@ export default function AdminNewPurchaseOrderPage() {
   const [tags, setTags] = useState("Leather-Supply, Raw-Hides")
   const [tagModalOpen, setTagModalOpen] = useState(false)
   const [newTagInput, setNewTagInput] = useState("")
+
+  const { reset } = useFormDirty({
+    supplier,
+    destination,
+    referenceNumber,
+    noteToSupplier,
+    paymentTerm,
+    currency,
+    tags,
+  })
 
   const paymentTermsList = [
     "None",
@@ -44,6 +55,7 @@ export default function AdminNewPurchaseOrderPage() {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault()
     toast.success(`Purchase order #${referenceNumber} created successfully!`)
+    reset()
     setTimeout(() => {
       router.push("/products/purchase-orders")
     }, 400)

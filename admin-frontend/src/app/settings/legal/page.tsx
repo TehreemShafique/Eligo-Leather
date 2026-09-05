@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE, getStoredUser } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
@@ -14,8 +16,12 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function UnifiedPoliciesAndPrivacyPage() {
+  const user = getStoredUser() as { email?: string; full_name?: string | null } | null
+  const userEmail = user?.email || "eligoleather9@gmail.com"
+  const userName = user?.full_name || "Administrator"
   // Tab Selection State
   const [activeTab, setActiveTab] = useState<"privacy_settings" | "policies">("policies")
 
@@ -31,12 +37,12 @@ export default function UnifiedPoliciesAndPrivacyPage() {
 
   // Policy Contents State (WYSIWYG HTML Content matching Pic 3 & MS Word style)
   const [policyData, setPolicyData] = useState<Record<string, string>>({
-    refund_policy: `<p>We have a 30-day return policy, which means you have 30 days after receiving your item to request a return.</p><p>To be eligible for a return, your item must be in the same condition that you received it, unworn or unused, with tags, and in its original packaging. You'll also need the receipt or proof of purchase.</p><p>To start a return, you can contact us at <a href="mailto:eligoleather9@gmail.com">eligoleather9@gmail.com</a>. Please note that returns will need to be sent to the following address: Off # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad.</p><p>If your return is accepted, we'll send you a return shipping label, as well as instructions on how and where to send your package. Items sent back to us without first requesting a return will not be accepted.</p>`,
+    refund_policy: `<p>We have a 30-day return policy, which means you have 30 days after receiving your item to request a return.</p><p>To be eligible for a return, your item must be in the same condition that you received it, unworn or unused, with tags, and in its original packaging. You'll also need the receipt or proof of purchase.</p><p>To start a return, you can contact us at <a href="mailto:${userEmail}">${userEmail}</a>. Please note that returns will need to be sent to the following address: Off # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad.</p><p>If your return is accepted, we'll send you a return shipping label, as well as instructions on how and where to send your package. Items sent back to us without first requesting a return will not be accepted.</p>`,
     privacy_policy: `<h2>Privacy Policy for Eligo Leather</h2><p>This Privacy Policy describes how Eligo Leather collects, uses, and discloses your Personal Information when you visit or make a purchase from eligoleather.com.</p><h3>Collecting Personal Information</h3><p>When you visit the Site, we collect certain information about your device, your interaction with the Site, and information necessary to process your purchases.</p>`,
     terms_of_service: `<h2>Terms of Service</h2><p>This website is operated by Eligo Leather Goods. Throughout the site, the terms 'we', 'us' and 'our' refer to Eligo Leather.</p><p>By visiting our site and/ or purchasing something from us, you engage in our 'Service' and agree to be bound by the following terms and conditions.</p>`,
     shipping_policy: `<h2>Shipping Policy</h2><p>All orders placed at Eligo Leather are processed within 1-2 business days. Standard domestic shipping across Pakistan takes 2-4 business days.</p><p>Flat delivery charge is Rs 250 across Pakistan. Orders over Rs 2,000 qualify for FREE delivery.</p>`,
-    contact_information: `<h2>Contact Information</h2><p><strong>Eligo Leather Customer Support Team</strong><br/>Email: eligoleather9@gmail.com<br/>Phone: +92 334 5399470<br/>Address: Off # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad, Pakistan</p>`,
-    legal_notice: `<h2>Merchant Legal Notice</h2><p><strong>Business Entity:</strong> Eligo Leather Goods &amp; Craftsmanship<br/><strong>Registration Address:</strong> Off # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad, Pakistan<br/><strong>Owner / Administrator:</strong> Bilal Hussain Abbasi</p>`,
+    contact_information: `<h2>Contact Information</h2><p><strong>Eligo Leather Customer Support Team</strong><br/>Email: ${userEmail}<br/>Phone: +92 334 5399470<br/>Address: Off # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad, Pakistan</p>`,
+    legal_notice: `<h2>Merchant Legal Notice</h2><p><strong>Business Entity:</strong> Eligo Leather Goods &amp; Craftsmanship<br/><strong>Registration Address:</strong> Off # 407, 4th floor, Gulberg Empire, Civic Center, Executive Block, Gulberg Greens, Islamabad, Pakistan<br/><strong>Owner / Administrator:</strong> ${userName}</p>`,
   })
 
   const policyOptionsList = [
@@ -48,6 +54,17 @@ export default function UnifiedPoliciesAndPrivacyPage() {
     { key: "legal_notice", label: "Legal notice", icon: FileCode },
   ]
 
+  const [dataLoaded, setDataLoaded] = useState(false)
+  const { reset } = useFormDirty(
+    {
+      cookieBannerActive,
+      trackingRegion,
+      doNotSellLink,
+      policyData,
+    },
+    dataLoaded
+  )
+
   // Fetch Privacy & Policy Settings from Backend DB on mount
   useEffect(() => {
     let isMounted = true
@@ -55,7 +72,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
     const fetchBackendSettings = async () => {
       // 1. Fetch Privacy Settings
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/privacy-settings")
+        const res = await fetch(`${API_BASE}/api/v1/settings/legal-privacy/privacy-settings`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted) {
@@ -70,14 +87,14 @@ export default function UnifiedPoliciesAndPrivacyPage() {
 
       // 2. Fetch Policies
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/policies")
+        const res = await fetch(`${API_BASE}/api/v1/settings/legal-privacy/policies`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted && Array.isArray(data)) {
             const fetchedMap: Record<string, string> = {}
             data.forEach((p: any) => {
-              if (p.policy_type && p.body) {
-                fetchedMap[p.policy_type] = p.body
+              if (p.policy_type && p.content) {
+                fetchedMap[p.policy_type] = p.content
               }
             })
             setPolicyData((prev) => ({ ...prev, ...fetchedMap }))
@@ -86,6 +103,8 @@ export default function UnifiedPoliciesAndPrivacyPage() {
       } catch (err) {
         console.log("Policies API offline, using default text.")
       }
+
+      if (isMounted) setDataLoaded(true)
     }
 
     fetchBackendSettings()
@@ -106,7 +125,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/privacy-settings", {
+      const res = await fetch(`${API_BASE}/api/v1/settings/legal-privacy/privacy-settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -121,6 +140,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
       toast.success("Customer Privacy settings saved!")
     } finally {
       setSavingPrivacy(false)
+      reset()
     }
   }
 
@@ -133,11 +153,11 @@ export default function UnifiedPoliciesAndPrivacyPage() {
     const payload = {
       policy_type: activePolicyKey,
       title: policyOptionsList.find((p) => p.key === activePolicyKey)?.label || activePolicyKey,
-      body: currentText,
+      content: currentText,
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/policies", {
+      const res = await fetch(`${API_BASE}/api/v1/settings/legal-privacy/policies`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -152,6 +172,7 @@ export default function UnifiedPoliciesAndPrivacyPage() {
       toast.success(`Saved policy content!`)
     } finally {
       setSavingPolicy(false)
+      reset()
     }
   }
 

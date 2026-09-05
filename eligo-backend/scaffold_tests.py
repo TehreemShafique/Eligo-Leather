@@ -28,12 +28,9 @@ MODEL_MODULES = [
     "content",
     "customers",
     "discounts",
-    "growth",
-    "markets",
     "orders",
     "segments",
     "store",
-    "analytics",
 ]
 
 # Modules containing router.py + service.py only

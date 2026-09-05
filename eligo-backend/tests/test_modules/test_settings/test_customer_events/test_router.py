@@ -36,7 +36,7 @@ async def test_admin_routes_require_auth(client):
 
 async def test_admin_routes_require_admin(client, auth_headers):
     resp = await client.get("/api/v1/settings/customer-events/pixels", headers=auth_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 403
     assert resp.json()["detail"] == "User is Not admin"
 
 

@@ -17,11 +17,17 @@ import {
   X,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
+import { getStoredUser } from "@/lib/api"
 
 export default function AdminPersonalAccountGeneralPage() {
-  const [firstName, setFirstName] = useState("Bilal")
-  const [lastName, setLastName] = useState("Hussain Abbasi")
-  const [email, setEmail] = useState("eligoleather9@gmail.com")
+  const user = getStoredUser() as { email?: string; full_name?: string | null } | null
+  const nameParts = (user?.full_name || "Admin").split(" ")
+  const defaultFirst = nameParts[0] || ""
+  const defaultLast = nameParts.slice(1).join(" ") || ""
+  const [firstName, setFirstName] = useState(defaultFirst)
+  const [lastName, setLastName] = useState(defaultLast)
+  const [email, setEmail] = useState(user?.email || "")
   const [phone, setPhone] = useState("+923366662345")
   const [isEmailVerified, setIsEmailVerified] = useState(true)
 
@@ -34,9 +40,19 @@ export default function AdminPersonalAccountGeneralPage() {
   const [updateEmailModalOpen, setUpdateEmailModalOpen] = useState(false)
   const [newEmail, setNewEmail] = useState("")
 
+  const { reset } = useFormDirty({
+    firstName,
+    lastName,
+    phone,
+    preferredLang,
+    accountTimezone,
+    newEmail,
+  })
+
   const handleSaveDetails = (e: React.FormEvent) => {
     e.preventDefault()
     toast.success("Personal account details updated successfully!")
+    reset()
   }
 
   const handleUpdateEmail = (e: React.FormEvent) => {
@@ -46,6 +62,7 @@ export default function AdminPersonalAccountGeneralPage() {
     setUpdateEmailModalOpen(false)
     setNewEmail("")
     toast.success("Verification email sent to " + newEmail + "! Please verify to update your primary login.")
+    reset()
   }
 
   return (
@@ -55,7 +72,7 @@ export default function AdminPersonalAccountGeneralPage() {
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-sky-400 text-sky-950 font-bold text-lg flex items-center justify-center shadow-2xs">
-              BH
+              {firstName.charAt(0).toUpperCase()}{lastName.charAt(0).toUpperCase()}
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{firstName} {lastName}</h1>

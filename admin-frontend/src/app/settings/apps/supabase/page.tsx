@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
@@ -19,6 +21,15 @@ import {
   Eye,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+
+// Customer-uploaded review photos are stored as backend-relative paths
+// (e.g. `/static/uploads/x.webp`). Resolve them against the backend API base.
+function resolveMediaUrl(url?: string | null): string {
+  if (!url) return ""
+  if (/^https?:\/\//i.test(url)) return url
+  if (url.startsWith("/")) return `${API_BASE}${url}`
+  return url
+}
 
 interface CustomerReview {
   id: string | number
@@ -40,96 +51,40 @@ export default function SupabaseReviewsAdminPage() {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
 
-  // Default initial reviews dataset (synced with Supabase DB API)
-  const [reviews, setReviews] = useState<CustomerReview[]>([
-    {
-      id: "rev-101",
-      productId: "1",
-      productTitle: "Rosy Leather Handbag",
-      reviewerName: "Zainab Malik",
-      reviewerEmail: "zainab.m@gmail.com",
-      rating: 5,
-      title: "Extremely Premium Leather Quality!",
-      body: "I bought the Rosy bag in Yellow color. The stitch precision and genuine leather feel are unmatched. Highly recommended!",
-      status: "approved",
-      images: [
-        "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=400&q=80",
-        "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=400&q=80",
-      ],
-      createdAt: "2026-08-12T10:30:00Z",
-      isVerified: true,
-    },
-    {
-      id: "rev-102",
-      productId: "2",
-      productTitle: "004 DYNAMO Biker Jacket",
-      reviewerName: "Hamza Shafique",
-      reviewerEmail: "hamza.s@hotmail.com",
-      rating: 5,
-      title: "Perfect fit and classic style!",
-      body: "The Dynamo jacket fits like a glove. Heavy-duty YKK zippers and rich leather aroma.",
-      status: "pending",
-      images: [
-        "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=400&q=80",
-      ],
-      createdAt: "2026-08-13T14:15:00Z",
-      isVerified: true,
-    },
-    {
-      id: "rev-103",
-      productId: "3",
-      productTitle: "Classic Eligo Formal Belt",
-      reviewerName: "Bilal Abbasi",
-      reviewerEmail: "bilal.abbasi@gmail.com",
-      rating: 4,
-      title: "Solid buckle and sturdy leather",
-      body: "Great formal belt for daily office wear. Smooth finish and durable brass buckle.",
-      status: "approved",
-      images: [],
-      createdAt: "2026-08-10T09:00:00Z",
-      isVerified: true,
-    },
-    {
-      id: "rev-104",
-      productId: "1",
-      productTitle: "Rosy Leather Handbag",
-      reviewerName: "Ayesha Khan",
-      reviewerEmail: "ayesha.k99@yahoo.com",
-      rating: 5,
-      title: "Loved the Blue color variant!",
-      body: "Order received in Lahore within 2 days. The color vibrant and genuine leather texturing looks super elegant.",
-      status: "pending",
-      images: [
-        "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=400&q=80",
-      ],
-      createdAt: "2026-08-14T08:45:00Z",
-      isVerified: true,
-    },
-  ])
+  const [reviews, setReviews] = useState<CustomerReview[]>([])
 
-  // Fetch live reviews from Supabase API safely
+  // Fetch live reviews from the backend database
   useEffect(() => {
     let isMounted = true
-    const fetchSupabaseReviews = async () => {
+    const fetchReviews = async () => {
       setLoading(true)
+      setError(null)
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/apps/supabase_reviews/action", {
+        const res = await fetch(`${API_BASE}/api/v1/settings/apps/supabase_reviews/action`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "fetch_reviews", payload: { page: 1, per_page: 50 } }),
+          body: JSON.stringify({ action: "fetch_reviews", payload: { page: 1, per_page: 100 } }),
         })
 
-        if (res.ok) {
-          const data = await res.json()
-          if (isMounted && data?.result?.reviews && Array.isArray(data.result.reviews)) {
-            const mapped: CustomerReview[] = data.result.reviews.map((r: any) => ({
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body?.detail || `Failed to load reviews (${res.status})`)
+        }
+
+        const data = await res.json()
+        if (isMounted && data?.data?.reviews && Array.isArray(data.data.reviews)) {
+            const mapped: CustomerReview[] = data.data.reviews.map((r: any) => ({
               id: r.id,
-              productId: r.product_id || "1",
-              productTitle: r.product_title || `Product #${r.product_id}`,
+              productId: r.product_id || "",
+              productTitle:
+                r.product_id == null || r.product_id === ""
+                  ? "Homepage Review"
+                  : r.product_title || `Product #${r.product_id}`,
               reviewerName: r.reviewer_name || "Anonymous",
-              reviewerEmail: r.reviewer_email || "customer@example.com",
+              reviewerEmail: r.reviewer_email || "",
               rating: Number(r.rating) || 5,
               title: r.title || "Customer Review",
               body: r.body || "",
@@ -138,27 +93,19 @@ export default function SupabaseReviewsAdminPage() {
               createdAt: r.created_at || new Date().toISOString(),
               isVerified: true,
             }))
-
-            setReviews((prev) => {
-              const combined = [...mapped, ...prev]
-              const uniqueMap = new Map()
-              combined.forEach((item) => {
-                if (!uniqueMap.has(item.id)) {
-                  uniqueMap.set(item.id, item)
-                }
-              })
-              return Array.from(uniqueMap.values())
-            })
+            setReviews(mapped)
           }
-        }
       } catch (err) {
-        console.log("Supabase API offline, rendering local review queue.")
+        console.error("Failed to fetch reviews:", err)
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : "Failed to load reviews")
+        }
       } finally {
         if (isMounted) setLoading(false)
       }
     }
 
-    fetchSupabaseReviews()
+    fetchReviews()
     return () => {
       isMounted = false
     }
@@ -167,14 +114,18 @@ export default function SupabaseReviewsAdminPage() {
   // Admin Decision: Update Review Status (Approve vs Reject)
   const handleUpdateStatus = async (reviewId: string | number, newStatus: "approved" | "rejected") => {
     try {
-      await fetch("http://127.0.0.1:8000/api/v1/apps/supabase_reviews/action", {
+      const res = await fetch(`${API_BASE}/api/v1/settings/apps/supabase_reviews/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "update_review_status",
           payload: { review_id: reviewId, status: newStatus },
         }),
-      }).catch(() => null)
+      })
+
+      if (!res.ok) {
+        throw new Error("Failed to update review status")
+      }
 
       setReviews((prev) =>
         prev.map((r) => (r.id === reviewId ? { ...r, status: newStatus } : r))
@@ -186,30 +137,30 @@ export default function SupabaseReviewsAdminPage() {
         toast.info("Review Rejected. It is hidden from storefront product pages.")
       }
     } catch (err) {
-      setReviews((prev) =>
-        prev.map((r) => (r.id === reviewId ? { ...r, status: newStatus } : r))
-      )
-      toast.success(`Review status updated to ${newStatus}!`)
+      toast.error("Failed to update review status. Please try again.")
     }
   }
 
   // Delete Review
   const handleDeleteReview = async (reviewId: string | number) => {
     try {
-      await fetch("http://127.0.0.1:8000/api/v1/apps/supabase_reviews/action", {
+      const res = await fetch(`${API_BASE}/api/v1/settings/apps/supabase_reviews/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "delete_review",
           payload: { review_id: reviewId },
         }),
-      }).catch(() => null)
+      })
+
+      if (!res.ok) {
+        throw new Error("Failed to delete review")
+      }
 
       setReviews((prev) => prev.filter((r) => r.id !== reviewId))
       toast.success("Review deleted from database.")
     } catch (err) {
-      setReviews((prev) => prev.filter((r) => r.id !== reviewId))
-      toast.success("Review deleted.")
+      toast.error("Failed to delete review. Please try again.")
     }
   }
 
@@ -252,13 +203,13 @@ export default function SupabaseReviewsAdminPage() {
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-gray-900">Supabase Product Reviews</h1>
+              <h1 className="text-lg font-bold text-gray-900">Product Reviews</h1>
               <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full border border-emerald-300 flex items-center gap-1">
                 <Database className="w-3 h-3" />
-                <span>Connected to Supabase DB</span>
+                <span>Stored in Eligo database</span>
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">Moderate customer reviews &amp; uploaded product photos before publishing live to product pages.</p>
+            <p className="text-xs text-gray-500 mt-0.5">Moderate customer reviews &amp; uploaded photos before publishing live to product pages.</p>
           </div>
         </div>
 
@@ -387,6 +338,15 @@ export default function SupabaseReviewsAdminPage() {
       </div>
 
       {/* Customer Reviews Queue Cards */}
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+          <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="text-sm text-red-800">
+            <p className="font-bold">Could not load reviews</p>
+            <p>{error}</p>
+          </div>
+        </div>
+      )}
       <div className="space-y-4">
         {filteredReviews.length > 0 ? (
           filteredReviews.map((rev) => (
@@ -465,7 +425,7 @@ export default function SupabaseReviewsAdminPage() {
                             onClick={() => setPreviewImage(imgUrl)}
                             className="w-16 h-16 rounded-xl border border-gray-300 overflow-hidden cursor-pointer hover:opacity-85 transition-opacity relative group"
                           >
-                            <img src={imgUrl} alt="Review upload" className="w-full h-full object-cover" />
+                            <img src={resolveMediaUrl(imgUrl)} alt="Review upload" className="w-full h-full object-cover" />
                             <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
                               <Eye className="w-4 h-4" />
                             </div>
@@ -536,7 +496,7 @@ export default function SupabaseReviewsAdminPage() {
             >
               <X className="w-5 h-5" />
             </button>
-            <img src={previewImage} alt="Uploaded customer review photo" className="w-full max-h-[75vh] object-contain rounded-xl" />
+            <img src={resolveMediaUrl(previewImage)} alt="Uploaded customer review photo" className="w-full max-h-[75vh] object-contain rounded-xl" />
           </div>
         </div>
       )}

@@ -179,3 +179,47 @@
 .font-sans {
   font-family: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
+
+/* ------------------------------------------------------------------ */
+/* Packing slip / order invoice printing                               */
+/* When the order detail page applies `slip-print-active` to <body>,    */
+/* only the .order-slip-print element is printed (the rest of the       */
+/* admin UI — sidebar, header, page content — is hidden on paper).      */
+/* ------------------------------------------------------------------ */
+@media print {
+  body.slip-print-active > * {
+    visibility: hidden !important;
+  }
+
+  body.slip-print-active .order-slip-print,
+  body.slip-print-active .order-slip-print * {
+    visibility: visible !important;
+  }
+
+  /* Neutralize the admin app's full-height scroll containers so the
+     slip is not clipped to a single viewport when it spans pages. */
+  body.slip-print-active,
+  body.slip-print-active * {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body.slip-print-active .order-slip-print {
+    position: absolute !important;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+}

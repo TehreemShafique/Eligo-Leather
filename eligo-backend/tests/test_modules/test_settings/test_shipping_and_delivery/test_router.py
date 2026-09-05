@@ -1,25 +1,6 @@
 """Tests for app.modules.settings.shipping_and_delivery.router"""
 
-from datetime import datetime, timezone
-
-import pytest
-
-import app.core.dependencies as dependencies
 from app.modules.settings.shipping_and_delivery import service
-
-
-@pytest.fixture(autouse=True)
-def _naive_utc_now(monkeypatch):
-    """SQLite drops timezone info, so the 2nd admin request of a test reads
-    ``UserSession.last_seen_at`` back as naive and get_current_user raises
-    ``TypeError`` subtracting an aware ``now``. Make ``now`` naive too."""
-
-    class _NaiveDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return datetime.now(timezone.utc).replace(tzinfo=None)
-
-    monkeypatch.setattr(dependencies, "datetime", _NaiveDatetime)
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +14,7 @@ async def test_admin_routes_require_auth(client):
 
 async def test_admin_routes_reject_non_admin(client, auth_headers):
     resp = await client.get("/api/v1/settings/shipping-and-delivery/settings", headers=auth_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------

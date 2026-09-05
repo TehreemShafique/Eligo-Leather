@@ -23,8 +23,16 @@ import {
   Check,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
+import { getStoredUser } from "@/lib/api"
+import PermissionGuard from "@/components/auth/permission-guard"
 
 export default function AdminSettingsGeneralPage() {
+  const user = getStoredUser() as { email?: string; full_name?: string | null } | null
+  const userFullName = user?.full_name || user?.email || "Admin"
+  const userEmail = user?.email || ""
+  const nameParts = userFullName.split(" ")
+
   // Modal states
   const [editEntityModalOpen, setEditEntityModalOpen] = useState(false)
   const [storeContactModalOpen, setStoreContactModalOpen] = useState(false)
@@ -35,8 +43,8 @@ export default function AdminSettingsGeneralPage() {
 
   // Business Entity Fields
   const [businessType, setBusinessType] = useState("Individual")
-  const [firstName, setFirstName] = useState("Bilal Hussain")
-  const [lastName, setLastName] = useState("Abbasi")
+  const [firstName, setFirstName] = useState(nameParts[0] || "")
+  const [lastName, setLastName] = useState(nameParts.slice(1).join(" ") || "")
   const [nickname, setNickname] = useState("Bilal")
   const [dobMonth, setDobMonth] = useState("08")
   const [dobDay, setDobDay] = useState("14")
@@ -47,7 +55,7 @@ export default function AdminSettingsGeneralPage() {
 
   // Store Identity Fields
   const [storeName, setStoreName] = useState("Eligo Leather")
-  const [storeEmail, setStoreEmail] = useState("eligoleather9@gmail.com")
+  const [storeEmail, setStoreEmail] = useState(userEmail || "eligoleather9@gmail.com")
   const [storePhone, setStorePhone] = useState("0334-5399470")
 
   // Store Address Fields
@@ -76,6 +84,41 @@ export default function AdminSettingsGeneralPage() {
   const [secondaryColor, setSecondaryColor] = useState("#3E2723")
   const [slogan, setSlogan] = useState("Handcrafted Genuine Leather Accessories for Life")
   const [shortDesc, setShortDesc] = useState("Premium handcrafted leather wallets, belts, card holders, and accessories from Pakistan.")
+
+  const { reset } = useFormDirty({
+    businessType,
+    firstName,
+    lastName,
+    nickname,
+    dobMonth,
+    dobDay,
+    dobYear,
+    resAddress,
+    resCity,
+    resPostal,
+    storeName,
+    storeEmail,
+    storePhone,
+    companyName,
+    countryRegion,
+    storeStreetAddress,
+    storeApartment,
+    storeCity,
+    storePostalCode,
+    storeCurrency,
+    backupRegion,
+    unitSystem,
+    weightUnit,
+    timeZone,
+    orderPrefix,
+    orderSuffix,
+    orderProcessing,
+    autoArchive,
+    primaryColor,
+    secondaryColor,
+    slogan,
+    shortDesc,
+  })
 
   const countriesList = [
     "Pakistan",
@@ -115,18 +158,19 @@ export default function AdminSettingsGeneralPage() {
   ]
 
   const activityLogs = [
-    { date: "Today, 6:45 PM", user: "Bilal Hussain Abbasi (eligoleather9@gmail.com)", action: "User Login Successful", ip: "192.168.18.176" },
-    { date: "Today, 2:15 PM", user: "Bilal Hussain Abbasi (eligoleather9@gmail.com)", action: "Updated Store Address", ip: "192.168.18.176" },
-    { date: "Yesterday, 11:30 AM", user: "Bilal Hussain Abbasi (eligoleather9@gmail.com)", action: "Created Product Metafield Definition", ip: "192.168.18.176" },
+    { date: "Today, 6:45 PM", user: `${userFullName} (${userEmail})`, action: "User Login Successful", ip: "192.168.18.176" },
+    { date: "Today, 2:15 PM", user: `${userFullName} (${userEmail})`, action: "Updated Store Address", ip: "192.168.18.176" },
+    { date: "Yesterday, 11:30 AM", user: `${userFullName} (${userEmail})`, action: "Created Product Metafield Definition", ip: "192.168.18.176" },
   ]
 
   return (
-    <div className="space-y-6 font-sans max-w-5xl mx-auto">
+    <PermissionGuard feature="settings_store">
+      <div className="space-y-6 font-sans max-w-5xl mx-auto">
       {/* Settings Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-amber-800 uppercase tracking-widest mb-1">
-            <span>Shopify Administrative Settings</span>
+            <span>Administrative Settings</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             General Settings
@@ -449,7 +493,7 @@ export default function AdminSettingsGeneralPage() {
               <button onClick={() => setEditEntityModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">
                 Cancel
               </button>
-              <button onClick={() => { toast.success("Business entity updated!"); setEditEntityModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
+              <button onClick={() => { toast.success("Business entity updated!"); setEditEntityModalOpen(false); reset(); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
                 Save Entity
               </button>
             </div>
@@ -491,7 +535,7 @@ export default function AdminSettingsGeneralPage() {
               <button onClick={() => setStoreContactModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">
                 Cancel
               </button>
-              <button onClick={() => { toast.success("Store contact details updated!"); setStoreContactModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
+              <button onClick={() => { toast.success("Store contact details updated!"); setStoreContactModalOpen(false); reset(); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
                 Save Details
               </button>
             </div>
@@ -553,7 +597,7 @@ export default function AdminSettingsGeneralPage() {
               <button onClick={() => setEditStoreAddressModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">
                 Cancel
               </button>
-              <button onClick={() => { toast.success("Store address updated!"); setEditStoreAddressModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
+              <button onClick={() => { toast.success("Store address updated!"); setEditStoreAddressModalOpen(false); reset(); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
                 Submit Address
               </button>
             </div>
@@ -602,7 +646,7 @@ export default function AdminSettingsGeneralPage() {
               <button onClick={() => setBrandWorkspaceOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">
                 Cancel
               </button>
-              <button onClick={() => { toast.success("Brand assets saved!"); setBrandWorkspaceOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
+              <button onClick={() => { toast.success("Brand assets saved!"); setBrandWorkspaceOpen(false); reset(); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900">
                 Save Brand Assets
               </button>
             </div>
@@ -641,6 +685,7 @@ export default function AdminSettingsGeneralPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </PermissionGuard>
   )
 }

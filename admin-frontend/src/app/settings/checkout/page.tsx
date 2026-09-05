@@ -1,106 +1,232 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
+import { useState, useEffect, useCallback } from "react"
 import {
   ShoppingBagOpen,
   DotsThreeOutline,
   PencilSimple,
   Copy,
-  Eye,
   X,
-  Check,
-  Globe,
-  Lock,
-  Tag,
-  ShieldCheck,
   Sliders,
-  Sparkle,
-  Minus,
-  Plus,
-  ArrowRight,
+  ShieldCheck,
   Info,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { PageHeader } from "@/components/layout/page-header"
+import { apiFetch } from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
+
+const API_PATH = "/api/v1/settings/checkout"
+
+interface CheckoutConfig {
+  id: string
+  name: string
+  is_active: boolean
+  contact_method: string
+  show_order_tracking_link: boolean
+  require_login: boolean
+  full_name_field: string
+  company_name_field: string
+  address_line2_field: string
+  shipping_phone_field: string
+  marketing_email_optin: string
+  marketing_sms_optin: string
+  show_tipping: boolean
+  checkout_language: string
+  billing_address_rule: string
+  validate_shipping_address: boolean
+  use_shipping_as_billing_default: boolean
+  enable_cart_limit: boolean
+  cart_item_limit: number
+  checkout_rules: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
 
 export default function AdminSettingsCheckoutPage() {
-  // Config Name & Action Dropdown States
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [configId, setConfigId] = useState<string | null>(null)
   const [configName, setConfigName] = useState("My Store configuration")
+  const [createdAt, setCreatedAt] = useState("")
+  const [updatedAt, setUpdatedAt] = useState("")
+
   const [actionDropdownOpen, setActionDropdownOpen] = useState(false)
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [tempConfigName, setTempConfigName] = useState(configName)
 
-  // Interactive Live Storefront Checkout Preview Modal
-  const [liveCheckoutModalOpen, setLiveCheckoutModalOpen] = useState(false)
-  const [checkoutStep, setCheckoutStep] = useState<"cart" | "signin" | "checkout">("checkout")
-  const [cartQuantity, setCartQuantity] = useState(1)
-  const [itemPrice] = useState(2899)
-  const [discountCode, setDiscountCode] = useState("")
-
-  // Checkout Settings States
   const [contactMethod, setContactMethod] = useState<"phone_or_email" | "email">("phone_or_email")
   const [showOrderTrackingLink, setShowOrderTrackingLink] = useState(false)
   const [requireLogin, setRequireLogin] = useState(false)
 
-  // Form Field Requirements
   const [fullNameField, setFullNameField] = useState("required")
   const [companyNameField, setCompanyNameField] = useState("don_t_include")
   const [addressLine2Field, setAddressLine2Field] = useState("optional")
   const [shippingPhoneField, setShippingPhoneField] = useState("required")
 
-  // Marketing Opt-In & Tipping
   const [emailOptin, setEmailOptin] = useState("checkout_and_signin")
   const [smsOptin, setSmsOptin] = useState("don_t_show")
   const [showTipping, setShowTipping] = useState(false)
   const [checkoutLanguage, setCheckoutLanguage] = useState("English")
 
-  // Address Collection & Cart Limits
   const [addressModalOpen, setAddressModalOpen] = useState(false)
   const [billingRule, setBillingRule] = useState<"allow_different" | "require_match">("allow_different")
   const [validateShippingAddress, setValidateShippingAddress] = useState(false)
   const [useShippingAsBillingDefault, setUseShippingAsBillingDefault] = useState(true)
 
-  // Cart Limit Modal & Settings
   const [cartLimitModalOpen, setCartLimitModalOpen] = useState(false)
   const [enableCartLimit, setEnableCartLimit] = useState(true)
   const [cartItemLimit, setCartItemLimit] = useState(50)
 
-  // Fraud Rules Modal & Settings
-  const [fraudModalOpen, setFraudModalOpen] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
 
-  const handleRenameSubmit = (e: React.FormEvent) => {
+  const { reset } = useFormDirty(
+    {
+      configName,
+      contactMethod,
+      showOrderTrackingLink,
+      requireLogin,
+      fullNameField,
+      companyNameField,
+      addressLine2Field,
+      shippingPhoneField,
+      emailOptin,
+      smsOptin,
+      showTipping,
+      checkoutLanguage,
+      billingRule,
+      validateShippingAddress,
+      useShippingAsBillingDefault,
+      enableCartLimit,
+      cartItemLimit,
+    },
+    dataLoaded
+  )
+
+  const fetchConfig = useCallback(async () => {
+    try {
+      setLoading(true)
+      const data = await apiFetch<CheckoutConfig>(`${API_PATH}/configs/active`)
+
+      setConfigId(data.id)
+      setConfigName(data.name)
+      setCreatedAt(data.created_at)
+      setUpdatedAt(data.updated_at)
+      setContactMethod(data.contact_method as "phone_or_email" | "email")
+      setShowOrderTrackingLink(data.show_order_tracking_link)
+      setRequireLogin(data.require_login)
+      setFullNameField(data.full_name_field)
+      setCompanyNameField(data.company_name_field)
+      setAddressLine2Field(data.address_line2_field)
+      setShippingPhoneField(data.shipping_phone_field)
+      setEmailOptin(data.marketing_email_optin)
+      setSmsOptin(data.marketing_sms_optin)
+      setShowTipping(data.show_tipping)
+      setCheckoutLanguage(data.checkout_language)
+      setBillingRule(data.billing_address_rule as "allow_different" | "require_match")
+      setValidateShippingAddress(data.validate_shipping_address)
+      setUseShippingAsBillingDefault(data.use_shipping_as_billing_default)
+      setEnableCartLimit(data.enable_cart_limit)
+      setCartItemLimit(data.cart_item_limit)
+      setDataLoaded(true)
+    } catch {
+      toast.error("Failed to load checkout configuration")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchConfig()
+  }, [fetchConfig])
+
+  const handleSave = async () => {
+    if (!configId) return
+    try {
+      setSaving(true)
+      await apiFetch(`${API_PATH}/configs/${configId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          contact_method: contactMethod,
+          show_order_tracking_link: showOrderTrackingLink,
+          require_login: requireLogin,
+          full_name_field: fullNameField,
+          company_name_field: companyNameField,
+          address_line2_field: addressLine2Field,
+          shipping_phone_field: shippingPhoneField,
+          marketing_email_optin: emailOptin,
+          marketing_sms_optin: smsOptin,
+          show_tipping: showTipping,
+          checkout_language: checkoutLanguage,
+          billing_address_rule: billingRule,
+          validate_shipping_address: validateShippingAddress,
+          use_shipping_as_billing_default: useShippingAsBillingDefault,
+          enable_cart_limit: enableCartLimit,
+          cart_item_limit: cartItemLimit,
+        }),
+      })
+      toast.success("Checkout configuration saved!")
+      reset()
+    } catch {
+      toast.error("Failed to save changes")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRenameSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setConfigName(tempConfigName)
-    setRenameModalOpen(false)
-    toast.success(`Checkout configuration renamed to "${tempConfigName}"!`)
+    if (!configId) return
+    try {
+      await apiFetch(`${API_PATH}/configs/${configId}/rename`, {
+        method: "POST",
+        body: JSON.stringify({ name: tempConfigName }),
+      })
+      setConfigName(tempConfigName)
+      setRenameModalOpen(false)
+      toast.success(`Configuration renamed to "${tempConfigName}"`)
+      reset()
+    } catch {
+      toast.error("Failed to rename configuration")
+    }
   }
 
-  const handleDuplicateConfig = () => {
-    toast.success(`Configuration "${configName}" duplicated as "My Store configuration Copy"!`)
-    setActionDropdownOpen(false)
+  const handleDuplicateConfig = async () => {
+    if (!configId) return
+    try {
+      const data = await apiFetch<CheckoutConfig>(`${API_PATH}/configs/${configId}/duplicate`, { method: "POST" })
+      toast.success(`Configuration duplicated as "${data.name}"`)
+      setActionDropdownOpen(false)
+      fetchConfig()
+    } catch {
+      toast.error("Failed to duplicate configuration")
+    }
   }
 
-  const handleCompleteOrder = () => {
-    toast.success("Order completed successfully! Inventory deducted.")
-    setLiveCheckoutModalOpen(false)
+  const formatDate = (iso: string) => {
+    if (!iso) return ""
+    const d = new Date(iso)
+    return d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }) +
+      " at " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6 font-sans max-w-5xl mx-auto">
+        <PageHeader title="Checkout" icon={<ShoppingBagOpen className="w-5 h-5" />} />
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs flex items-center justify-center py-20">
+          <div className="flex items-center gap-3 text-gray-500">
+            <div className="w-5 h-5 border-2 border-amber-800 border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm font-semibold">Loading checkout configuration...</span>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6 font-sans max-w-5xl mx-auto">
-      {/* Header & Configurations Card */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-amber-800 uppercase tracking-widest mb-1">
-            <span>Shopify Checkout Experience</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-            Checkout
-          </h1>
-          <p className="text-xs text-gray-500 mt-1">
-            Customize checkout forms, customer login rules, cart item limits, marketing consent, and fraud validation rules.
-          </p>
-        </div>
-      </div>
+      <PageHeader title="Checkout" icon={<ShoppingBagOpen className="w-5 h-5" />} />
 
       <div className="space-y-6 text-xs">
         {/* 1. Configurations Management Card */}
@@ -120,22 +246,16 @@ export default function AdminSettingsCheckoutPage() {
                   Active
                 </span>
               </div>
-              <p className="text-gray-500 text-xs">Saved 30 Apr at 4:03 am &bull; Default store rules</p>
+              <p className="text-gray-500 text-xs">
+                {updatedAt ? `Updated ${formatDate(updatedAt)}` : createdAt ? `Created ${formatDate(createdAt)}` : ""} &bull; Default store rules
+              </p>
             </div>
 
             <div className="flex items-center gap-3 relative">
-              <button
-                onClick={() => setLiveCheckoutModalOpen(true)}
-                className="px-4 py-2 bg-amber-800 hover:bg-amber-900 text-white rounded-xl font-bold text-xs shadow-2xs flex items-center gap-1.5 cursor-pointer"
-              >
-                <Eye className="w-4 h-4" />
-                <span>View Live Checkout</span>
-              </button>
-
               <div className="relative">
                 <button
                   onClick={() => setActionDropdownOpen(!actionDropdownOpen)}
-                  className="p-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-xl text-gray-800 font-bold"
+                  className="p-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-xl text-gray-800 font-bold cursor-pointer"
                 >
                   <DotsThreeOutline className="w-4 h-4" />
                 </button>
@@ -144,28 +264,18 @@ export default function AdminSettingsCheckoutPage() {
                   <div className="absolute right-0 mt-2 w-44 bg-white rounded-xl border border-gray-200 shadow-xl z-50 p-2 space-y-1 font-semibold text-gray-700">
                     <button
                       onClick={() => {
-                        setLiveCheckoutModalOpen(true)
-                        setActionDropdownOpen(false)
-                      }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-gray-50 rounded-lg flex items-center gap-2"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-amber-800" />
-                      <span>View</span>
-                    </button>
-                    <button
-                      onClick={() => {
                         setTempConfigName(configName)
                         setRenameModalOpen(true)
                         setActionDropdownOpen(false)
                       }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-gray-50 rounded-lg flex items-center gap-2"
+                      className="w-full text-left px-3 py-1.5 hover:bg-gray-50 rounded-lg flex items-center gap-2 cursor-pointer"
                     >
                       <PencilSimple className="w-3.5 h-3.5 text-gray-500" />
                       <span>Rename</span>
                     </button>
                     <button
                       onClick={handleDuplicateConfig}
-                      className="w-full text-left px-3 py-1.5 hover:bg-gray-50 rounded-lg flex items-center gap-2"
+                      className="w-full text-left px-3 py-1.5 hover:bg-gray-50 rounded-lg flex items-center gap-2 cursor-pointer"
                     >
                       <Copy className="w-3.5 h-3.5 text-gray-500" />
                       <span>Duplicate</span>
@@ -306,42 +416,170 @@ export default function AdminSettingsCheckoutPage() {
           </div>
         </div>
 
-        {/* 4. Address Rules, Cart Limits & Fraud Rules Buttons */}
+        {/* 4. Advanced Rules Buttons */}
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
-          <h2 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2">Advanced Rules &amp; Fraud Validation</h2>
+          <h2 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2">Advanced Rules</h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button
               onClick={() => setAddressModalOpen(true)}
-              className="p-4 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 text-left font-bold text-gray-900 transition-colors"
+              className="p-4 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 text-left font-bold text-gray-900 transition-colors cursor-pointer"
             >
               Address Collection Rules &rarr;
             </button>
 
             <button
               onClick={() => setCartLimitModalOpen(true)}
-              className="p-4 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 text-left font-bold text-gray-900 transition-colors"
+              className="p-4 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 text-left font-bold text-gray-900 transition-colors cursor-pointer"
             >
               Add-to-Cart Item Limit &rarr;
             </button>
-
-            <button
-              onClick={() => setFraudModalOpen(true)}
-              className="p-4 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 text-left font-bold text-amber-900 transition-colors"
-            >
-              CWILL Fraud Validation &rarr;
-            </button>
           </div>
+        </div>
+
+        {/* 5. Live Checkout Preview */}
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+            <h2 className="text-sm font-bold text-gray-900">Live Checkout Preview</h2>
+            <a
+              href="http://localhost:3000/checkout"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold text-amber-800 hover:text-amber-900 underline underline-offset-2"
+            >
+              Open Storefront Checkout →
+            </a>
+          </div>
+          <p className="text-xs text-gray-500">This is a visual reference showing how your storefront checkout will appear to customers with the current settings. Edit settings above to change the layout.</p>
+
+          <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 space-y-5 text-xs">
+            {/* Contact Section Preview */}
+            <div className="space-y-2">
+              <h3 className="font-bold text-gray-900 text-sm">Contact</h3>
+              <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">
+                {contactMethod === "email" ? "Email *" : "Email (optional)"}
+              </div>
+              {emailOptin !== "don_t_show" && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <div className="w-3.5 h-3.5 rounded border border-gray-300 bg-white" />
+                  <span>Email me with news and offers</span>
+                </div>
+              )}
+              {requireLogin && (
+                <p className="text-[11px] text-amber-700 font-semibold">Customers must sign in before checkout</p>
+              )}
+            </div>
+
+            {/* Delivery Fields Preview */}
+            <div className="space-y-2">
+              <h3 className="font-bold text-gray-900 text-sm">Delivery</h3>
+              <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">Country/Region</div>
+              <div className="grid grid-cols-2 gap-2">
+                {fullNameField === "required" && (
+                  <>
+                    <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">First name *</div>
+                    <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">Last name *</div>
+                  </>
+                )}
+                {fullNameField === "optional" && (
+                  <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">Last name *</div>
+                )}
+              </div>
+              {companyNameField !== "don_t_include" && (
+                <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">
+                  Company name {companyNameField === "required" ? "*" : "(optional)"}
+                </div>
+              )}
+              <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">Address *</div>
+              {addressLine2Field !== "don_t_include" && (
+                <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">
+                  Apt, suite, etc. {addressLine2Field === "required" ? "*" : "(optional)"}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">City *</div>
+                <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">Postal code</div>
+              </div>
+              {shippingPhoneField !== "don_t_include" && (
+                <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">
+                  Phone {shippingPhoneField === "required" ? "*" : ""}
+                </div>
+              )}
+            </div>
+
+            {/* Shipping Method Preview */}
+            <div className="space-y-2">
+              <h3 className="font-bold text-gray-900 text-sm">Shipping method</h3>
+              <div className="p-3 bg-white rounded-lg border border-gray-200 flex items-center justify-between">
+                <span className="text-gray-400">Standard Delivery</span>
+                <span className="text-gray-400">Rs 250.00</span>
+              </div>
+            </div>
+
+            {/* Tipping Preview */}
+            {showTipping && (
+              <div className="space-y-2">
+                <h3 className="font-bold text-gray-900 text-sm">Add a tip</h3>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {["None", "Rs 50", "Rs 100", "Rs 200"].map((label) => (
+                    <div key={label} className="py-2 rounded-lg border border-gray-200 bg-white text-center text-gray-400">
+                      {label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Billing Preview */}
+            <div className="space-y-2">
+              <h3 className="font-bold text-gray-900 text-sm">Billing address</h3>
+              {billingRule === "require_match" ? (
+                <div className="p-3 bg-white rounded-lg border border-gray-200 text-gray-400">
+                  Must match shipping address
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="p-3 bg-white rounded-lg border border-gray-200 flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full border-4 border-amber-800" />
+                    <span className="text-gray-700">Same as shipping address</span>
+                  </div>
+                  <div className="p-3 bg-white rounded-lg border border-gray-200 flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full border border-gray-300" />
+                    <span className="text-gray-700">Use a different billing address</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Cart Limit Info */}
+            {enableCartLimit && (
+              <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-800">
+                Max {cartItemLimit} items per cart
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Save Button */}
+        <div className="sticky bottom-4 flex justify-end">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-6 py-2.5 bg-amber-800 hover:bg-amber-900 disabled:opacity-60 text-white rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 cursor-pointer"
+          >
+            {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
         </div>
       </div>
 
-      {/* A. Rename Configuration Popup Modal */}
+      {/* Rename Configuration Modal */}
       {renameModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 p-6 space-y-4 text-xs font-sans">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-base font-bold text-gray-900">Rename Configuration</h3>
-              <button onClick={() => setRenameModalOpen(false)} className="p-1 text-gray-400 hover:text-black">
+              <button onClick={() => setRenameModalOpen(false)} className="p-1 text-gray-400 hover:text-black cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -359,7 +597,7 @@ export default function AdminSettingsCheckoutPage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-                <button type="button" onClick={() => setRenameModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">
+                <button type="button" onClick={() => setRenameModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-pointer">
                   Cancel
                 </button>
                 <button type="submit" className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900 cursor-pointer">
@@ -371,170 +609,13 @@ export default function AdminSettingsCheckoutPage() {
         </div>
       )}
 
-      {/* B. Live Interactive Storefront Checkout Modal (View Option) */}
-      {liveCheckoutModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-gray-200 overflow-hidden text-xs font-sans flex flex-col max-h-[92vh]">
-            <div className="p-4 bg-stone-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="font-bold text-sm">Eligo Leather Storefront Checkout</span>
-                <span className="px-2.5 py-0.5 bg-amber-800 text-white rounded-full text-[10px] font-bold">Live Simulation</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setCheckoutStep(checkoutStep === "cart" ? "checkout" : "cart")}
-                  className="text-xs underline text-amber-200"
-                >
-                  Toggle Cart / Checkout
-                </button>
-                <button onClick={() => setLiveCheckoutModalOpen(false)} className="p-1 text-gray-400 hover:text-white">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-gray-50/50">
-              {checkoutStep === "cart" ? (
-                /* Shopping Cart View */
-                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs max-w-xl mx-auto space-y-4">
-                  <h2 className="text-lg font-bold text-gray-900 border-b border-gray-100 pb-2">Shopping Cart</h2>
-                  <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                    <div>
-                      <div className="font-bold text-gray-900 text-sm">ESSENCE - Premium Leather Belt</div>
-                      <div className="text-gray-500 text-xs">Dark Brown / 34</div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center border rounded-lg bg-gray-50 px-2 py-1 gap-2">
-                        <button onClick={() => setCartQuantity(Math.max(1, cartQuantity - 1))} className="p-0.5 text-gray-600"><Minus className="w-3 h-3" /></button>
-                        <span className="font-bold text-xs">{cartQuantity}</span>
-                        <button onClick={() => setCartQuantity(cartQuantity + 1)} className="p-0.5 text-gray-600"><Plus className="w-3 h-3" /></button>
-                      </div>
-                      <span className="font-bold text-gray-900">Rs {(itemPrice * cartQuantity).toLocaleString()}.00</span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center pt-2">
-                    <button
-                      onClick={() => setCheckoutStep("signin")}
-                      className="text-amber-800 font-semibold hover:underline"
-                    >
-                      Continue Shopping / Sign In
-                    </button>
-                    <button
-                      onClick={() => setCheckoutStep("checkout")}
-                      className="px-6 py-2.5 bg-amber-800 text-white font-bold rounded-xl shadow-md"
-                    >
-                      Check out
-                    </button>
-                  </div>
-                </div>
-              ) : checkoutStep === "signin" ? (
-                /* Optional Sign-In Bypass Modal */
-                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs max-w-md mx-auto space-y-4">
-                  <h2 className="text-base font-bold text-gray-900">Sign In to Eligo Store</h2>
-                  <p className="text-gray-500 text-xs">Sign in with your email or bypass authentication to continue as guest.</p>
-                  <input type="email" placeholder="customer@example.com" className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold" />
-                  <div className="flex justify-between gap-3 pt-2">
-                    <button onClick={() => setCheckoutStep("checkout")} className="px-4 py-2 bg-gray-100 text-gray-800 font-semibold rounded-xl">
-                      Bypass &amp; Guest Checkout
-                    </button>
-                    <button onClick={() => setCheckoutStep("checkout")} className="px-5 py-2 bg-amber-800 text-white font-bold rounded-xl">
-                      Sign In &amp; Continue
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* Final Checkout Page View */
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
-                    <h2 className="text-base font-bold text-gray-900 uppercase tracking-wide border-b border-gray-100 pb-2">Checkout Details</h2>
-
-                    <div>
-                      <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">Contact Email / Phone</label>
-                      <input type="text" defaultValue="sajidwatto155@gmail.com" className="w-full h-10 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold" />
-                      <label className="flex items-center gap-2 cursor-pointer mt-1 text-gray-700">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-amber-800" />
-                        <span>Email me with news and offers</span>
-                      </label>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">Delivery Method</label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button type="button" className="p-2.5 bg-amber-50 border border-amber-800 text-amber-900 font-bold rounded-xl text-center">Ship (Pakistan)</button>
-                        <button type="button" className="p-2.5 bg-gray-50 border border-gray-200 text-gray-600 font-medium rounded-xl text-center">Pickup</button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">Shipping Method</label>
-                      <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 font-bold text-gray-900 flex justify-between">
-                        <span>Free Standard Courier</span>
-                        <span className="text-emerald-700">FREE</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">Payment Method</label>
-                      <div className="p-3 bg-amber-50 rounded-xl border border-amber-300 space-y-1">
-                        <span className="font-bold text-amber-900 block">Cash on Delivery (COD)</span>
-                        <span className="text-amber-800 text-[11px] block">Free Shipping On Above 2000/ Order. Pay cash upon delivery.</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-gray-700 uppercase tracking-wide mb-1">Billing Address</label>
-                      <div className="space-y-1">
-                        <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="billAddr" defaultChecked /><span className="font-semibold">Same as shipping address</span></label>
-                        <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="billAddr" /><span className="font-semibold">Use a different billing address</span></label>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={handleCompleteOrder}
-                      className="w-full py-3 bg-amber-800 hover:bg-amber-900 text-white font-bold rounded-xl shadow-md text-sm mt-4 cursor-pointer"
-                    >
-                      Complete Order (Submit)
-                    </button>
-                  </div>
-
-                  {/* Order Summary Column */}
-                  <div className="lg:col-span-5 bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4">
-                    <h2 className="text-base font-bold text-gray-900 uppercase tracking-wide border-b border-gray-100 pb-2">Order Summary</h2>
-
-                    <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                      <div>
-                        <div className="font-bold text-gray-900">ESSENCE - Premium Leather Belt</div>
-                        <div className="text-gray-500 text-[11px]">Dark Brown / 34 &bull; Qty: {cartQuantity}</div>
-                      </div>
-                      <span className="font-bold text-gray-900">Rs {(itemPrice * cartQuantity).toLocaleString()}.00</span>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <input type="text" placeholder="Discount code" value={discountCode} onChange={(e) => setDiscountCode(e.target.value)} className="w-full h-9 px-3 rounded-xl bg-gray-50 border border-gray-300 font-semibold" />
-                      <button onClick={() => toast.success("Discount code applied!")} className="px-3 py-1.5 bg-gray-100 text-gray-800 rounded-xl font-bold">Apply</button>
-                    </div>
-
-                    <div className="space-y-1.5 pt-2 border-t border-gray-100">
-                      <div className="flex justify-between text-gray-700"><span>Subtotal</span><span className="font-bold">Rs {(itemPrice * cartQuantity).toLocaleString()}.00</span></div>
-                      <div className="flex justify-between text-gray-700"><span>Shipping</span><span className="font-bold text-emerald-700">FREE</span></div>
-                      <div className="flex justify-between text-gray-900 font-bold text-sm pt-2 border-t border-gray-100"><span>Total</span><span className="text-amber-800">PKR Rs {(itemPrice * cartQuantity).toLocaleString()}.00</span></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* C. Address Collection Rules Modal */}
+      {/* Address Collection Rules Modal */}
       {addressModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 p-6 space-y-4 text-xs font-sans">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-base font-bold text-gray-900">Address Collection Rules</h3>
-              <button onClick={() => setAddressModalOpen(false)} className="p-1 text-gray-400 hover:text-black">
+              <button onClick={() => setAddressModalOpen(false)} className="p-1 text-gray-400 hover:text-black cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -570,20 +651,19 @@ export default function AdminSettingsCheckoutPage() {
             </div>
 
             <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-              <button onClick={() => setAddressModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">Cancel</button>
-              <button onClick={() => { toast.success("Address rules saved!"); setAddressModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold">Save</button>
-            </div>
+              <button onClick={() => setAddressModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-pointer">Cancel</button>
+              <button onClick={() => { toast.success("Address rules applied! Click Save to persist."); setAddressModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold cursor-pointer">Apply</button>            </div>
           </div>
         </div>
       )}
 
-      {/* D. Add-to-Cart Limit Popup Modal */}
+      {/* Add-to-Cart Limit Modal */}
       {cartLimitModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 p-6 space-y-4 text-xs font-sans">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-base font-bold text-gray-900">Add-to-Cart Limit</h3>
-              <button onClick={() => setCartLimitModalOpen(false)} className="p-1 text-gray-400 hover:text-black">
+              <button onClick={() => setCartLimitModalOpen(false)} className="p-1 text-gray-400 hover:text-black cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -593,7 +673,7 @@ export default function AdminSettingsCheckoutPage() {
             <div className="space-y-3">
               <label className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200 cursor-pointer font-bold text-gray-900">
                 <span>Enable Add-to-cart Limit</span>
-                <input type="checkbox" checked={enableCartLimit} onChange={(e) => setEnableCartLimit(e.target.checked)} className="w-4 h-4 text-amber-800 rounded" />
+                <input type="checkbox" checked={enableCartLimit} onChange={(e) => setEnableCartLimit(e.target.checked)} className="w-4 h-4 text-amber-800 rounded cursor-pointer" />
               </label>
 
               <div>
@@ -604,38 +684,8 @@ export default function AdminSettingsCheckoutPage() {
             </div>
 
             <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-              <button onClick={() => setCartLimitModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold">Cancel</button>
-              <button onClick={() => { toast.success(`Cart limit set to ${cartItemLimit}!`); setCartLimitModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold">Save Limit</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* E. CWILL Fraud Order Validation Popup Modal */}
-      {fraudModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 p-6 space-y-4 text-xs font-sans">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-amber-800" />
-                <h3 className="text-base font-bold text-gray-900">CWILL (PARCEL PANEL) Fraud Order Validation</h3>
-              </div>
-              <button onClick={() => setFraudModalOpen(false)} className="p-1 text-gray-400 hover:text-black">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-2 text-amber-900">
-              <span className="font-bold text-sm block">Active Risk Validation Extension</span>
-              <p className="text-xs">
-                CWILL Parcel Panel validates customer checkout details against high-risk order patterns, disposable emails, and suspicious shipping addresses.
-              </p>
-            </div>
-
-            <div className="flex justify-end pt-3 border-t border-gray-100">
-              <button onClick={() => setFraudModalOpen(false)} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold">
-                Close Validation
-              </button>
+              <button onClick={() => setCartLimitModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-pointer">Cancel</button>
+              <button onClick={() => { toast.success(`Cart limit set to ${cartItemLimit}! Click Save to persist.`); setCartLimitModalOpen(false); }} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold cursor-pointer">Apply Limit</button>
             </div>
           </div>
         </div>

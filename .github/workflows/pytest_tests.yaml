@@ -171,6 +171,14 @@ jobs:
         working-directory: eligo-frontend
         run: npm ci
 
+      - name: Frontend Lint
+        working-directory: eligo-frontend
+        run: npm run lint
+
+      - name: Eligo Frontend Tests
+        working-directory: eligo-frontend
+        run: npm run test
+
       - name: Build Frontend
         working-directory: eligo-frontend
         run: npm run build
@@ -201,6 +209,10 @@ jobs:
       - name: Install Admin Frontend Dependencies
         working-directory: admin-frontend
         run: npm ci
+
+      - name: Admin Frontend Lint
+        working-directory: admin-frontend
+        run: npm run lint
 
       - name: Build Admin Frontend
         working-directory: admin-frontend

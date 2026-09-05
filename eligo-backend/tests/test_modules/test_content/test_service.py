@@ -4,12 +4,12 @@ from app.modules.content import service
 from app.modules.content.model import (
     MetaobjectStatus,
     MenuTarget,
-    BlogCommentStatus,
     BlogPost,
 )
 from app.modules.content.schema import (
     MetaobjectDefinitionCreate,
     MetaobjectDefinitionUpdate,
+    MetaobjectDefinitionFieldCreate,
     MetaobjectEntryCreate,
     MetaobjectEntryUpdate,
     FileCreate,
@@ -22,8 +22,6 @@ from app.modules.content.schema import (
     UrlRedirectUpdate,
     BlogPostCreate,
     BlogPostUpdate,
-    BlogCommentCreate,
-    BlogCommentUpdate,
 )
 
 
@@ -56,6 +54,30 @@ async def test_metaobject_definition_crud(db_session):
     assert await service.update_metaobject_definition(
         db_session, 99999, MetaobjectDefinitionUpdate(name="x"),
     ) is None
+
+    with_fields = await service.update_metaobject_definition(
+        db_session, definition.id,
+        MetaobjectDefinitionUpdate(
+            description="Rebuilt fields",
+            fields=[
+                MetaobjectDefinitionFieldCreate(
+                    label="Title", field_type="Single line text",
+                    cardinality="one", required=True,
+                    is_display_name=True, is_filterable=False, position=0,
+                ),
+                MetaobjectDefinitionFieldCreate(
+                    label="Color", field_type="Color",
+                    cardinality="one", required=False,
+                    is_display_name=False, is_filterable=True, position=1,
+                ),
+            ],
+        ),
+    )
+    assert with_fields.description == "Rebuilt fields"
+    rebuilt = await service.get_metaobject_definition(db_session, definition.id)
+    assert [f.label for f in rebuilt.fields] == ["Title", "Color"]
+    assert all(f.definition_id == rebuilt.id for f in rebuilt.fields)
+    assert rebuilt.fields[1].is_filterable is True
 
     assert await service.delete_metaobject_definition(db_session, definition.id) is True
     assert await service.delete_metaobject_definition(db_session, definition.id) is False
@@ -123,11 +145,12 @@ async def test_file_crud_and_filters(db_session):
 
     fetched = await service.get_file(db_session, file_obj.id)
     assert fetched is not None
-    assert fetched.filename == "hero.png"
+    assert fetched.filename == "hero.webp"
+    assert fetched.mime_type == "image/webp"
     assert await service.get_file(db_session, 99999) is None
 
     assert len(await service.list_files(db_session, search="hero")) == 1
-    assert len(await service.list_files(db_session, mime_type="image/png")) == 1
+    assert len(await service.list_files(db_session, mime_type="image/webp")) == 1
     assert len(await service.list_files(db_session, mime_type="application/pdf")) == 0
 
     updated = await service.update_file(db_session, file_obj.id, FileUpdate(alt_text="New alt"))
@@ -266,40 +289,6 @@ async def test_blog_post_crud_and_filters(db_session):
 
 
 # ---------------------------------------------------------------------------
-# Blog Comments
-# ---------------------------------------------------------------------------
-
-async def test_blog_comment_crud_and_filters(db_session):
-    post = await service.create_blog_post(db_session, BlogPostCreate(title="Post", handle="post-1"))
-    comment = await service.create_blog_comment(
-        db_session,
-        BlogCommentCreate(post_id=post.id, author_name="A", author_email="a@b.com", content="Nice"),
-    )
-    assert comment.id is not None
-    assert comment.status == BlogCommentStatus.pending
-
-    fetched = await service.get_blog_comment(db_session, comment.id)
-    assert fetched is not None
-    assert fetched.author_name == "A"
-    assert await service.get_blog_comment(db_session, 99999) is None
-
-    assert len(await service.list_blog_comments(db_session, post_id=post.id)) == 1
-    assert len(await service.list_blog_comments(db_session, status="pending")) == 1
-    assert len(await service.list_blog_comments(db_session, status="approved")) == 0
-
-    updated = await service.update_blog_comment(
-        db_session, comment.id, BlogCommentUpdate(status="approved"),
-    )
-    assert updated.status == BlogCommentStatus.approved
-    assert await service.update_blog_comment(
-        db_session, 99999, BlogCommentUpdate(status="approved"),
-    ) is None
-
-    assert await service.delete_blog_comment(db_session, comment.id) is True
-    assert await service.delete_blog_comment(db_session, comment.id) is False
-
-
-# ---------------------------------------------------------------------------
 # Content Overview
 # ---------------------------------------------------------------------------
 
@@ -318,10 +307,6 @@ async def test_get_content_overview(db_session):
     await service.create_menu(db_session, MenuCreate(title="Main", handle="main-menu"))
     await service.create_url_redirect(db_session, UrlRedirectCreate(from_path="/a", to_path="/b"))
     post = await service.create_blog_post(db_session, BlogPostCreate(title="Post", handle="post-9"))
-    await service.create_blog_comment(
-        db_session,
-        BlogCommentCreate(post_id=post.id, author_name="A", author_email="a@b.com", content="x"),
-    )
 
     overview = await service.get_content_overview(db_session)
 
@@ -340,5 +325,3 @@ async def test_get_content_overview(db_session):
     assert overview.blog.total_posts == 1
     assert overview.blog.visible_posts == 1
     assert overview.blog.hidden_posts == 0
-    assert overview.blog.total_comments == 1
-    assert overview.blog.pending_comments == 1

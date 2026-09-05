@@ -5,10 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.catalog.model import (
-    Product, ProductVariant, ProductImage, Collection,
+    Product, ProductVariant, ProductImage, Collection, ProductCollection,
     Location, InventoryItem,
     PurchaseOrder, PurchaseOrderItem,
     Transfer, GiftCard,
+    GiftCardProduct, GiftCardProductImage,
+    CollectionType,
 )
 from app.modules.catalog.schema import (
     ProductCreate, ProductUpdate, ProductListOut,
@@ -21,8 +23,61 @@ from app.modules.catalog.schema import (
     PurchaseOrderItemCreate, PurchaseOrderItemUpdate,
     TransferCreate, TransferUpdate,
     GiftCardCreate, GiftCardUpdate,
+    GiftCardProductCreate, GiftCardProductUpdate, GiftCardProductListOut,
     CatalogOverview,
 )
+
+
+def _collection_descendant_ids(
+    root_ids: set[int], all_collections: list[Collection],
+) -> set[int]:
+    """All ids reachable from root_ids through collections.parent_id."""
+    children_map: dict[int | None, list[int]] = {}
+    for col in all_collections:
+        children_map.setdefault(col.parent_id, []).append(col.id)
+    scope = set(root_ids)
+    frontier = list(root_ids)
+    while frontier:
+        current = frontier.pop()
+        for child_id in children_map.get(current, []):
+            if child_id not in scope:
+                scope.add(child_id)
+                frontier.append(child_id)
+    return scope
+
+
+async def _collection_scope_filter(
+    db: AsyncSession, collection_ref: str,
+) -> "list[Collection] | None":
+    """Resolve a collection reference (id or url_handle) plus any
+    collection_type group name into the scoped collection rows."""
+    all_rows = list((await db.execute(select(Collection))).scalars().all())
+
+    target: Collection | None = None
+    if collection_ref.isdigit():
+        target = next((c for c in all_rows if c.id == int(collection_ref)), None)
+    if target is None:
+        target = next(
+            (c for c in all_rows if c.url_handle == collection_ref), None,
+        )
+
+    if target is not None:
+        scope_ids = _collection_descendant_ids({target.id}, all_rows)
+        return [c for c in all_rows if c.id in scope_ids]
+
+    type_values = {t.value for t in CollectionType}
+    if collection_ref.lower() in type_values:
+        roots = [
+            c for c in all_rows if c.collection_type == collection_ref.lower()
+        ]
+        if not roots:
+            return []
+        scope_ids = _collection_descendant_ids(
+            {c.id for c in roots}, all_rows,
+        )
+        return [c for c in all_rows if c.id in scope_ids]
+
+    return []
 
 
 # ===========================================================================
@@ -53,6 +108,15 @@ async def create_product(db: AsyncSession, data: ProductCreate) -> Product:
         images=[ProductImage(**img.model_dump()) for img in data.images],
     )
     db.add(product)
+    await db.flush()
+
+    cat_names = [c.strip() for c in (categories_str or "").split(",") if c.strip()]
+    if cat_names:
+        cols_result = await db.execute(select(Collection).where(Collection.title.in_(cat_names)))
+        cols = list(cols_result.scalars().all())
+        for c in cols:
+            db.add(ProductCollection(product_id=product.id, collection_id=c.id))
+
     await db.commit()
     await db.refresh(product, attribute_names=["variants", "images"])
     return product
@@ -100,6 +164,7 @@ async def list_products(
     category: str | None = None,
     vendor: str | None = None,
     search: str | None = None,
+    collection: str | None = None,
     skip: int = 0,
     limit: int = 50,
 ) -> list[ProductListOut]:
@@ -113,6 +178,27 @@ async def list_products(
         query = query.where(Product.category == category)
     if vendor:
         query = query.where(Product.vendor.ilike(f"%{vendor}%"))
+    if collection:
+        scoped = await _collection_scope_filter(db, collection)
+        # Unknown collection reference -> nothing belongs to it.
+        if not scoped:
+            return []
+        scope_ids = [c.id for c in scoped]
+        title_predicates = [
+            Product.categories.ilike(f"%{c.title.strip()}%")
+            for c in scoped
+            if c.title.strip()
+        ]
+        query = query.where(
+            or_(
+                Product.id.in_(
+                    select(ProductCollection.product_id).where(
+                        ProductCollection.collection_id.in_(scope_ids),
+                    ),
+                ),
+                *title_predicates,
+            ),
+        )
     if search:
         query = query.where(
             or_(
@@ -132,11 +218,52 @@ async def update_product(db: AsyncSession, product_id: int, data: ProductUpdate)
     product = await get_product(db, product_id)
     if not product:
         return None
-    for field, value in data.model_dump(exclude_unset=True).items():
+    payload = data.model_dump(exclude_unset=True)
+
+    variants = payload.pop("variants", None)
+    images = payload.pop("images", None)
+
+    # `category_list` is a read-only computed property on the model (derived
+    # from the `categories` column), so it must never be written directly.
+    # Mirror create_product: keep the client-sent `categories` string when
+    # present, otherwise rebuild it from `category_list`.
+    category_list = payload.pop("category_list", None)
+    if category_list and not payload.get("categories"):
+        payload["categories"] = ",".join(category_list)
+
+    for field, value in payload.items():
         setattr(product, field, value)
+
+    # Full replacement of the variant & image collections when the client
+    # sends them (edit flow), so updates keep the product row in place while
+    # its child records are re-synced to match the form.
+    #
+    # Delete the existing child rows first and flush BEFORE inserting the new
+    # set. Otherwise SQLAlchemy flushes new INSERTs ahead of the orphan
+    # DELETEs, which collides on the unique `sku` constraint (500) whenever a
+    # product is re-saved with the same variant SKUs.
+    if variants is not None:
+        for child in list(product.variants):
+            await db.delete(child)
+    if images is not None:
+        for child in list(product.images):
+            await db.delete(child)
+    await db.flush()
+
+    if variants is not None:
+        product.variants = [
+            ProductVariant(product_id=product_id, **VariantCreate(**v).model_dump()) for v in variants
+        ]
+    if images is not None:
+        product.images = [
+            ProductImage(product_id=product_id, **ProductImageCreate(**img).model_dump()) for img in images
+        ]
+
     await db.commit()
-    await db.refresh(product, attribute_names=["variants", "images"])
-    return product
+    # Re-load with eager-loaded relationships (variants/images) so response
+    # serialization never triggers a lazy load outside the async context
+    # (which raises MissingGreenlet and produces a 500).
+    return await get_product(db, product_id)
 
 
 async def delete_product(db: AsyncSession, product_id: int) -> bool:
@@ -238,13 +365,37 @@ async def create_collection(db: AsyncSession, data: CollectionCreate) -> Collect
     return obj
 
 
+async def _compute_products_count_for_collections(db: AsyncSession, collections: list[Collection]) -> list[Collection]:
+    for col in collections:
+        title_stripped = col.title.strip() if col.title else ""
+        conditions = [
+            Product.id.in_(
+                select(ProductCollection.product_id).where(
+                    ProductCollection.collection_id == col.id
+                )
+            )
+        ]
+        if title_stripped:
+            conditions.append(Product.categories.ilike(f"%{title_stripped}%"))
+        
+        query = select(func.count(func.distinct(Product.id))).where(or_(*conditions))
+        res = await db.execute(query)
+        count = res.scalar() or 0
+        setattr(col, "products_count", count)
+    return collections
+
+
 async def get_collection(db: AsyncSession, col_id: int) -> Collection | None:
-    return await db.get(Collection, col_id)
+    obj = await db.get(Collection, col_id)
+    if obj:
+        await _compute_products_count_for_collections(db, [obj])
+    return obj
 
 
 async def list_collections(
     db: AsyncSession,
     search: str | None = None,
+    collection_type: str | None = None,
     skip: int = 0,
     limit: int = 50,
 ) -> list[Collection]:
@@ -256,9 +407,13 @@ async def list_collections(
                 Collection.url_handle.ilike(f"%{search}%"),
             ),
         )
+    if collection_type:
+        query = query.where(Collection.collection_type == collection_type)
     query = query.order_by(Collection.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
-    return list(result.scalars().all())
+    cols = list(result.scalars().all())
+    await _compute_products_count_for_collections(db, cols)
+    return cols
 
 
 async def update_collection(db: AsyncSession, col_id: int, data: CollectionUpdate) -> Collection | None:
@@ -596,6 +751,108 @@ async def update_gift_card(db: AsyncSession, gc_id: int, data: GiftCardUpdate) -
 
 async def delete_gift_card(db: AsyncSession, gc_id: int) -> bool:
     obj = await get_gift_card(db, gc_id)
+    if not obj:
+        return False
+    await db.delete(obj)
+    await db.commit()
+    return True
+
+
+# ===========================================================================
+# Gift Card Product – CRUD
+# ===========================================================================
+
+async def create_gift_card_product(db: AsyncSession, data: GiftCardProductCreate) -> GiftCardProduct:
+    from app.modules.catalog.model import GiftCardProductImage as GCProductImage
+    obj = GiftCardProduct(
+        code=data.code,
+        title=data.title,
+        description=data.description,
+        status=data.status,
+        base_price=data.base_price,
+        compare_at_price=data.compare_at_price,
+        seo_title=data.seo_title,
+        seo_description=data.seo_description,
+        meta_description=data.meta_description,
+        url_handle=data.url_handle,
+        product_ids=data.product_ids,
+        images=[GCProductImage(**img.model_dump()) for img in data.images],
+    )
+    db.add(obj)
+    await db.flush()
+    await db.commit()
+    await db.refresh(obj, attribute_names=["images"])
+    return obj
+
+
+async def get_gift_card_product(db: AsyncSession, gcp_id: int) -> GiftCardProduct | None:
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(GiftCardProduct)
+        .options(selectinload(GiftCardProduct.images))
+        .where(GiftCardProduct.id == gcp_id),
+    )
+    return result.scalar_one_or_none()
+
+
+def to_gift_card_product_list_out(obj: GiftCardProduct) -> GiftCardProductListOut:
+    images = sorted(obj.images, key=lambda img: img.position) if obj.images else []
+    return GiftCardProductListOut(
+        id=obj.id,
+        code=obj.code,
+        title=obj.title,
+        status=obj.status,
+        base_price=obj.base_price,
+        compare_at_price=obj.compare_at_price,
+        seo_title=obj.seo_title,
+        url_handle=obj.url_handle,
+        product_ids=obj.product_ids,
+        image_url=images[0].url if images else None,
+        created_at=obj.created_at,
+        updated_at=obj.updated_at,
+    )
+
+
+async def list_gift_card_products(
+    db: AsyncSession,
+    search: str | None = None,
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
+) -> list[GiftCardProductListOut]:
+    from sqlalchemy.orm import selectinload
+    query = (
+        select(GiftCardProduct)
+        .options(selectinload(GiftCardProduct.images))
+    )
+    if search:
+        query = query.where(
+            or_(
+                GiftCardProduct.title.ilike(f"%{search}%"),
+                GiftCardProduct.url_handle.ilike(f"%{search}%"),
+            ),
+        )
+    if status:
+        query = query.where(GiftCardProduct.status == status)
+    query = query.order_by(GiftCardProduct.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    objs = list(result.scalars().all())
+    return [to_gift_card_product_list_out(o) for o in objs]
+
+
+async def update_gift_card_product(db: AsyncSession, gcp_id: int, data: GiftCardProductUpdate) -> GiftCardProduct | None:
+    obj = await get_gift_card_product(db, gcp_id)
+    if not obj:
+        return None
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(obj, field, value)
+    await db.commit()
+    await db.refresh(obj, attribute_names=["images"])
+    return obj
+
+
+async def delete_gift_card_product(db: AsyncSession, gcp_id: int) -> bool:
+    obj = await get_gift_card_product(db, gcp_id)
     if not obj:
         return False
     await db.delete(obj)

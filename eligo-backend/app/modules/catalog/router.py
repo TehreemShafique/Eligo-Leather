@@ -8,17 +8,19 @@ from app.modules.catalog.schema import (
     ProductCreate, ProductUpdate, ProductOut, ProductListOut,
     VariantCreate, VariantUpdate, VariantOut,
     ProductImageCreate, ProductImageUpdate, ProductImageOut,
-    CollectionCreate, CollectionUpdate, CollectionOut,
+    CollectionCreate, CollectionUpdate, CollectionOut, CollectionType,
     LocationCreate, LocationUpdate, LocationOut,
     InventoryItemCreate, InventoryItemUpdate, InventoryItemOut,
     PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderOut, PurchaseOrderWithItems,
     PurchaseOrderItemCreate, PurchaseOrderItemUpdate, PurchaseOrderItemOut,
     TransferCreate, TransferUpdate, TransferOut,
     GiftCardCreate, GiftCardUpdate, GiftCardOut,
+    GiftCardProductCreate, GiftCardProductUpdate, GiftCardProductOut, GiftCardProductListOut,
     CatalogOverview,
 )
 
 from app.core.cache import cache_response, invalidate_cache
+from app.modules.catalog.revalidation import purge_catalog_cache
 
 # ===========================================================================
 # Catalog Overview
@@ -51,6 +53,7 @@ product_router = APIRouter(
 async def create_product(data: ProductCreate, db: AsyncSession = Depends(get_db)):
     res = await service.create_product(db, data)
     invalidate_cache("catalog")
+    await purge_catalog_cache()
     return res
 
 
@@ -61,13 +64,15 @@ async def list_products(
     category: str | None = Query(None),
     vendor: str | None = Query(None),
     search: str | None = Query(None),
+    collection: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
     return await service.list_products(
         db, status=status_filter, category=category,
-        vendor=vendor, search=search, skip=skip, limit=limit,
+        vendor=vendor, search=search, collection=collection,
+        skip=skip, limit=limit,
     )
 
 
@@ -84,6 +89,8 @@ async def update_product(product_id: int, data: ProductUpdate, db: AsyncSession 
     product = await service.update_product(db, product_id, data)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    invalidate_cache("catalog")
+    await purge_catalog_cache()
     return product
 
 
@@ -92,6 +99,8 @@ async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
     deleted = await service.delete_product(db, product_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Product not found")
+    invalidate_cache("catalog")
+    await purge_catalog_cache()
 
 
 # --- Variants ---
@@ -162,11 +171,15 @@ async def create_collection(data: CollectionCreate, db: AsyncSession = Depends(g
 @collection_router.get("/", response_model=list[CollectionOut])
 async def list_collections(
     search: str | None = Query(None),
+    collection_type: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    return await service.list_collections(db, search=search, skip=skip, limit=limit)
+    return await service.list_collections(
+        db, search=search, collection_type=collection_type,
+        skip=skip, limit=limit,
+    )
 
 
 @collection_router.get("/{col_id}", response_model=CollectionOut)
@@ -468,3 +481,55 @@ async def delete_gift_card(gc_id: int, db: AsyncSession = Depends(get_db)):
     deleted = await service.delete_gift_card(db, gc_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Gift card not found")
+
+
+# ===========================================================================
+# Gift Card Products
+# ===========================================================================
+
+gift_card_product_router = APIRouter(
+    prefix="/catalog/gift-card-products",
+    tags=["Gift Card Products"],
+    dependencies=[Depends(get_current_user)],
+)
+
+
+@gift_card_product_router.post("/", response_model=GiftCardProductOut, status_code=status.HTTP_201_CREATED)
+async def create_gift_card_product(data: GiftCardProductCreate, db: AsyncSession = Depends(get_db)):
+    return await service.create_gift_card_product(db, data)
+
+
+@gift_card_product_router.get("/", response_model=list[GiftCardProductListOut])
+async def list_gift_card_products(
+    search: str | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.list_gift_card_products(
+        db, search=search, status=status_filter, skip=skip, limit=limit,
+    )
+
+
+@gift_card_product_router.get("/{gcp_id}", response_model=GiftCardProductOut)
+async def get_gift_card_product(gcp_id: int, db: AsyncSession = Depends(get_db)):
+    obj = await service.get_gift_card_product(db, gcp_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Gift card product not found")
+    return obj
+
+
+@gift_card_product_router.patch("/{gcp_id}", response_model=GiftCardProductOut)
+async def update_gift_card_product(gcp_id: int, data: GiftCardProductUpdate, db: AsyncSession = Depends(get_db)):
+    obj = await service.update_gift_card_product(db, gcp_id, data)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Gift card product not found")
+    return obj
+
+
+@gift_card_product_router.delete("/{gcp_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_gift_card_product(gcp_id: int, db: AsyncSession = Depends(get_db)):
+    deleted = await service.delete_gift_card_product(db, gcp_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Gift card product not found")

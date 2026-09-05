@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
+import { getStoredUser } from "@/lib/api"
 import {
   House,
   Users,
@@ -37,20 +38,32 @@ export default function SettingsLayout({
   const [searchQuery, setSearchQuery] = useState("")
   const [usersOpen, setUsersOpen] = useState(pathname.includes("/organization-account"))
 
+  const user = getStoredUser() as { email?: string; full_name?: string | null; is_admin?: boolean } | null
+  const isAdmin = !!user?.is_admin
+  const displayName = user?.full_name || user?.email || "Admin"
+  const displayEmail = user?.email || "No email"
+  const initials = user?.full_name
+    ? user.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : user?.email?.slice(0, 2).toUpperCase() || "AD"
+
   // Settings Items (Plan and Billing explicitly removed)
   const settingsNavItems = [
     { name: "General", href: "/settings/general", icon: House },
-    {
-      name: "Users",
-      href: "/settings/organization-account",
-      icon: Users,
-      hasSub: true,
-      subItems: [
-        { name: "Users List", href: "/settings/organization-account" },
-        { name: "Roles & Permissions", href: "/settings/organization-account/roles" },
-        { name: "Security Logs", href: "/settings/organization-account/security" },
-      ],
-    },
+    ...(isAdmin
+      ? [
+          {
+            name: "Users",
+            href: "/settings/organization-account",
+            icon: Users,
+            hasSub: true,
+            subItems: [
+              { name: "Users List", href: "/settings/organization-account" },
+              { name: "Roles & Permissions", href: "/settings/organization-account/roles" },
+              { name: "Security Logs", href: "/settings/organization-account/security" },
+            ],
+          },
+        ]
+      : []),
     { name: "Payments", href: "/settings/payments", icon: CreditCard },
     { name: "Checkout", href: "/settings/checkout", icon: ShoppingCart },
     { name: "Customer accounts", href: "/settings/customer_accounts", icon: UserCircle },
@@ -187,11 +200,11 @@ export default function SettingsLayout({
             className="pt-3 border-t border-gray-100 flex items-center gap-2.5 p-2 rounded-xl hover:bg-amber-50 transition-all duration-200 cursor-pointer block"
           >
             <div className="w-7 h-7 rounded-lg bg-amber-800 text-white font-extrabold text-[11px] flex items-center justify-center shrink-0">
-              BH
+              {initials}
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-xs font-bold text-gray-900 truncate">Bilal Hussain Abbasi</span>
-              <span className="text-[10px] text-gray-500 truncate">eligoleather9@gmail.com</span>
+              <span className="text-xs font-bold text-gray-900 truncate">{displayName}</span>
+              <span className="text-[10px] text-gray-500 truncate">{displayEmail}</span>
             </div>
           </Link>
         </aside>

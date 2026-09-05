@@ -42,3 +42,6 @@ htmlcov/
 # SQLite
 *.db
 *.sqlite3
+
+# Uploaded media (served from /static)
+static/uploads/

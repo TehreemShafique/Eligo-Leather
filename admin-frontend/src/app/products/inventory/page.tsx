@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import { Package, DownloadSimple, UploadSimple, X, MagnifyingGlass } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
+import { apiFetch, API_BASE} from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 interface InventoryRowItem {
   id: number
@@ -31,11 +33,29 @@ export default function AdminInventoryPage() {
 
   const [inventoryRows, setInventoryRows] = useState<InventoryRowItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const onHandValues = useMemo(() => {
+    const map: Record<string, number> = {}
+    inventoryRows.forEach((item) => { map[String(item.id)] = item.onHand })
+    return map
+  }, [inventoryRows])
+
+  const { reset } = useFormDirty(onHandValues, dataLoaded)
 
   const fetchInventoryFromBackend = async () => {
     setLoading(true)
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/catalog/products/")
+      // Committed units per variant come from open orders:
+      // available = on_hand - committed (cancelled/restocked orders excluded server-side).
+      let commitments: Record<string, number> = {}
+      try {
+        commitments = await apiFetch<Record<string, number>>("/api/v1/orders/inventory-commitments")
+      } catch (commitErr) {
+        console.error("Could not load order commitments:", commitErr)
+      }
+
+      const res = await fetch(`${API_BASE}/api/v1/catalog/products/`)
       if (res.ok) {
         const products = await res.json()
         if (Array.isArray(products) && products.length > 0) {
@@ -44,6 +64,8 @@ export default function AdminInventoryPage() {
             const defaultImg = p.images?.[0]?.url || "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=200"
             if (p.variants && p.variants.length > 0) {
               p.variants.forEach((v: any) => {
+                const onHand = v.inventory_quantity ?? 0
+                const committed = commitments[String(v.id)] ?? 0
                 rows.push({
                   id: v.id,
                   productId: p.id,
@@ -51,9 +73,9 @@ export default function AdminInventoryPage() {
                   title: p.title,
                   variant: v.color_name || v.title || "Standard",
                   colorHex: v.color_hex,
-                  onHand: v.inventory_quantity ?? 0,
-                  available: v.inventory_quantity ?? 0,
-                  committed: 0,
+                  onHand,
+                  available: Math.max(onHand - committed, 0),
+                  committed,
                   unavailable: 0,
                   img: v.image_url || defaultImg,
                 })
@@ -82,6 +104,7 @@ export default function AdminInventoryPage() {
       console.error("Error loading inventory from DB:", err)
     } finally {
       setLoading(false)
+      setDataLoaded(true)
     }
   }
 
@@ -91,11 +114,15 @@ export default function AdminInventoryPage() {
 
   const handleUpdateVariantStock = async (variantId: number, newStock: number) => {
     setInventoryRows(prev =>
-      prev.map(item => (item.id === variantId ? { ...item, available: newStock, onHand: newStock } : item))
+      prev.map(item => (
+        item.id === variantId
+          ? { ...item, onHand: newStock, available: Math.max(newStock - item.committed, 0) }
+          : item
+      ))
     )
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/catalog/products/variants/${variantId}`, {
+      const res = await fetch(`${API_BASE}/api/v1/catalog/products/variants/${variantId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inventory_quantity: newStock }),
@@ -103,6 +130,7 @@ export default function AdminInventoryPage() {
 
       if (res.ok) {
         toast.success("Updated variant inventory stock in database!")
+        reset()
       }
     } catch (err) {
       toast.info("Updated stock quantity locally.")
@@ -188,7 +216,7 @@ export default function AdminInventoryPage() {
                     <td className="eligo-td">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-gray-100 relative overflow-hidden border border-gray-200 shrink-0">
-                          <Image src={inv.img} alt={inv.title} fill unoptimized className="object-cover" />
+                          <Image src={inv.img} alt={inv.title} fill className="object-cover" />
                         </div>
                         <div className="min-w-0">
                           <div className="font-bold text-gray-900 truncate">{inv.title}</div>
@@ -205,10 +233,24 @@ export default function AdminInventoryPage() {
                       </div>
                     </td>
                     <td className="eligo-td font-mono text-gray-600 text-xs font-semibold">{inv.sku}</td>
-                    <td className="eligo-td font-semibold text-gray-400">0</td>
-                    <td className="eligo-td font-semibold text-gray-400">0</td>
+                    <td className="eligo-td font-semibold text-gray-400">{inv.unavailable}</td>
+                    <td className="eligo-td">
+                      {inv.committed > 0 ? (
+                        <span className="px-2.5 py-1 bg-orange-100 text-orange-900 font-extrabold text-xs rounded-full border border-orange-300">
+                          {inv.committed} committed
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-gray-400">0</span>
+                      )}
+                    </td>
                     <td className="eligo-td text-center">
-                      <span className="px-2.5 py-1 bg-emerald-100 text-emerald-900 font-extrabold text-xs rounded-full border border-emerald-300">
+                      <span
+                        className={`px-2.5 py-1 font-extrabold text-xs rounded-full border ${
+                          inv.available > 0
+                            ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+                            : "bg-red-100 text-red-900 border-red-300"
+                        }`}
+                      >
                         {inv.available} units
                       </span>
                     </td>

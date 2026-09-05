@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Users, Globe, Lock, ArrowSquareOut, X, Check, ArrowRight, ShieldCheck, CreditCard } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 export default function AdminSettingsCustomerAccountsPage() {
   const router = useRouter()
@@ -25,6 +26,13 @@ export default function AdminSettingsCustomerAccountsPage() {
   const [currentDomain] = useState("eligoleather.com/account")
   const [newSubdomain, setNewSubdomain] = useState("accounts")
 
+  const { reset } = useFormDirty({
+    allowRegistration,
+    requireEmailVerification,
+    sessionDurationDays,
+    newSubdomain,
+  })
+
   const handleCustomizeCheckout = () => {
     toast.info("Redirecting to Checkout & Customer Accounts Editor...")
     router.push("/settings/checkout")
@@ -34,6 +42,7 @@ export default function AdminSettingsCustomerAccountsPage() {
     e.preventDefault()
     toast.success("Native backend authentication settings updated!")
     setAuthModalOpen(false)
+    reset()
   }
 
   const handleSaveDomain = (e: React.FormEvent) => {
@@ -44,6 +53,7 @@ export default function AdminSettingsCustomerAccountsPage() {
     }
     toast.success(`Domain change request initiated for "${newSubdomain}.eligoleather.com"!`)
     setDomainModalOpen(false)
+    reset()
   }
 
   return (

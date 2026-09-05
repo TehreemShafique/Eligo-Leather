@@ -1,6 +1,10 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { API_BASE } from "@/lib/api"
+
+const STORE_URL = process.env.NEXT_PUBLIC_STORE_URL || ""
+
+import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -13,31 +17,36 @@ import {
   CaretDown,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import { RichTextEditor } from "@/components/ui/rich-text-editor"
+import { LexicalEditor } from "@/components/ui/lexical-editor"
+import { CharCounter } from "@/components/ui/char-counter"
+import { ImageUploadNote } from "@/components/ui/image-upload-note"
+import { useUnsavedChanges } from "@/components/unsaved-changes"
+import { uploadImages } from "@/lib/upload"
 
 export default function CreateBlogPostPage() {
   const router = useRouter()
 
   // Form State
   const [title, setTitle] = useState("")
+  const [slugInput, setSlugInput] = useState("")
   const [content, setContent] = useState("")
   const [excerpt, setExcerpt] = useState("")
-  const [showExcerptField, setShowExcerptField] = useState(false)
+
+  // FAQs State — array of {question, answer}
+  const [faqs, setFaqs] = useState<{ question: string; answer: string }[]>([])
 
   // SEO Fields
   const [seoTitle, setSeoTitle] = useState("")
   const [seoDescription, setSeoDescription] = useState("")
+  const [seoKeyword, setSeoKeyword] = useState("")
+  const [seoCanonicalUrl, setSeoCanonicalUrl] = useState("")
   const [showSeoFields, setShowSeoFields] = useState(false)
 
   // Right Column Settings
   const [visibility, setVisibility] = useState<"Visible" | "Hidden">("Visible")
   const [customScriptOverride, setCustomScriptOverride] = useState<string>("")
   const [isScriptEdited, setIsScriptEdited] = useState<boolean>(false)
-  const [imageUrls, setImageUrls] = useState<string[]>([
-    "https://images.unsplash.com/photo-1591561954557-26941169b49e?auto=format&fit=crop&w=800&q=80",
-    "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=800&q=80",
-    "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=800&q=80",
-  ])
+  const [imageUrls, setImageUrls] = useState<string[]>([])
   const [author, setAuthor] = useState("Bilal Hussain Abbasi")
   const [selectedBlogCategory, setSelectedBlogCategory] = useState("News")
   const [availableBlogs, setAvailableBlogs] = useState<string[]>(["News", "Style Guide", "Leather Care"])
@@ -50,16 +59,66 @@ export default function CreateBlogPostPage() {
   const [showNewBlogInput, setShowNewBlogInput] = useState(false)
   const [newBlogCategoryName, setNewBlogCategoryName] = useState("")
   const [saving, setSaving] = useState(false)
+  const [uploadingImages, setUploadingImages] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+  const { setUnsavedChanges } = useUnsavedChanges()
+  const canonicalTouchedRef = useRef(false)
+
+  const galleryModified = imageUrls.length > 0
+
+  const hasUnsavedChanges =
+    title.trim() !== "" ||
+    slugInput.trim() !== "" ||
+    content.trim() !== "" ||
+    excerpt.trim() !== "" ||
+    faqs.length > 0 ||
+    seoTitle.trim() !== "" ||
+    seoDescription.trim() !== "" ||
+    seoKeyword.trim() !== "" ||
+    seoCanonicalUrl.trim() !== "" ||
+    showSeoFields ||
+    galleryModified ||
+    tags.trim() !== "" ||
+    customScriptOverride.trim() !== ""
+
+  useEffect(() => {
+    setUnsavedChanges(hasUnsavedChanges)
+  }, [setUnsavedChanges, hasUnsavedChanges])
+
+  // Auto-derive the canonical URL from the slug (only when the user has not
+  // manually overridden it).
+  useEffect(() => {
+    if (canonicalTouchedRef.current) return
+    const slug = slugInput
+      ? slugInput.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+      : title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+    const base = (STORE_URL || "").replace(/\/$/, "")
+    setSeoCanonicalUrl(`${base}/blog/${slug || "blog-post"}`)
+  }, [slugInput, title])
+
   // Handle Multi-Image Upload
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
-    if (files && files.length > 0) {
-      const newUrls = Array.from(files).map((f) => URL.createObjectURL(f))
-      setImageUrls((prev) => [...prev, ...newUrls])
-      toast.success(`Attached ${files.length} image(s) to blog post gallery!`)
+    if (!files || files.length === 0) return
+
+    setUploadingImages(true)
+    try {
+      const urls = await uploadImages(Array.from(files), "blogs")
+      const validUrls = urls.filter((u) => u.length > 0)
+      if (validUrls.length > 0) {
+        setImageUrls((prev) => [...prev, ...validUrls])
+        toast.success(`Uploaded ${validUrls.length} image(s) to cloud storage!`)
+      }
+      if (validUrls.length < files.length) {
+        toast.error(`${files.length - validUrls.length} image(s) failed to upload.`)
+      }
+    } catch {
+      toast.error("Image upload failed. Please try again.")
+    } finally {
+      setUploadingImages(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
     }
   }
 
@@ -89,48 +148,34 @@ export default function CreateBlogPostPage() {
     }
 
     setSaving(true)
-    const todayDateStr = new Date().toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    })
+
+    const slug = slugInput
+      ? slugInput.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+      : title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
 
     const payload = {
       title: title.trim(),
-      content: content.trim(),
-      excerpt: excerpt.trim() || title.trim(),
-      author: author.trim() || "Bilal Hussain Abbasi",
-      blog_category: selectedBlogCategory,
-      visibility: visibility,
-      is_visible: visibility === "Visible",
-      featured_image: imageUrls[0] || "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=400&q=80",
-      tags: tags.trim(),
-      published_at: new Date().toISOString(),
-    }
-
-    const newBlogRecord = {
-      id: Date.now(),
-      title: title.trim(),
-      thumbnailUrl: imageUrls[0] || "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=100&q=80",
-      visibility: visibility,
+      handle: slug,
+      body: content.trim(),
+      excerpt: excerpt.trim() || null,
+      faqs: JSON.stringify(faqs),
       author: author.trim() || "Bilal Hussain Abbasi",
       blog: selectedBlogCategory,
-      updatedAt: todayDateStr,
-      publishedAt: todayDateStr,
-    }
-
-    // Save to LocalStorage for cross-page sync
-    try {
-      const stored = localStorage.getItem("eligo_created_blogs")
-      const existing = stored ? JSON.parse(stored) : []
-      localStorage.setItem("eligo_created_blogs", JSON.stringify([newBlogRecord, ...existing]))
-    } catch (e) {
-      console.log("localStorage error", e)
+      visibility: visibility,
+      featured_image_url: imageUrls[0] || null,
+      thumbnail_url: imageUrls[0] || null,
+      tags: tags.trim() || null,
+      seo_title: seoTitle.trim() || null,
+      seo_description: seoDescription.trim() || null,
+      seo_keyword: seoKeyword.trim() || null,
+      seo_canonical_url: seoCanonicalUrl.trim() || null,
+      template_suffix: themeTemplate,
+      published_at: new Date().toISOString(),
     }
 
     // Save to PostgreSQL Backend DB
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/blog-posts/", {
+      const res = await fetch(`${API_BASE}/api/v1/blog-posts/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -138,14 +183,16 @@ export default function CreateBlogPostPage() {
 
       if (res.ok) {
         toast.success(`Blog post "${title}" saved to database!`)
+        setUnsavedChanges(false)
+        router.push("/content/blogs")
       } else {
-        toast.success(`Blog post "${title}" created!`)
+        const body = await res.json().catch(() => null)
+        toast.error(`Could not save blog post: ${body?.detail || "Server error"}`)
       }
     } catch (err) {
-      toast.success(`Blog post "${title}" created!`)
+      toast.error("Could not reach the server. Please try again.")
     } finally {
       setSaving(false)
-      router.push("/content/blogs")
     }
   }
 
@@ -164,10 +211,11 @@ export default function CreateBlogPostPage() {
         <button
           type="button"
           onClick={handleSaveBlogPost}
-          disabled={saving}
-          className="px-5 py-2 bg-[#1a1a1a] hover:bg-black text-white font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer"
+          disabled={saving || uploadingImages}
+          className="px-5 py-2 bg-[#1a1a1a] hover:bg-black text-white font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer disabled:opacity-60 flex items-center gap-2"
         >
-          {saving ? "Saving..." : "Save"}
+          {(saving || uploadingImages) && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+          {uploadingImages ? "Uploading..." : saving ? "Saving..." : "Save"}
         </button>
       </div>
 
@@ -176,6 +224,22 @@ export default function CreateBlogPostPage() {
         <div className="lg:col-span-8 space-y-5">
           {/* Card 1: Title */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-2">
+            {/* Slug */}
+            <div className="space-y-1.5">
+              <label className="font-bold text-gray-900 text-xs block">Slug / URL Handle</label>
+              <div className="flex items-center gap-0">
+                {STORE_URL && <span className="h-11 px-3 bg-gray-100 border border-gray-300 border-r-0 rounded-l-xl text-[11px] text-gray-500 font-mono flex items-center shrink-0">{STORE_URL.replace(/\/$/, "")}/blog/</span>}
+                <input
+                  type="text"
+                  value={slugInput}
+                  onChange={(e) => setSlugInput(e.target.value)}
+                  placeholder={title ? title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : "blog-post-slug"}
+                  className={`${STORE_URL ? "rounded-r-xl" : "rounded-xl"} flex-1 h-11 px-4 bg-white border border-gray-300 font-mono text-sm text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-amber-800/30 transition-all placeholder:text-gray-400`}
+                />
+              </div>
+              <p className="text-[10px] text-gray-400">Leave blank to auto-generate from title. Preview: <span className="font-mono text-gray-600">{STORE_URL ? `${STORE_URL.replace(/\/$/, "")}` : "https://yourdomain.com"}/blog/{slugInput ? slugInput.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : title ? title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : "..."}</span></p>
+            </div>
+
             <label className="font-bold text-gray-900 text-xs block">Title</label>
             <div className="relative flex items-center">
               <input
@@ -194,7 +258,7 @@ export default function CreateBlogPostPage() {
           {/* Card 2: Content MS Word Style Rich Text Editor */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-3">
             <label className="font-bold text-gray-900 text-xs block">Content</label>
-            <RichTextEditor
+            <LexicalEditor
               value={content}
               onChange={(htmlContent) => setContent(htmlContent)}
               placeholder="Write your blog post content here..."
@@ -202,30 +266,81 @@ export default function CreateBlogPostPage() {
             />
           </div>
 
-          {/* Card 3: Excerpt */}
+          {/* Card 2.5: Excerpt */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-2">
+            <label className="font-bold text-gray-900 text-xs block">Post excerpt</label>
+            <textarea
+              value={excerpt}
+              onChange={(e) => setExcerpt(e.target.value)}
+              rows={3}
+              placeholder="Short summary shown in blog preview cards and search results..."
+              className="w-full p-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-800/20 transition-all placeholder:text-gray-400"
+            />
+            <p className="text-[10px] text-gray-400">Leave blank to auto-generate from the post content.</p>
+          </div>
+
+          {/* Card 3: FAQs */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <label className="font-bold text-gray-900 text-xs block">Excerpt</label>
+              <div>
+                <label className="font-bold text-gray-900 text-xs block">Frequently Asked Questions</label>
+                <span className="text-[10px] text-gray-500 font-medium">{faqs.length} FAQ{faqs.length !== 1 ? "s" : ""} added</span>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowExcerptField(!showExcerptField)}
-                className="p-1 text-gray-500 hover:text-black rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                title="Edit excerpt"
+                onClick={() => setFaqs([...faqs, { question: "", answer: "" }])}
+                className="px-3 py-1.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-[11px] rounded-xl transition-colors cursor-pointer flex items-center gap-1"
               >
-                <Pencil className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add FAQ</span>
               </button>
             </div>
 
-            {showExcerptField ? (
-              <textarea
-                value={excerpt}
-                onChange={(e) => setExcerpt(e.target.value)}
-                rows={3}
-                placeholder="Add a summary of the post to appear on your home page or blog."
-                className="w-full p-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden"
-              />
+            {faqs.length === 0 ? (
+              <p className="text-gray-400 font-medium text-[11px]">No FAQs added. Click "Add FAQ" to create one.</p>
             ) : (
-              <p className="text-gray-500 font-medium">Add a summary of the post to appear on your home page or blog.</p>
+              <div className="space-y-3">
+                {faqs.map((faq, idx) => (
+                  <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2 relative group">
+                    <button
+                      type="button"
+                      onClick={() => setFaqs(faqs.filter((_, i) => i !== idx))}
+                      className="absolute top-2 right-2 w-6 h-6 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 rounded-full text-xs font-bold flex items-center justify-center transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
+                      title="Remove FAQ"
+                    >
+                      ✕
+                    </button>
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-600 block mb-1">Question {idx + 1}</label>
+                      <input
+                        type="text"
+                        value={faq.question}
+                        onChange={(e) => {
+                          const next = [...faqs]
+                          next[idx] = { ...next[idx], question: e.target.value }
+                          setFaqs(next)
+                        }}
+                        placeholder="e.g., How do I care for my leather product?"
+                        className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-800/20 transition-all placeholder:text-gray-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-600 block mb-1">Answer</label>
+                      <textarea
+                        value={faq.answer}
+                        onChange={(e) => {
+                          const next = [...faqs]
+                          next[idx] = { ...next[idx], answer: e.target.value }
+                          setFaqs(next)
+                        }}
+                        rows={2}
+                        placeholder="Provide a detailed answer..."
+                        className="w-full p-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-800/20 transition-all placeholder:text-gray-400"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
@@ -245,10 +360,19 @@ export default function CreateBlogPostPage() {
 
             {showSeoFields ? (
               <div className="space-y-3 pt-1">
+                <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-1">
+                  <span className="text-[11px] text-emerald-800 font-mono block">{STORE_URL ? `${STORE_URL.replace(/\/$/, "")}` : "https://yourdomain.com"}/blog/{slugInput ? slugInput.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : title ? title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : "..."}</span>
+                  <span className="text-sm font-bold text-blue-700 hover:underline block">{seoTitle || title || "Page title"}</span>
+                  <span className="text-xs text-gray-600 block line-clamp-2">{(seoDescription ? seoDescription.replace(/<[^>]+>/g, "").trim() : "") || "Meta description"}</span>
+                </div>
                 <div>
-                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Page Title</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Page Title</label>
+                    <CharCounter value={seoTitle} limit={60} />
+                  </div>
                   <input
                     type="text"
+                    maxLength={60}
                     value={seoTitle}
                     onChange={(e) => setSeoTitle(e.target.value)}
                     placeholder={title || "SEO Page Title"}
@@ -256,14 +380,41 @@ export default function CreateBlogPostPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Meta Description</label>
-                  <textarea
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Meta Description</label>
+                    <CharCounter value={seoDescription} limit={160} />
+                  </div>
+                  <LexicalEditor
                     value={seoDescription}
-                    onChange={(e) => setSeoDescription(e.target.value)}
-                    rows={2}
+                    onChange={setSeoDescription}
                     placeholder="Meta description for Google search engines..."
-                    className="w-full p-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden"
+                    minHeight="80px"
                   />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Focus keyword</label>
+                  <input
+                    type="text"
+                    value={seoKeyword}
+                    onChange={(e) => setSeoKeyword(e.target.value)}
+                    placeholder="e.g. leather wallet care"
+                    className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">A key phrase you want this post to rank for. Separate multiple keywords with commas.</p>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Canonical URL</label>
+                  <input
+                    type="text"
+                    value={seoCanonicalUrl}
+                    onChange={(e) => {
+                      canonicalTouchedRef.current = true
+                      setSeoCanonicalUrl(e.target.value)
+                    }}
+                    placeholder="https://yourdomain.com/blog/..."
+                    className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-mono text-xs font-medium text-gray-900 focus:outline-hidden"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">Auto-generated from the slug. Override only if this post lives at a custom canonical URL.</p>
                 </div>
               </div>
             ) : (
@@ -278,50 +429,53 @@ export default function CreateBlogPostPage() {
             </h2>
 
             {(() => {
-              const slug = (title || "blog-post").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+              const slug = slugInput
+                ? slugInput.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+                : (title || "blog-post").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+              const domain = STORE_URL || "https://yourdomain.com"
               const defaultBlogSchema = {
                 "@context": "https://schema.org",
                 "@graph": [
                   {
                     "@type": "BlogPosting",
-                    "@id": `https://eligoleather.com/blog/${slug}/#blogposting`,
+                    "@id": `${domain}/blog/${slug}/#blogposting`,
                     "headline": title || "Blog Post Title",
-                    "description": seoDescription || excerpt || title || "Read our latest editorial guide from Eligo Leather.",
-                    "image": imageUrls.length > 0 ? imageUrls : ["https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=800&q=80"],
+                    "description": seoDescription || title || "Read our latest editorial guide from Eligo Leather.",
+                    "image": imageUrls.length > 0 ? imageUrls : [],
                     "datePublished": new Date().toISOString(),
                     "dateModified": new Date().toISOString(),
                     "author": {
                       "@type": "Person",
                       "name": author || "Bilal Hussain Abbasi",
-                      "url": "https://eligoleather.com/authors/bilal-abbasi"
+                      "url": `${domain}/authors/bilal-abbasi`
                     },
                     "publisher": {
                       "@type": "Organization",
                       "name": "Eligo Leather Official Store",
-                      "url": "https://eligoleather.com",
+                      "url": domain,
                       "logo": {
                         "@type": "ImageObject",
-                        "url": "https://eligoleather.com/logo.png"
+                        "url": `${domain}/logo.png`
                       }
                     },
                     "mainEntityOfPage": {
                       "@type": "WebPage",
-                      "@id": `https://eligoleather.com/blog/${slug}`
+                      "@id": `${domain}/blog/${slug}`
                     }
                   },
                   {
                     "@type": "BreadcrumbList",
                     "itemListElement": [
-                      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://eligoleather.com" },
-                      { "@type": "ListItem", "position": 2, "name": "Blogs", "item": "https://eligoleather.com/blogs" },
-                      { "@type": "ListItem", "position": 3, "name": title || "Blog Post Title", "item": `https://eligoleather.com/blog/${slug}` }
+                      { "@type": "ListItem", "position": 1, "name": "Home", "item": domain },
+                      { "@type": "ListItem", "position": 2, "name": "Blogs", "item": `${domain}/blogs` },
+                      { "@type": "ListItem", "position": 3, "name": title || "Blog Post Title", "item": `${domain}/blog/${slug}` }
                     ]
                   },
                   {
                     "@type": "Organization",
                     "name": "Eligo Leather Official Store",
-                    "url": "https://eligoleather.com",
-                    "logo": "https://eligoleather.com/logo.png",
+                    "url": domain,
+                    "logo": `${domain}/logo.png`,
                     "sameAs": [
                       "https://facebook.com/eligoleather",
                       "https://instagram.com/eligoleather"
@@ -329,24 +483,14 @@ export default function CreateBlogPostPage() {
                   },
                   {
                     "@type": "FAQPage",
-                    "mainEntity": [
-                      {
-                        "@type": "Question",
-                        "name": `What are the key insights in ${title || "this article"}?`,
-                        "acceptedAnswer": {
-                          "@type": "Answer",
-                          "text": "This editorial provides expert advice on leather craftsmanship, care techniques, and style guide tips."
-                        }
-                      },
-                      {
-                        "@type": "Question",
-                        "name": "Are Eligo Leather articles written by real artisans?",
-                        "acceptedAnswer": {
-                          "@type": "Answer",
-                          "text": "Yes! All guides are written and verified by experienced leather artisans and designers."
-                        }
+                    "mainEntity": faqs.filter(f => f.question.trim()).map(f => ({
+                      "@type": "Question",
+                      "name": f.question.trim(),
+                      "acceptedAnswer": {
+                        "@type": "Answer",
+                        "text": f.answer.trim() || "No answer provided."
                       }
-                    ]
+                    }))
                   }
                 ]
               }
@@ -394,17 +538,31 @@ export default function CreateBlogPostPage() {
                       <button
                         type="button"
                         onClick={async () => {
+                          const rawJson = computedScriptCode
+                            .replace(/<script[^>]*>/gi, "")
+                            .replace(/<\/script>/gi, "")
+                            .trim()
                           try {
-                            const scopedScriptStr = `<!-- BLOG Page Target Script -->\n<script>\nif (window.location.pathname.startsWith('/blog') || window.location.pathname.startsWith('/blogs')) {\n  const script = document.createElement('script');\n  script.type = 'application/ld+json';\n  script.text = JSON.stringify(${JSON.stringify(JSON.parse(computedScriptCode.replace(/<script[^>]*>/, '').replace(/<\/script>/, '')), null, 2)});\n  document.head.appendChild(script);\n}\n</script>`
-                            
-                            await fetch("http://127.0.0.1:8000/api/v1/store/header-scripts", {
+                            JSON.parse(rawJson)
+                          } catch (parseErr) {
+                            toast.error("Blog schema JSON is invalid — please fix the code before publishing.")
+                            return
+                          }
+                          try {
+                            await fetch(`${API_BASE}/api/v1/store/schemas`, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ header_scripts: scopedScriptStr }),
+                              body: JSON.stringify({
+                                name: `Blog Schema - ${title.trim() || slug || "blog-post"}`,
+                                schema_type: "blog",
+                                target_pages: `/blog/${slug || "blog-post"}`,
+                                schema_json: rawJson,
+                                is_active: true,
+                              }),
                             })
-                            toast.success("Saved & Published custom Blog script to Customer Events (DB)! Runs live on /blog/*")
+                            toast.success("Blog schema published to this post's page for SEO!")
                           } catch (e) {
-                            toast.success("Blog script copied and ready for Customer Events!")
+                            toast.error("Could not publish blog schema to the database.")
                           }
                         }}
                         className="px-2.5 py-1 bg-amber-800 hover:bg-amber-900 text-white font-bold text-[11px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
@@ -472,6 +630,8 @@ export default function CreateBlogPostPage() {
                 + Add Image
               </button>
             </div>
+
+            <ImageUploadNote />
 
             <input
               type="file"

@@ -31,11 +31,14 @@ async def test_orders_require_auth(client):
     assert response.status_code in (401, 403)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: create_order passes location_id to Order() (service.py:56) -> TypeError -> 500",
-)
-async def test_create_order(client, auth_headers):
+async def test_create_order(client, auth_headers, monkeypatch):
+    async def _noop_background_dispatch(order_id: int) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.modules.orders.router.background_dispatch_order_placed",
+        _noop_background_dispatch,
+    )
     response = await client.post(
         "/api/v1/orders/",
         headers=auth_headers,
@@ -79,10 +82,6 @@ async def test_list_orders_filters(client, auth_headers, db_session):
     assert [o["order_number"] for o in body] == ["ORD-LIVE"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: OrderOut.location_id is required (schema.py:116) but Order model has no location_id attribute -> ResponseValidationError/500",
-)
 async def test_get_order_by_id(client, auth_headers, db_session):
     seeded = await _seed_order(db_session, order_number="ORD-GET")
     response = await client.get(f"/api/v1/orders/{seeded.id}", headers=auth_headers)
@@ -96,10 +95,6 @@ async def test_get_order_missing_returns_404(client, auth_headers):
     assert response.json()["detail"] == "Order not found"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: OrderOut.location_id required (schema.py:116) + updated_at MissingGreenlet after UPDATE -> ResponseValidationError/500",
-)
 async def test_update_order(client, auth_headers, db_session):
     seeded = await _seed_order(db_session)
     response = await client.patch(
@@ -119,10 +114,6 @@ async def test_update_order_missing_returns_404(client, auth_headers):
     assert response.json()["detail"] == "Order not found"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: OrderOut.location_id is required (schema.py:116) but Order model has no location_id attribute -> ResponseValidationError/500",
-)
 async def test_archive_order(client, auth_headers, db_session):
     seeded = await _seed_order(db_session)
     response = await client.post(
@@ -138,10 +129,6 @@ async def test_archive_order_missing_returns_404(client, auth_headers):
     assert response.json()["detail"] == "Order not found"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: OrderOut.location_id is required (schema.py:116) but Order model has no location_id attribute -> ResponseValidationError/500",
-)
 async def test_restock_order(client, auth_headers, db_session):
     seeded = await _seed_order(db_session, return_status=ReturnStatus.approved)
     response = await client.post(
@@ -157,10 +144,6 @@ async def test_restock_order_missing_returns_404(client, auth_headers):
     assert response.json()["detail"] == "Order not found"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: OrderOut.location_id is required (schema.py:116) but Order model has no location_id attribute -> ResponseValidationError/500",
-)
 async def test_return_flow(client, auth_headers, db_session):
     seeded = await _seed_order(db_session)
 
@@ -286,10 +269,6 @@ async def test_orders_analytics_empty(client, auth_headers):
     assert response.json()["total_sales"] == "0"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: get_orders_analytics lazy-loads order.items (service.py:348) without eager loading -> MissingGreenlet when orders exist",
-)
 async def test_orders_analytics_with_orders(client, auth_headers, db_session):
     await _seed_order(db_session, order_number="ORD-ANA", total_price=Decimal("20.00"))
     response = await client.get("/api/v1/orders/analytics", headers=auth_headers)
@@ -329,10 +308,6 @@ async def test_create_draft_order(client, auth_headers):
     assert float(response.json()["total_price"]) == 20.0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: GET /orders/drafts is shadowed by GET /orders/{order_id} (router.py:122 registered before list at :232) -> 422",
-)
 async def test_list_draft_orders(client, auth_headers):
     await client.post(
         "/api/v1/orders/drafts",
@@ -362,10 +337,6 @@ async def test_get_draft_order_missing_returns_404(client, auth_headers):
     assert response.json()["detail"] == "Draft order not found"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug (SQLite): updated_at has onupdate=func.now(); after UPDATE it is expired and lazily reloaded -> MissingGreenlet during response serialization",
-)
 async def test_update_draft_order(client, auth_headers):
     created = await client.post(
         "/api/v1/orders/drafts",
@@ -414,10 +385,6 @@ async def test_remove_draft_order_item(client, auth_headers):
     assert response.status_code == 204
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: convert_draft_to_order passes location_id=None to Order() (service.py:558) -> TypeError -> 500",
-)
 async def test_convert_draft_to_order(client, auth_headers):
     created = await client.post(
         "/api/v1/orders/drafts",
@@ -452,10 +419,6 @@ async def test_create_abandoned_checkout(client, auth_headers):
     assert body["recovery_token"] is not None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug: GET /orders/abandoned-checkouts is shadowed by GET /orders/{order_id} (router.py:122 registered before list at :291) -> 422",
-)
 async def test_list_abandoned_checkouts(client, auth_headers):
     await client.post(
         "/api/v1/orders/abandoned-checkouts",
@@ -491,10 +454,6 @@ async def test_get_abandoned_checkout_missing_returns_404(client, auth_headers):
     assert response.json()["detail"] == "Abandoned checkout not found"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug (SQLite): updated_at has onupdate=func.now(); after UPDATE it is expired and lazily reloaded -> MissingGreenlet during response serialization",
-)
 async def test_update_abandoned_checkout(client, auth_headers):
     created = await client.post(
         "/api/v1/orders/abandoned-checkouts",
@@ -511,10 +470,6 @@ async def test_update_abandoned_checkout(client, auth_headers):
     assert response.json()["customer_name"] == "Ayesha"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug (SQLite): updated_at has onupdate=func.now(); after UPDATE it is expired and lazily reloaded -> MissingGreenlet during response serialization",
-)
 async def test_send_recovery_email(client, auth_headers):
     created = await client.post(
         "/api/v1/orders/abandoned-checkouts",
@@ -531,10 +486,6 @@ async def test_send_recovery_email(client, auth_headers):
     assert response.json()["recovery_attempts"] == 1
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Backend bug (SQLite): updated_at has onupdate=func.now(); after UPDATE it is expired and lazily reloaded -> MissingGreenlet during response serialization",
-)
 async def test_mark_checkout_recovered(client, auth_headers):
     created = await client.post(
         "/api/v1/orders/abandoned-checkouts",
@@ -588,17 +539,95 @@ async def test_receive_leopard_webhook(client, db_session):
     assert res_json["processed_result"]["matched_updated"] == 1
 
 
-async def test_get_leopard_orders_api(client, db_session):
+async def test_leopard_webhook_out_for_delivery_updates_status_and_emails(
+    client, db_session, monkeypatch
+):
+    """When Leopards reports "out for delivery", the order's delivery_status must
+    become out_for_delivery and an order_out_for_delivery email must be dispatched
+    using the ORDER's checkout snapshot."""
+    from app.modules.orders.model import DeliveryStatus
+    from app.modules.settings.notifications import service as notif_service
+
+    order = await _seed_order(
+        db_session,
+        order_number="ORD-LPD-OFD-1",
+        tracking_number="LPD-OFD-777",
+        shipping_name="Bilal Khan",
+        shipping_phone="03121234567",
+        shipping_email="ofd-webhook@example.com",
+        shipping_city="Karachi",
+        destination="Karachi",
+        total_price=Decimal("20.00"),
+    )
+
+    dispatched = []
+
+    async def _fake_dispatch(event_type, payload):
+        dispatched.append((event_type, payload))
+
+    monkeypatch.setattr(notif_service, "background_dispatch_event", _fake_dispatch)
+
+    payload = {
+        "data": [
+            {
+                "cn_number": "LPD-OFD-777",
+                "status": "Out for delivery",
+                "receiver_name": "Bilal Khan",
+            }
+        ]
+    }
+
+    response = await client.post("/api/v1/orders/webhooks/leopard", json=payload)
+    assert response.status_code == 200
+    assert response.json()["processed_result"]["matched_updated"] == 1
+
+    # Let the fire-and-forget dispatch task run.
+    import asyncio
+    for _ in range(5):
+        await asyncio.sleep(0)
+
+    # The order's structured delivery_status was updated.
+    order_id = order.id
+    db_session.expire_all()
+    fresh = await db_session.get(Order, order_id)
+    assert fresh.delivery_status == DeliveryStatus.out_for_delivery
+
+    # The out-for-delivery email was dispatched with order snapshot details.
+    events = [e for e, _ in dispatched]
+    assert "order_out_for_delivery" in events
+    event_payload = next(p for e, p in dispatched if e == "order_out_for_delivery")
+    assert event_payload["customer_name"] == "Bilal Khan"
+    assert event_payload["customer_email"] == "ofd-webhook@example.com"
+
+
+async def test_get_leopard_orders_api(client, auth_headers, db_session, monkeypatch):
     await _seed_order(db_session, order_number="#1331", tracking_number="ID7536607778")
-    response = await client.get("/api/v1/orders/leopard/list")
+
+    async def _mock_track(cn_numbers):
+        return [{
+            "track_number": "ID7536607778",
+            "order_id": "#1331",
+            "booking_date": "2026-09-01",
+            "weight": "500",
+            "pieces": 1,
+            "collect_amount": "1000",
+            "destination_city": "Lahore",
+            "consignee_name": "Test Customer",
+            "current_status": "Booked",
+        }]
+
+    from app.modules.orders import leopard_client
+    monkeypatch.setattr(leopard_client, "track_booked_packets", _mock_track)
+
+    response = await client.get("/api/v1/orders/leopard/list", headers=auth_headers)
     assert response.status_code == 200
     res_json = response.json()
     assert res_json["status"] == "success"
     assert len(res_json["orders"]) >= 1
 
 
-async def test_generate_leopard_cn_api(client):
-    response = await client.post("/api/v1/orders/leopard/generate-cn", json={"order_ids": [1331, 1329]})
+async def test_generate_leopard_cn_api(client, auth_headers):
+    response = await client.post("/api/v1/orders/leopard/generate-cn", json={"order_ids": [1331, 1329]}, headers=auth_headers)
     assert response.status_code == 200
     res_json = response.json()
     assert res_json["status"] == "success"

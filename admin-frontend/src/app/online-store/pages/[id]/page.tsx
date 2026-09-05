@@ -1,5 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useParams } from "next/navigation"
@@ -14,8 +16,10 @@ import {
   Eye,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { CharCounter } from "@/components/ui/char-counter"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
 import { AddMetafieldDefinitionModal } from "@/components/modals/add-metafield-definition-modal"
+import { useFormDirty, useUnsavedChanges } from "@/components/unsaved-changes"
 
 export default function EditPageDetailScreen() {
   const router = useRouter()
@@ -54,20 +58,37 @@ export default function EditPageDetailScreen() {
   // Actions Dropdown & Loading
   const [moreActionsOpen, setMoreActionsOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { confirmLeave } = useUnsavedChanges()
+  const { reset } = useFormDirty(
+    {
+      title,
+      handle,
+      content,
+      wathappMetafield,
+      visibility,
+      template,
+      seoTitle,
+      seoDescription,
+      dynamicMetafieldValues,
+    },
+    dataLoaded
+  )
 
   // Fetch Policies from Backend DB for Template Dropdown
   useEffect(() => {
     let isMounted = true
     const fetchDbPolicies = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/settings/legal-privacy/policies")
+        const res = await fetch(`${API_BASE}/api/v1/settings/legal-privacy/policies`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted && Array.isArray(data)) {
             const mapped = data.map((p: any) => ({
               key: p.policy_type,
               title: `${p.title || p.policy_type} (DB Policy)`,
-              body: p.body,
+              body: p.content,
             }))
             setDbPolicies(mapped)
           }
@@ -162,7 +183,7 @@ export default function EditPageDetailScreen() {
     const loadInitialPageData = async () => {
       // 1. Check PostgreSQL Backend DB
       try {
-        const res = await fetch(`http://127.0.0.1:8000/api/v1/pages/${pageIdStr}`)
+        const res = await fetch(`${API_BASE}/api/v1/pages/${pageIdStr}`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted) {
@@ -179,6 +200,7 @@ export default function EditPageDetailScreen() {
                 setWathappMetafield(parsed.wathapp || "")
               } catch (e) {}
             }
+            setDataLoaded(true)
             return
           }
         }
@@ -205,6 +227,7 @@ export default function EditPageDetailScreen() {
         setTemplate(defaultObj.template)
         setSeoTitle(defaultObj.seoTitle)
         setSeoDescription(defaultObj.seoDescription)
+        setDataLoaded(true)
       }
     }
 
@@ -259,7 +282,7 @@ export default function EditPageDetailScreen() {
 
     try {
       if (pageIdStr.length < 8) {
-        await fetch(`http://127.0.0.1:8000/api/v1/pages/${pageIdStr}`, {
+        await fetch(`${API_BASE}/api/v1/pages/${pageIdStr}`, {
           method: "DELETE",
         })
       }
@@ -267,7 +290,7 @@ export default function EditPageDetailScreen() {
     } catch (e) {
       toast.success(`Deleted page "${title}"!`)
     } finally {
-      router.push("/online-store/pages")
+      confirmLeave(() => router.push("/online-store/pages"))
     }
   }
 
@@ -292,7 +315,7 @@ export default function EditPageDetailScreen() {
     }
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/pages/${pageIdStr}`, {
+      const res = await fetch(`${API_BASE}/api/v1/pages/${pageIdStr}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -300,6 +323,7 @@ export default function EditPageDetailScreen() {
 
       if (res.ok) {
         toast.success(`Updated page "${title}" in database!`)
+        reset()
       } else {
         toast.success(`Updated page "${title}"!`)
       }
@@ -510,20 +534,28 @@ export default function EditPageDetailScreen() {
             {showSeoFields && (
               <div className="space-y-3 pt-2 border-t border-gray-100">
                 <div>
-                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Page Title</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Page Title</label>
+                    <CharCounter value={seoTitle} limit={60} />
+                  </div>
                   <input
                     type="text"
+                    maxLength={60}
                     value={seoTitle}
                     onChange={(e) => setSeoTitle(e.target.value)}
                     className="w-full h-9 px-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Meta Description</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Meta Description</label>
+                    <CharCounter value={seoDescription} limit={160} />
+                  </div>
                   <textarea
                     value={seoDescription}
                     onChange={(e) => setSeoDescription(e.target.value)}
                     rows={2}
+                    maxLength={160}
                     className="w-full p-3 bg-white border border-gray-300 rounded-xl font-medium text-gray-900 text-xs focus:outline-hidden"
                   />
                 </div>

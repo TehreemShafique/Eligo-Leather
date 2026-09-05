@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { API_BASE } from "@/lib/api"
+
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -9,6 +11,9 @@ import {
   Plus,
   MagnifyingGlass,
   SlidersHorizontal,
+  Trash,
+  X,
+  Spinner,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
@@ -25,117 +30,47 @@ export default function AdminPagesListPage() {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedIds, setSelectedIds] = useState<(number | string)[]>([])
+  const [deleting, setDeleting] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const deletedKeysRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Pages List matching Pic 1
+  // Pages List - Strictly Custom CMS Marketing Pages (Sales, About Us, Contact Us, Track Order)
   const [pagesList, setPagesList] = useState<PageRecord[]>([
     {
       id: 1,
-      title: "Terms of Service",
-      handle: "terms-of-service",
+      title: "Sales",
+      handle: "sales",
       visibility: "Visible",
-      contentPreview: "",
-      updatedAt: "19 Apr 2025",
+      contentPreview: "Explore exclusive limited-time promotional deals and discounts on genuine handcrafted leather goods.",
+      updatedAt: "17 Aug 2026",
     },
     {
       id: 2,
-      title: "Refund Policy",
-      handle: "refund-policy",
+      title: "About Us",
+      handle: "about-us",
       visibility: "Visible",
-      contentPreview: "",
-      updatedAt: "19 Apr 2025",
+      contentPreview: "Discover the heritage of Eligo Leather master artisans, top-grain craftsmanship, and ethical sourcing.",
+      updatedAt: "17 Aug 2026",
     },
     {
       id: 3,
       title: "Contact Us",
       handle: "contact-us",
       visibility: "Visible",
-      contentPreview: "",
-      updatedAt: "28 Mar 2025",
+      contentPreview: "Get in touch with Eligo Leather customer support team via email, phone, or store visit.",
+      updatedAt: "17 Aug 2026",
     },
     {
       id: 4,
       title: "Track Your Order",
       handle: "track-order",
       visibility: "Visible",
-      contentPreview: "",
-      updatedAt: "1 Jan 2025",
-    },
-    {
-      id: 5,
-      title: "Privacy Policy",
-      handle: "privacy-policy",
-      visibility: "Visible",
-      contentPreview: "",
-      updatedAt: "31 Dec 2024",
-    },
-    {
-      id: 6,
-      title: "About Us",
-      handle: "about-us",
-      visibility: "Visible",
-      contentPreview: "",
-      updatedAt: "31 Dec 2024",
-    },
-    {
-      id: 7,
-      title: "Sales",
-      handle: "sales",
-      visibility: "Visible",
-      contentPreview: "",
-      updatedAt: "31 Dec 2024",
-    },
-    {
-      id: 8,
-      title: "HTML sitemap for blogs",
-      handle: "avada-sitemap-blogs",
-      visibility: "Hidden",
-      contentPreview: "Blogs Blog Different Leather Grades & Leather Quality: ...",
-      updatedAt: "28 Oct 2024",
-    },
-    {
-      id: 9,
-      title: "HTML sitemap for articles",
-      handle: "avada-sitemap-articles",
-      visibility: "Hidden",
-      contentPreview: "Blog Posts Sewing of Leather: The Art and Craft Behind ...",
-      updatedAt: "28 Oct 2024",
-    },
-    {
-      id: 10,
-      title: "HTML sitemap for collections",
-      handle: "avada-sitemap-collections",
-      visibility: "Hidden",
-      contentPreview: "Collections Accessories All All Belts All Cases All Keych...",
-      updatedAt: "28 Oct 2024",
-    },
-    {
-      id: 11,
-      title: "HTML sitemap for products",
-      handle: "avada-sitemap-products",
-      visibility: "Hidden",
-      contentPreview: "Products Gift Box Gift Box Gift Box Gift Box Gift Box Gift ...",
-      updatedAt: "28 Oct 2024",
-    },
-    {
-      id: 12,
-      title: "HTML sitemap",
-      handle: "avada-sitemap",
-      visibility: "Hidden",
-      contentPreview: "Products Gift Box Gift Box Gift Box Gift Box Gift Box Gift ...",
-      updatedAt: "28 Oct 2024",
-    },
-    {
-      id: 13,
-      title: "HTML sitemap for pages",
-      handle: "avada-sitemap-pages",
-      visibility: "Hidden",
-      contentPreview: "Pages Contact Information Terms of Service Refund Pol...",
-      updatedAt: "28 Oct 2024",
+      contentPreview: "Enter your Leopard CN tracking number to track your package delivery status in real-time.",
+      updatedAt: "17 Aug 2026",
     },
   ])
 
@@ -169,7 +104,7 @@ export default function AdminPagesListPage() {
     // Fetch from Backend PostgreSQL DB
     const fetchPagesFromDB = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/pages/")
+        const res = await fetch(`${API_BASE}/api/v1/pages/`)
         if (res.ok) {
           const data = await res.json()
           if (isMounted && Array.isArray(data) && data.length > 0) {
@@ -220,6 +155,92 @@ export default function AdminPagesListPage() {
     } else {
       setSelectedIds([...selectedIds, id])
     }
+  }
+
+  const refreshPagesFromDB = () => {
+    fetch(`${API_BASE}/api/v1/pages/`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const mapped: PageRecord[] = data.map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            handle: p.handle || p.title.toLowerCase().replace(/\s+/g, "-"),
+            visibility: p.visibility === "Visible" ? "Visible" : "Hidden",
+            contentPreview: p.content ? p.content.replace(/<[^>]*>?/gm, "").substring(0, 60) + "..." : "",
+            updatedAt: p.updated_at ? new Date(p.updated_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "28 Oct 2024",
+          }))
+          setPagesList((prev) => {
+            const currentSourceKeys = new Set(mapped.map((p) => String(p.id)))
+            const localPages = prev.filter(
+              (p) =>
+                !deletedKeysRef.current.has(String(p.id)) &&
+                !deletedKeysRef.current.has(p.handle) &&
+                !deletedKeysRef.current.has(p.title) &&
+                (Number.isInteger(p.id) ? !currentSourceKeys.has(String(p.id)) : true)
+            )
+            return [...mapped, ...localPages]
+          })
+        }
+      })
+      .catch(() => {})
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    const selectedPages = pagesList.filter((p) => selectedIds.includes(p.id))
+    const targetNames = selectedPages.map((p) => `"${p.title}"`)
+    if (!confirm(`Delete ${selectedPages.length} page${selectedPages.length === 1 ? "" : "s"}? ${targetNames.join(", ")}`)) return
+
+    setDeleting(true)
+    const ids = selectedPages.filter((p) => typeof p.id === "number").map((p) => Number(p.id))
+    const handles = selectedPages.map((p) => p.handle)
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/pages/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, handles }),
+      })
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        const count = data?.deleted ?? selectedPages.length
+        toast.success(`Deleted ${count} page${count === 1 ? "" : "s"} from the database.`)
+      } else {
+        toast.error("Failed to delete pages. They were removed locally but the database was not updated.")
+      }
+    } catch {
+      toast.error("Could not reach the server. Pages were removed locally only.")
+    }
+
+    // Remember the deleted pages so they are not re-added on refresh.
+    selectedPages.forEach((p) => {
+      deletedKeysRef.current.add(String(p.id))
+      if (p.handle) deletedKeysRef.current.add(p.handle)
+      deletedKeysRef.current.add(p.title)
+    })
+
+    // Remove selected pages from the local list and the localStorage backup.
+    const keptKeys = new Set(selectedIds.map((id) => String(id)))
+    const keptTitles = new Set(selectedPages.map((p) => p.title))
+    setPagesList((prev) => prev.filter((p) => !keptKeys.has(String(p.id)) && !keptTitles.has(p.title)))
+    try {
+      const stored = localStorage.getItem("eligo_created_pages")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed)) {
+          const updated = parsed.filter((p) =>
+            !selectedIds.some((id) => String(p?.id) === String(id)) &&
+            !keptTitles.has(p?.title)
+          )
+          localStorage.setItem("eligo_created_pages", JSON.stringify(updated))
+        }
+      }
+    } catch { /* ignore */ }
+
+    setSelectedIds([])
+    setDeleting(false)
+    refreshPagesFromDB()
   }
 
   const filteredPages = pagesList.filter((p) => {
@@ -284,6 +305,34 @@ export default function AdminPagesListPage() {
             </button>
           </div>
         </div>
+
+        {/* Bulk Actions Bar (shown when pages are selected) */}
+        {selectedIds.length > 0 && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-50 border-b border-amber-200">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-gray-900">
+                {selectedIds.length} selected
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-gray-600 hover:text-gray-900 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+                Clear selection
+              </button>
+            </div>
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={handleBulkDelete}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer disabled:cursor-not-allowed"
+            >
+              {deleting ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5" />}
+              <span>{deleting ? "Deleting..." : `Delete ${selectedIds.length === 1 ? "page" : "pages"}`}</span>
+            </button>
+          </div>
+        )}
 
         {/* Table */}
         <div className="overflow-x-auto">

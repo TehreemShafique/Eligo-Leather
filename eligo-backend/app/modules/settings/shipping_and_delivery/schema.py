@@ -186,6 +186,10 @@ class PackageOut(BaseModel):
 class ShippingSettingsUpdate(BaseModel):
     routing_strategy: RoutingStrategy | None = None
     allow_split_shipments: bool | None = None
+
+    shipping_charge: Decimal | None = None
+    free_shipping_threshold: Decimal | None = None
+
     sender_name: str | None = None
     sender_address: str | None = None
     sender_city: str | None = None
@@ -193,16 +197,37 @@ class ShippingSettingsUpdate(BaseModel):
     sender_country: str | None = None
     sender_postal_code: str | None = None
     sender_phone: str | None = None
+
+    return_same_as_sender: bool | None = None
+    return_name: str | None = None
+    return_phone: str | None = None
+    return_address: str | None = None
+    return_city: str | None = None
+    return_province: str | None = None
+    return_postal_code: str | None = None
+    return_country: str | None = None
+
     packing_slip_show_sku: bool | None = None
     packing_slip_show_variants: bool | None = None
     packing_slip_show_quantity: bool | None = None
     packing_slip_template: str | None = None
+
+    @field_validator("shipping_charge", "free_shipping_threshold")
+    @classmethod
+    def validate_non_negative_amount(cls, value):
+        if value is not None and value < 0:
+            raise ValueError("Shipping amounts must be zero or greater (PKR)")
+        return value
 
 
 class ShippingSettingsOut(BaseModel):
     id: int
     routing_strategy: RoutingStrategy
     allow_split_shipments: bool
+
+    shipping_charge: Decimal
+    free_shipping_threshold: Decimal
+
     sender_name: str | None = None
     sender_address: str | None = None
     sender_city: str | None = None
@@ -210,6 +235,16 @@ class ShippingSettingsOut(BaseModel):
     sender_country: str | None = None
     sender_postal_code: str | None = None
     sender_phone: str | None = None
+
+    return_same_as_sender: bool
+    return_name: str | None = None
+    return_phone: str | None = None
+    return_address: str | None = None
+    return_city: str | None = None
+    return_province: str | None = None
+    return_postal_code: str | None = None
+    return_country: str | None = None
+
     packing_slip_show_sku: bool
     packing_slip_show_variants: bool
     packing_slip_show_quantity: bool
@@ -217,3 +252,22 @@ class ShippingSettingsOut(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============================== Public calculation ==============================
+
+
+class ShippingCalculationRequest(BaseModel):
+    subtotal: float = 0.0
+
+
+class ShippingCalculationOut(BaseModel):
+    """Result of the storewide charge/threshold calculation (PKR)."""
+
+    currency: str = "PKR"
+    subtotal: float
+    shipping_charge: float
+    free_shipping_threshold: float
+    shipping_cost: float
+    is_free_shipping: bool
+    amount_to_free_shipping: float | None = None

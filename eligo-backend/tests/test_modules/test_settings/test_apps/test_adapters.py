@@ -44,30 +44,30 @@ def test_encrypt_uses_fresh_iv_per_call():
 # ---------------------------------------------------------------------------
 
 async def test_run_dispatches_to_registered_adapter(monkeypatch):
-    async def fake_resend(payload):
+    async def fake_create_shipment(payload):
         return {"success": True, "id": "evt_1"}
 
-    monkeypatch.setitem(adapters.ADAPTERS["resend_email"], "send_email", fake_resend)
+    monkeypatch.setitem(
+        adapters.ADAPTERS["leopards_shipping"], "create_shipment", fake_create_shipment
+    )
     result = await adapters.run(
-        "resend_email", "send_email", {"to": "a@b.com", "subject": "Hi", "html": "<p>Hi</p>"}
+        "leopards_shipping", "create_shipment", {"order": {"id": 1}}
     )
     assert result == {"success": True, "id": "evt_1"}
 
 
 async def test_run_unknown_app_raises_adapter_error():
     with pytest.raises(AdapterError, match="No adapter registered"):
-        await adapters.run("no_such_app", "send_email", {})
+        await adapters.run("no_such_app", "create_shipment", {})
 
 
 async def test_run_unsupported_action_raises_adapter_error():
     with pytest.raises(AdapterError, match="No adapter registered"):
-        await adapters.run("resend_email", "send_sms", {})
+        await adapters.run("leopards_shipping", "send_sms", {})
 
 
 async def test_adapter_missing_env_var_raises_adapter_error(monkeypatch):
-    monkeypatch.delenv("RESEND_API_KEY", raising=False)
-    monkeypatch.delenv("RESEND_FROM_EMAIL", raising=False)
-    with pytest.raises(AdapterError, match="RESEND_API_KEY"):
-        await adapters._resend_send_email(
-            {"to": "a@b.com", "subject": "Hi", "html": "<p>Hi</p>"}
-        )
+    monkeypatch.delenv("LEOPARDS_API_KEY", raising=False)
+    monkeypatch.delenv("LEOPARDS_API_PASSWORD", raising=False)
+    with pytest.raises(AdapterError, match="LEOPARDS_API_KEY"):
+        await adapters._leopards_create_shipment({"order": {"id": 1}})

@@ -54,7 +54,7 @@ async def test_account_requires_auth(client):
 
 async def test_account_requires_admin(client, auth_headers):
     resp = await client.get(f"{BASE}/profile", headers=auth_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -127,9 +127,9 @@ async def test_list_languages(client, admin_headers):
     resp = await client.get(f"{BASE}/languages", headers=admin_headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert len(body) > 10
-    assert body[0]["code"]
-    assert body[0]["name"]
+    assert len(body) == 1
+    assert body[0]["code"] == "en-US"
+    assert body[0]["name"] == "English"
 
 
 async def test_list_regional_formats(client, admin_headers):
@@ -476,7 +476,7 @@ async def test_revoke_current_session_invalidates_token(client, admin_headers, d
     assert resp.json()["was_current"] is True
 
     resp = await client.get(f"{BASE}/profile", headers=admin_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------

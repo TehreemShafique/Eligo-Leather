@@ -1,23 +1,26 @@
 from datetime import datetime
+import json
 
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.content.model import (
     MetaobjectDefinition,
     MetaobjectEntry,
+    MetaobjectDefinitionField,
+    MetaobjectEntryValue,
     File,
     Menu,
     MenuItem,
     UrlRedirect,
     BlogPost,
-    BlogComment,
     Page,
 )
 from app.modules.content.schema import (
     MetaobjectDefinitionCreate,
     MetaobjectDefinitionUpdate,
+    MetaobjectDefinitionFieldCreate,
     MetaobjectEntryCreate,
     MetaobjectEntryUpdate,
     FileCreate,
@@ -30,8 +33,6 @@ from app.modules.content.schema import (
     UrlRedirectUpdate,
     BlogPostCreate,
     BlogPostUpdate,
-    BlogCommentCreate,
-    BlogCommentUpdate,
     PageCreate,
     PageUpdate,
     ContentOverview,
@@ -48,8 +49,33 @@ from app.modules.content.schema import (
 async def create_metaobject_definition(
     db: AsyncSession, data: MetaobjectDefinitionCreate,
 ) -> MetaobjectDefinition:
-    obj = MetaobjectDefinition(**data.model_dump())
+    obj = MetaobjectDefinition(
+        name=data.name,
+        type_key=data.type_key,
+        handle=data.handle,
+        description=data.description,
+        status=data.status,
+        publish_as_web_pages=data.publish_as_web_pages,
+        available_on_storefront=data.available_on_storefront,
+    )
     db.add(obj)
+    await db.flush()  # Get the ID before adding fields
+
+    # Create fields if provided
+    for field_data in data.fields:
+        field = MetaobjectDefinitionField(
+            definition_id=obj.id,
+            label=field_data.label,
+            field_type=field_data.field_type,
+            cardinality=field_data.cardinality,
+            required=field_data.required,
+            is_display_name=field_data.is_display_name,
+            is_filterable=field_data.is_filterable,
+            position=field_data.position,
+            config=json.dumps(field_data.config) if field_data.config else None,
+        )
+        db.add(field)
+
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -60,7 +86,10 @@ async def get_metaobject_definition(
 ) -> MetaobjectDefinition | None:
     result = await db.execute(
         select(MetaobjectDefinition)
-        .options(selectinload(MetaobjectDefinition.entries))
+        .options(
+            selectinload(MetaobjectDefinition.fields),
+            selectinload(MetaobjectDefinition.entries).selectinload(MetaobjectEntry.field_values),
+        )
         .where(MetaobjectDefinition.id == def_id),
     )
     return result.scalar_one_or_none()
@@ -72,7 +101,9 @@ async def list_metaobject_definitions(
     skip: int = 0,
     limit: int = 50,
 ) -> list[MetaobjectDefinition]:
-    query = select(MetaobjectDefinition)
+    query = select(MetaobjectDefinition).options(
+        selectinload(MetaobjectDefinition.fields),
+    )
     if search:
         query = query.where(
             or_(
@@ -91,8 +122,36 @@ async def update_metaobject_definition(
     obj = await get_metaobject_definition(db, def_id)
     if not obj:
         return None
-    for field, value in data.model_dump(exclude_unset=True).items():
+
+    # Update definition fields
+    update_data = data.model_dump(exclude_unset=True)
+    fields_data = update_data.pop("fields", None)
+
+    for field, value in update_data.items():
         setattr(obj, field, value)
+
+    # Update fields if provided
+    if fields_data is not None:
+        # Delete existing fields
+        for existing_field in obj.fields:
+            await db.delete(existing_field)
+        await db.flush()
+
+        # Create new fields
+        for field_data in fields_data:
+            field = MetaobjectDefinitionField(
+                definition_id=obj.id,
+                label=field_data["label"],
+                field_type=field_data["field_type"],
+                cardinality=field_data["cardinality"],
+                required=field_data["required"],
+                is_display_name=field_data["is_display_name"],
+                is_filterable=field_data["is_filterable"],
+                position=field_data["position"],
+                config=json.dumps(field_data["config"]) if field_data.get("config") else None,
+            )
+            db.add(field)
+
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -114,8 +173,29 @@ async def delete_metaobject_definition(db: AsyncSession, def_id: int) -> bool:
 async def create_metaobject_entry(
     db: AsyncSession, data: MetaobjectEntryCreate,
 ) -> MetaobjectEntry:
-    obj = MetaobjectEntry(**data.model_dump())
+    obj = MetaobjectEntry(
+        definition_id=data.definition_id,
+        display_name=data.display_name,
+        code=data.code,
+        handle=data.handle,
+        status=data.status,
+        tags=data.tags,
+        added_by=data.added_by,
+    )
     db.add(obj)
+    await db.flush()  # Get the ID before adding field values
+
+    # Create field values if provided
+    for value_data in data.field_values:
+        field_value = MetaobjectEntryValue(
+            entry_id=obj.id,
+            field_id=value_data.field_id,
+            value=value_data.value,
+            reference_id=value_data.reference_id,
+            reference_type=value_data.reference_type,
+        )
+        db.add(field_value)
+
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -126,7 +206,10 @@ async def get_metaobject_entry(
 ) -> MetaobjectEntry | None:
     result = await db.execute(
         select(MetaobjectEntry)
-        .options(selectinload(MetaobjectEntry.definition))
+        .options(
+            selectinload(MetaobjectEntry.definition).selectinload(MetaobjectDefinition.fields),
+            selectinload(MetaobjectEntry.field_values),
+        )
         .where(MetaobjectEntry.id == entry_id),
     )
     return result.scalar_one_or_none()
@@ -142,7 +225,8 @@ async def list_metaobject_entries(
     limit: int = 50,
 ) -> list[MetaobjectEntry]:
     query = select(MetaobjectEntry).options(
-        selectinload(MetaobjectEntry.definition),
+        selectinload(MetaobjectEntry.definition).selectinload(MetaobjectDefinition.fields),
+        selectinload(MetaobjectEntry.field_values),
     )
     if definition_id:
         query = query.where(MetaobjectEntry.definition_id == definition_id)
@@ -171,8 +255,32 @@ async def update_metaobject_entry(
     obj = await get_metaobject_entry(db, entry_id)
     if not obj:
         return None
-    for field, value in data.model_dump(exclude_unset=True).items():
+
+    # Update entry fields
+    update_data = data.model_dump(exclude_unset=True)
+    field_values_data = update_data.pop("field_values", None)
+
+    for field, value in update_data.items():
         setattr(obj, field, value)
+
+    # Update field values if provided
+    if field_values_data is not None:
+        # Delete existing field values
+        for existing_value in obj.field_values:
+            await db.delete(existing_value)
+        await db.flush()
+
+        # Create new field values
+        for value_data in field_values_data:
+            field_value = MetaobjectEntryValue(
+                entry_id=obj.id,
+                field_id=value_data.field_id,
+                value=value_data.value,
+                reference_id=value_data.reference_id,
+                reference_type=value_data.reference_type,
+            )
+            db.add(field_value)
+
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -188,6 +296,38 @@ async def delete_metaobject_entry(db: AsyncSession, entry_id: int) -> bool:
 
 
 import io
+import re
+import uuid
+from pathlib import Path
+
+from app.core.r2 import r2, make_upload_key
+
+# Uploaded media lives next to the backend root and is served by the
+# StaticFiles mount at /static (see app.main).
+UPLOADS_DIR = Path(__file__).resolve().parents[3] / "static" / "uploads"
+
+
+def save_upload_to_disk(data: bytes, filename: str) -> str:
+    """Persists uploaded bytes under static/uploads and returns its public URL."""
+    suffix = Path(filename).suffix
+    safe_stem = re.sub(r"[^A-Za-z0-9_-]+", "_", Path(filename).stem)[:60] or "file"
+    unique_name = f"{uuid.uuid4().hex[:8]}_{safe_stem}{suffix}"
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    (UPLOADS_DIR / unique_name).write_bytes(data)
+    return f"/static/uploads/{unique_name}"
+
+
+def save_upload_to_r2(data: bytes, filename: str, folder: str = "general") -> str:
+    """Uploads bytes to Cloudflare R2 and returns the public URL."""
+    key = make_upload_key(filename, folder)
+    return r2.upload(data, key, content_type="image/webp")
+
+
+def save_upload(data: bytes, filename: str, folder: str = "general") -> str:
+    """Route to R2 when configured, otherwise fall back to local disk."""
+    if r2.is_configured:
+        return save_upload_to_r2(data, filename, folder)
+    return save_upload_to_disk(data, filename)
 
 
 def convert_image_to_webp(image_bytes: bytes, filename: str) -> tuple[bytes, str, str]:
@@ -500,7 +640,6 @@ async def get_blog_post(
 ) -> BlogPost | None:
     result = await db.execute(
         select(BlogPost)
-        .options(selectinload(BlogPost.comments))
         .where(BlogPost.id == post_id),
     )
     return result.scalar_one_or_none()
@@ -549,68 +688,6 @@ async def update_blog_post(
 
 async def delete_blog_post(db: AsyncSession, post_id: int) -> bool:
     obj = await get_blog_post(db, post_id)
-    if not obj:
-        return False
-    await db.delete(obj)
-    await db.commit()
-    return True
-
-
-# ===========================================================================
-# Blog Comment – CRUD
-# ===========================================================================
-
-async def create_blog_comment(
-    db: AsyncSession, data: BlogCommentCreate,
-) -> BlogComment:
-    obj = BlogComment(**data.model_dump())
-    db.add(obj)
-    await db.commit()
-    await db.refresh(obj)
-    return obj
-
-
-async def get_blog_comment(
-    db: AsyncSession, comment_id: int,
-) -> BlogComment | None:
-    result = await db.execute(
-        select(BlogComment).where(BlogComment.id == comment_id),
-    )
-    return result.scalar_one_or_none()
-
-
-async def list_blog_comments(
-    db: AsyncSession,
-    post_id: int | None = None,
-    status: str | None = None,
-    skip: int = 0,
-    limit: int = 50,
-) -> list[BlogComment]:
-    query = select(BlogComment)
-    if post_id:
-        query = query.where(BlogComment.post_id == post_id)
-    if status:
-        query = query.where(BlogComment.status == status)
-    query = query.order_by(BlogComment.created_at.desc()).offset(skip).limit(limit)
-    result = await db.execute(query)
-    return list(result.scalars().all())
-
-
-async def update_blog_comment(
-    db: AsyncSession, comment_id: int, data: BlogCommentUpdate,
-) -> BlogComment | None:
-    obj = await get_blog_comment(db, comment_id)
-    if not obj:
-        return None
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(obj, field, value)
-    await db.commit()
-    await db.refresh(obj)
-    return obj
-
-
-async def delete_blog_comment(db: AsyncSession, comment_id: int) -> bool:
-    obj = await get_blog_comment(db, comment_id)
     if not obj:
         return False
     await db.delete(obj)
@@ -696,18 +773,6 @@ async def get_content_overview(db: AsyncSession) -> ContentOverview:
     )
     blog_row = blog_counts.one()
 
-    comment_counts = await db.execute(
-        select(
-            func.coalesce(func.count(BlogComment.id), 0).label("total"),
-            func.coalesce(
-                func.count(BlogComment.id).filter(
-                    BlogComment.status == "pending",
-                ), 0,
-            ).label("pending"),
-        ),
-    )
-    comment_row = comment_counts.one()
-
     return ContentOverview(
         metaobjects=MetaobjectSummary(
             total_definitions=len(all_defs),
@@ -724,8 +789,6 @@ async def get_content_overview(db: AsyncSession) -> ContentOverview:
             total_posts=int(blog_row.total),
             visible_posts=int(blog_row.visible),
             hidden_posts=int(blog_row.hidden),
-            pending_comments=int(comment_row.pending),
-            total_comments=int(comment_row.total),
         ),
     )
 
@@ -826,4 +889,91 @@ async def delete_page(db: AsyncSession, page_id: int) -> bool:
     await db.delete(obj)
     await db.commit()
     return True
+
+
+async def bulk_delete_pages(
+    db: AsyncSession, page_ids: list[int], handles: list[str],
+) -> int:
+    """Delete multiple pages. Returns the number of rows actually deleted."""
+    ids = list({int(i) for i in page_ids if i})
+    names = list({h.strip() for h in handles if h and h.strip()})
+    if not ids and not names:
+        return 0
+
+    conditions = []
+    if ids:
+        conditions.append(Page.id.in_(ids))
+    if names:
+        conditions.append(Page.handle.in_(names))
+
+    result = await db.execute(delete(Page).where(or_(*conditions)))
+    await db.commit()
+    return result.rowcount or 0
+
+
+# ===========================================================================
+# Public Storefront Metaobject – Read-only (no drafts)
+# ===========================================================================
+
+async def list_storefront_definitions(
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 50,
+) -> list[MetaobjectDefinition]:
+    """List all active definitions available on storefront."""
+    query = select(MetaobjectDefinition).options(
+        selectinload(MetaobjectDefinition.fields),
+    ).where(
+        MetaobjectDefinition.available_on_storefront == True,
+        MetaobjectDefinition.status == "active",
+    ).order_by(MetaobjectDefinition.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def get_storefront_definition_by_type_key(
+    db: AsyncSession, type_key: str,
+) -> MetaobjectDefinition | None:
+    """Get a single definition by type_key (storefront only, active only)."""
+    result = await db.execute(
+        select(MetaobjectDefinition)
+        .options(
+            selectinload(MetaobjectDefinition.fields),
+        )
+        .where(
+            MetaobjectDefinition.type_key == type_key,
+            MetaobjectDefinition.available_on_storefront == True,
+            MetaobjectDefinition.status == "active",
+        ),
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_storefront_entries(
+    db: AsyncSession,
+    type_key: str,
+    skip: int = 0,
+    limit: int = 50,
+) -> list[MetaobjectEntry]:
+    """List active entries for a definition (storefront only, no drafts)."""
+    # First get the definition
+    def_result = await db.execute(
+        select(MetaobjectDefinition).where(
+            MetaobjectDefinition.type_key == type_key,
+            MetaobjectDefinition.available_on_storefront == True,
+            MetaobjectDefinition.status == "active",
+        ),
+    )
+    definition = def_result.scalar_one_or_none()
+    if not definition:
+        return []
+
+    query = select(MetaobjectEntry).options(
+        selectinload(MetaobjectEntry.field_values),
+    ).where(
+        MetaobjectEntry.definition_id == definition.id,
+        MetaobjectEntry.status == "active",
+    ).order_by(MetaobjectEntry.display_name.asc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    return list(result.scalars().all())
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, use } from "react"
+import { useState, useEffect, useCallback, use } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -18,26 +18,156 @@ import {
   Trash,
   ShieldCheck,
   Translate,
+  Spinner,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import { MOCK_CUSTOMERS } from "@/modules/customers/api"
-import type { Customer } from "@/modules/customers/types"
+import { apiFetch } from "@/lib/api"
+import { useFormDirty } from "@/components/unsaved-changes"
 
 type CustomerDetailPageProps = {
   params: Promise<{ id: string }>
 }
 
+interface CustomerAddress {
+  id: number
+  first_name: string | null
+  last_name: string | null
+  address_line1: string
+  city: string
+  province: string | null
+  postal_code: string | null
+  country: string
+  phone: string | null
+  is_default: boolean
+}
+
+interface CompanyInfo {
+  id?: number
+  name?: string
+  company_name?: string
+}
+
+interface CustomerData {
+  id: number
+  email: string | null
+  first_name: string | null
+  last_name: string | null
+  phone: string | null
+  location: string | null
+  postal_code: string | null
+  customer_language: string | null
+  email_subscription: boolean
+  sms_subscription: boolean
+  whatsapp_subscription: boolean
+  total_orders: number
+  amount_spent: number
+  tax_exempt: boolean
+  deletable: boolean
+  created_at: string
+  addresses: CustomerAddress[]
+  companies: CompanyInfo[]
+}
+
+interface OrderRow {
+  id: number
+  order_number: string
+  total_price: number
+  payment_status: string
+  fulfillment_status: string
+  created_at: string
+  items: { id: number; product_name: string; quantity: number }[]
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric",
+  })
+}
+
 export default function AdminCustomerDetailPage({ params }: CustomerDetailPageProps) {
   const { id } = use(params)
-  const customer: Customer = MOCK_CUSTOMERS.find((c) => c.id.toString() === id) || MOCK_CUSTOMERS[0]
 
-  const [emailSub, setEmailSub] = useState(customer.email_subscription)
-  const [smsSub, setSmsSub] = useState(customer.sms_subscription)
-  const [whatsappSub, setWhatsappSub] = useState(customer.whatsapp_subscription)
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
+  const [customer, setCustomer] = useState<CustomerData | null>(null)
+  const [orders, setOrders] = useState<OrderRow[]>([])
 
-  const handleUpdateSubscription = () => {
-    toast.success("Customer subscription settings updated!")
+  const [emailSub, setEmailSub] = useState(false)
+  const [smsSub, setSmsSub] = useState(false)
+  const [whatsappSub, setWhatsappSub] = useState(false)
+  const [toggling, setToggling] = useState<string | null>(null)
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  const { reset } = useFormDirty({ emailSub, smsSub, whatsappSub }, dataLoaded)
+
+  const fetchCustomer = useCallback(async () => {
+    try {
+      const data = await apiFetch<CustomerData>(`/api/v1/customers/${id}`)
+      setCustomer(data)
+      setEmailSub(Boolean(data.email_subscription))
+      setSmsSub(Boolean(data.sms_subscription))
+      setWhatsappSub(Boolean(data.whatsapp_subscription))
+    } catch {
+      setNotFound(true)
+    } finally {
+      setLoading(false)
+      setDataLoaded(true)
+    }
+  }, [id])
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      const data = await apiFetch<OrderRow[]>(`/api/v1/orders/?customer_id=${id}&limit=50`)
+      setOrders(Array.isArray(data) ? data : [])
+    } catch { /* silent */ }
+  }, [id])
+
+  useEffect(() => {
+    fetchCustomer(); fetchOrders()
+  }, [fetchCustomer, fetchOrders])
+
+  const handleUpdateSubscription = async (
+    key: "email" | "sms" | "whatsapp",
+    value: boolean,
+  ) => {
+    if (!customer) return
+    setToggling(key)
+    const body =
+      key === "email" ? { email_subscription: value }
+      : key === "sms" ? { sms_subscription: value }
+      : { whatsapp_subscription: value }
+    try {
+      await apiFetch(`/api/v1/customers/${customer.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      })
+      toast.success("Customer subscription settings updated!")
+      reset()
+    } catch {
+      toast.error("Failed to update subscription")
+      // revert on failure
+      if (key === "email") setEmailSub(!value)
+      else if (key === "sms") setSmsSub(!value)
+      else setWhatsappSub(!value)
+    } finally {
+      setToggling(null)
+    }
   }
+
+  if (loading) return <div className="flex items-center justify-center py-32"><Spinner className="w-8 h-8 text-amber-800 animate-spin" /></div>
+
+  if (!customer || notFound) return (
+    <div className="flex flex-col items-center justify-center py-32 gap-4">
+      <User className="w-10 h-10 text-gray-400" />
+      <span className="text-sm font-semibold text-gray-500">Customer not found</span>
+      <Link href="/customers" className="text-xs font-bold text-amber-800 hover:underline">Back to customers</Link>
+    </div>
+  )
+
+  const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(" ") || customer.email || "Guest"
+  const defaultAddress =
+    customer.addresses?.find((a) => a.is_default) || customer.addresses?.[0] || null
+  const company = customer.companies?.[0] || null
 
   return (
     <div className="space-y-6 font-sans">
@@ -52,9 +182,7 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                {customer.first_name} {customer.last_name}
-              </h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{fullName}</h1>
               {customer.tax_exempt && (
                 <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full inline-flex items-center gap-1">
                   <ShieldCheck className="w-3.5 h-3.5" />
@@ -63,28 +191,9 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
               )}
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Customer since {customer.customer_added_date} &bull; Location: <strong className="text-gray-800">{customer.location}</strong>
+              Customer since {formatDate(customer.created_at)} &bull; Location: <strong className="text-gray-800">{customer.location || "—"}</strong>
             </p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => toast.info("Opening Edit Customer Drawer...")}
-            className="px-3.5 py-2 bg-white border border-gray-300 text-gray-800 text-xs font-semibold rounded-xl hover:bg-gray-50 transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
-          >
-            <PencilSimple className="w-4 h-4 text-gray-500" />
-            <span>Edit Profile</span>
-          </button>
-          {customer.deletable && (
-            <button
-              onClick={() => toast.error("Delete customer functionality confirmed.")}
-              className="px-3.5 py-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl hover:bg-rose-100 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <Trash className="w-4 h-4" />
-              <span>Delete</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -98,38 +207,40 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
               <div className="flex items-center gap-2">
                 <ShoppingBagOpen className="w-5 h-5 text-amber-800" />
                 <h2 className="text-base font-bold text-gray-900">
-                  Orders History ({customer.total_orders})
+                  Orders History ({orders.length})
                 </h2>
               </div>
               <span className="text-xs font-bold text-gray-900">
-                Total Spent: Rs. {customer.amount_spent.toLocaleString()}
+                Total Spent: Rs. {Number(customer.amount_spent || 0).toLocaleString()}
               </span>
             </div>
 
             <div className="divide-y divide-gray-100 text-xs">
-              <div className="p-4 flex items-center justify-between hover:bg-gray-50/80 transition-colors">
-                <div>
-                  <Link href="/orders/1022" className="font-bold text-amber-800 hover:underline">#1022</Link>
-                  <span className="text-gray-500 ml-2">&bull; Feb 8, 2026</span>
-                  <p className="text-[11px] text-gray-600 mt-0.5">ARDOR Handmade Leather Wallet x 1</p>
-                </div>
-                <div className="text-right">
-                  <div className="font-bold text-gray-900">Rs. 1,699</div>
-                  <span className="inline-block text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded-full">Paid</span>
-                </div>
-              </div>
-
-              <div className="p-4 flex items-center justify-between hover:bg-gray-50/80 transition-colors">
-                <div>
-                  <Link href="/orders/1008" className="font-bold text-amber-800 hover:underline">#1008</Link>
-                  <span className="text-gray-500 ml-2">&bull; Jan 24, 2026</span>
-                  <p className="text-[11px] text-gray-600 mt-0.5">SOVEREIGN Classic Leather Belt x 2</p>
-                </div>
-                <div className="text-right">
-                  <div className="font-bold text-gray-900">Rs. 4,998</div>
-                  <span className="inline-block text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded-full">Paid</span>
-                </div>
-              </div>
+              {orders.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 font-semibold">No orders yet</div>
+              ) : (
+                orders.map((order) => (
+                  <div key={order.id} className="p-4 flex items-center justify-between hover:bg-gray-50/80 transition-colors">
+                    <div>
+                      <Link href={`/orders/${encodeURIComponent(String(order.order_number).replace(/^#/, ""))}`} className="font-bold text-amber-800 hover:underline">{order.order_number}</Link>
+                      <span className="text-gray-500 ml-2">&bull; {formatDate(order.created_at)}</span>
+                      <p className="text-[11px] text-gray-600 mt-0.5 truncate max-w-[320px]">
+                        {order.items?.map((i) => `${i.product_name} x${i.quantity}`).join(", ") || "—"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-gray-900">Rs. {Number(order.total_price).toLocaleString()}</div>
+                      <span className={`inline-block text-[10px] px-2 py-0.5 font-bold rounded-full ${
+                        order.payment_status === "paid"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-amber-100 text-amber-900"
+                      }`}>
+                        {order.payment_status}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -151,11 +262,12 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
                     {emailSub ? "Subscribed" : "Unsubscribed"}
                   </span>
                   <button
+                    disabled={toggling === "email"}
                     onClick={() => {
                       setEmailSub(!emailSub)
-                      handleUpdateSubscription()
+                      handleUpdateSubscription("email", !emailSub)
                     }}
-                    className="text-[11px] font-bold text-amber-800 hover:underline"
+                    className="text-[11px] font-bold text-amber-800 hover:underline disabled:opacity-50"
                   >
                     Toggle
                   </button>
@@ -173,11 +285,12 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
                     {smsSub ? "Subscribed" : "Unsubscribed"}
                   </span>
                   <button
+                    disabled={toggling === "sms"}
                     onClick={() => {
                       setSmsSub(!smsSub)
-                      handleUpdateSubscription()
+                      handleUpdateSubscription("sms", !smsSub)
                     }}
-                    className="text-[11px] font-bold text-amber-800 hover:underline"
+                    className="text-[11px] font-bold text-amber-800 hover:underline disabled:opacity-50"
                   >
                     Toggle
                   </button>
@@ -195,11 +308,12 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
                     {whatsappSub ? "Subscribed" : "Unsubscribed"}
                   </span>
                   <button
+                    disabled={toggling === "whatsapp"}
                     onClick={() => {
                       setWhatsappSub(!whatsappSub)
-                      handleUpdateSubscription()
+                      handleUpdateSubscription("whatsapp", !whatsappSub)
                     }}
-                    className="text-[11px] font-bold text-amber-800 hover:underline"
+                    className="text-[11px] font-bold text-amber-800 hover:underline disabled:opacity-50"
                   >
                     Toggle
                   </button>
@@ -209,7 +323,7 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
           </div>
 
           {/* B2B Company Account Link */}
-          {customer.company_name && (
+          {company && (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs p-6 space-y-3">
               <h2 className="text-base font-bold text-gray-900 border-b border-gray-200 pb-3 flex items-center gap-2">
                 <Building className="w-5 h-5 text-amber-800" />
@@ -218,8 +332,7 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
 
               <div className="flex items-center justify-between text-xs pt-1">
                 <div>
-                  <h3 className="font-bold text-sm text-gray-900">{customer.company_name}</h3>
-                  <p className="text-gray-500 mt-0.5">Pricing Tier: Tier 1 Gold (15% Corporate Discount)</p>
+                  <h3 className="font-bold text-sm text-gray-900">{company.name || company.company_name}</h3>
                 </div>
                 <Link
                   href="/customers/companies"
@@ -243,21 +356,29 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
             <div className="space-y-3 text-gray-700">
               <div className="flex items-center gap-2.5">
                 <EnvelopeSimple className="w-4 h-4 text-amber-800 shrink-0" />
-                <a href={`mailto:${customer.email}`} className="font-semibold text-gray-900 hover:underline truncate">
-                  {customer.email}
-                </a>
+                {customer.email ? (
+                  <a href={`mailto:${customer.email}`} className="font-semibold text-gray-900 hover:underline truncate">
+                    {customer.email}
+                  </a>
+                ) : (
+                  <span className="text-gray-400">No email</span>
+                )}
               </div>
 
               <div className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-amber-800 shrink-0" />
-                <a href={`tel:${customer.phone}`} className="font-semibold text-gray-900 hover:underline">
-                  {customer.phone}
-                </a>
+                {customer.phone ? (
+                  <a href={`tel:${customer.phone}`} className="font-semibold text-gray-900 hover:underline">
+                    {customer.phone}
+                  </a>
+                ) : (
+                  <span className="text-gray-400">No phone</span>
+                )}
               </div>
 
               <div className="flex items-center gap-2.5 pt-2 border-t border-gray-100">
                 <Translate className="w-4 h-4 text-gray-400 shrink-0" />
-                <span>Language: <strong className="text-gray-900">{customer.customer_language}</strong></span>
+                <span>Language: <strong className="text-gray-900">{customer.customer_language || "en"}</strong></span>
               </div>
             </div>
           </div>
@@ -269,11 +390,18 @@ export default function AdminCustomerDetailPage({ params }: CustomerDetailPagePr
               <span>Default Address</span>
             </h2>
 
-            <div className="text-gray-700 leading-relaxed space-y-1">
-              <p className="font-bold text-gray-900">{customer.first_name} {customer.last_name}</p>
-              <p>{customer.location}</p>
-              <p className="text-gray-500 font-mono">Postal Code: {customer.postal_code}</p>
-            </div>
+            {defaultAddress ? (
+              <div className="text-gray-700 leading-relaxed space-y-1">
+                <p className="font-bold text-gray-900">{fullName}</p>
+                <p>{defaultAddress.address_line1}, {defaultAddress.city}{defaultAddress.province ? `, ${defaultAddress.province}` : ""}, {defaultAddress.country}</p>
+                <p className="text-gray-500 font-mono">Postal Code: {defaultAddress.postal_code || customer.postal_code || "—"}</p>
+              </div>
+            ) : (
+              <div className="text-gray-700 leading-relaxed space-y-1">
+                <p>{customer.location || "No address on file"}</p>
+                <p className="text-gray-500 font-mono">Postal Code: {customer.postal_code || "—"}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

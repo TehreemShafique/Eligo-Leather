@@ -36,41 +36,6 @@ def _require_env(key: str) -> str:
     return value
 
 
-# ============================ EMAIL (Resend) ===========================
-# Required env: RESEND_API_KEY, RESEND_FROM_EMAIL
-# Get the API key from Resend Dashboard -> API Keys. RESEND_FROM_EMAIL
-# must be an address on a domain you've verified in Resend -> Domains,
-# otherwise sends will fail (or be restricted to their sandbox address).
-
-RESEND_SEND_URL = "https://api.resend.com/emails"
-
-
-async def _resend_send_email(payload: dict) -> dict:
-    """Resend - action: send_email. Payload: {to, subject, html}"""
-    api_key = _require_env("RESEND_API_KEY")
-    from_email = _require_env("RESEND_FROM_EMAIL")
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                RESEND_SEND_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "from": from_email,
-                    "to": [payload["to"]] if isinstance(payload["to"], str) else payload["to"],
-                    "subject": payload["subject"],
-                    "html": payload["html"],
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        return {"success": True, "id": data.get("id")}
-    except httpx.HTTPError as exc:
-        raise AdapterError(f"Resend send_email failed: {exc}")
-
-
 # ============================ SHIPPING / TRACKING ====================
 
 # ---- Leopards Courier ----
@@ -168,113 +133,6 @@ async def _sonic_trax_track_shipment(payload: dict) -> dict:
 
 
 
-async def _supabase_headers() -> dict:
-    key = _require_env("NEXT_PUBLIC_SUPABASE_SECRET_KEY")
-    return {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-    }
-
-
-def _supabase_reviews_url() -> str:
-    base_url = _require_env("NEXT_PUBLIC_SUPABASE_URL").rstrip("/")
-    table = os.environ.get("SUPABASE_REVIEWS_TABLE", "reviews")
-    return f"{base_url}/rest/v1/{table}"
-
-
-async def _supabase_fetch_reviews(payload: dict) -> dict:
-    """Supabase Reviews - action: fetch_reviews. Payload: {external_id?, page?, per_page?}"""
-    try:
-        per_page = payload.get("per_page", 20)
-        page = payload.get("page", 1)
-        offset = (page - 1) * per_page
-
-        params = {
-            "select": "*",
-            "order": "created_at.desc",
-            "limit": str(per_page),
-            "offset": str(offset),
-        }
-        if payload.get("external_id"):
-            params["product_id"] = f"eq.{payload['external_id']}"
-
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                _supabase_reviews_url(),
-                headers=await _supabase_headers(),
-                params=params,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-        return {"success": True, "reviews": data}
-    except httpx.HTTPError as exc:
-        raise AdapterError(f"Supabase fetch_reviews failed: {exc}")
-
-
-async def _supabase_post_review(payload: dict) -> dict:
-    """Supabase Reviews - action: post_review.
-    Payload: {external_id, reviewer_name, reviewer_email, rating, title, body}
-    """
-    try:
-        body = {
-            "product_id": payload["external_id"],
-            "reviewer_name": payload["reviewer_name"],
-            "reviewer_email": payload["reviewer_email"],
-            "rating": payload["rating"],
-            "title": payload.get("title", ""),
-            "body": payload["body"],
-        }
-        headers = await _supabase_headers()
-        headers["Prefer"] = "return=representation"  # ask PostgREST to return the created row
-
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(_supabase_reviews_url(), headers=headers, json=body)
-            resp.raise_for_status()
-            data = resp.json()
-
-        return {"success": True, "review": data[0] if isinstance(data, list) and data else data}
-    except httpx.HTTPError as exc:
-        raise AdapterError(f"Supabase post_review failed: {exc}")
-
-
-async def _supabase_update_review_status(payload: dict) -> dict:
-    """Supabase Reviews - action: update_review_status.
-    Payload: {review_id, status} ('approved' | 'rejected' | 'pending')
-    """
-    try:
-        review_id = payload["review_id"]
-        status = payload["status"]
-        url = f"{_supabase_reviews_url()}?id=eq.{review_id}"
-        headers = await _supabase_headers()
-        headers["Prefer"] = "return=representation"
-
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.patch(url, headers=headers, json={"status": status})
-            resp.raise_for_status()
-            data = resp.json()
-
-        return {"success": True, "review": data[0] if isinstance(data, list) and data else data}
-    except httpx.HTTPError as exc:
-        raise AdapterError(f"Supabase update_review_status failed: {exc}")
-
-
-async def _supabase_delete_review(payload: dict) -> dict:
-    """Supabase Reviews - action: delete_review. Payload: {review_id}"""
-    try:
-        review_id = payload["review_id"]
-        url = f"{_supabase_reviews_url()}?id=eq.{review_id}"
-        headers = await _supabase_headers()
-
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.delete(url, headers=headers)
-            resp.raise_for_status()
-
-        return {"success": True, "message": f"Review {review_id} deleted successfully"}
-    except httpx.HTTPError as exc:
-        raise AdapterError(f"Supabase delete_review failed: {exc}")
-
 #   FOR FRONTEND  LOGIC
 # function timeAgo(createdAt) {
 #   const diffDays = Math.floor((Date.now() - new Date(createdAt)) / 86400000);
@@ -356,7 +214,6 @@ async def _clarity_fetch_insights(payload: dict) -> dict:
 
 
 ADAPTERS: dict[str, dict[str, callable]] = {
-    "resend_email": {"send_email": _resend_send_email},
     "leopards_shipping": {
         "create_shipment": _leopards_create_shipment,
         "track_shipment": _leopards_track_shipment,
@@ -365,12 +222,6 @@ ADAPTERS: dict[str, dict[str, callable]] = {
     #     "create_shipment": _sonic_trax_create_shipment,
     #     "track_shipment": _sonic_trax_track_shipment,
     # },
-    "supabase_reviews": {
-        "fetch_reviews": _supabase_fetch_reviews,
-        "post_review": _supabase_post_review,
-        "update_review_status": _supabase_update_review_status,
-        "delete_review": _supabase_delete_review,
-    },
     "clarity_analytics": {"fetch_insights": _clarity_fetch_insights},
     # "twilio_sms": {"send_sms": _twilio_send_sms},           # skipped
     # "klaviyo_marketing": {                                   # not needed yet

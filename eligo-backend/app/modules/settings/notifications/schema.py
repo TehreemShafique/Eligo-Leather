@@ -173,6 +173,11 @@ class NotificationLogOut(BaseModel):
     subject: str | None = None
     status: DispatchStatus
     error: str | None = None
+    template_code: str | None = None
+    provider: str | None = None
+    provider_message_id: str | None = None
+    customer_id: int | None = None
+    order_id: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -187,3 +192,51 @@ class DispatchResponse(BaseModel):
     event_type: str
     dispatched: int
     failed: int
+
+
+# ============================== Notification Settings ==============================
+
+
+class NotificationSettingOut(BaseModel):
+    id: int
+    notification_type: str
+    enabled: bool
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationSettingUpdate(BaseModel):
+    enabled: bool
+
+
+# ============================== Manual / Test Email ==============================
+
+
+class ManualEmailRequest(BaseModel):
+    customer_id: int | None = None
+    recipient_email: str | None = None
+    template_code: str
+    subject: str | None = None
+    context: dict = Field(default_factory=dict)
+
+
+class ManualEmailResponse(BaseModel):
+    success: bool
+    message: str
+    recipient: str | None = None
+
+
+class TestEmailWithTemplateRequest(BaseModel):
+    to: str
+    template_code: str
+    context: dict = Field(default_factory=dict)
+
+
+class CustomerSearchResult(BaseModel):
+    id: int
+    name: str
+    email: str | None = None
+    phone: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)

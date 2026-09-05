@@ -1,7 +1,7 @@
 "use client"
 
+import { API_BASE } from "@/lib/api"
 import { useState, useEffect } from "react"
-import Link from "next/link"
 import {
   Sliders,
   Eye,
@@ -9,18 +9,60 @@ import {
   Code,
   CheckCircle,
   Play,
-  Copy,
-  Check,
   FloppyDisk,
   Lightning,
   X,
   Sparkle,
-  ShareNetwork,
-  FolderSimple,
+  Trash,
+  PencilSimple,
+  ArrowClockwise,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
+import { useFormDirty } from "@/components/unsaved-changes"
+
+const API = `${API_BASE}/api/v1/store`
+
+interface SavedSchema {
+  id: number
+  user_id: number
+  name: string
+  schema_type: string
+  target_pages: string
+  schema_json: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+const TYPE_BADGES: Record<string, { label: string; color: string }> = {
+  product: { label: "Product", color: "bg-blue-100 text-blue-800 border-blue-200" },
+  blog: { label: "Blog", color: "bg-purple-100 text-purple-800 border-purple-200" },
+  category: { label: "Category", color: "bg-green-100 text-green-800 border-green-200" },
+  global: { label: "Global", color: "bg-amber-100 text-amber-800 border-amber-200" },
+  custom: { label: "Custom", color: "bg-gray-100 text-gray-800 border-gray-200" },
+}
+
+const PRESET_TARGETS = [
+  { label: "All Pages", value: "/*" },
+  { label: "Product Pages", value: "/products/*" },
+  { label: "Blog Pages", value: "/blog/*" },
+  { label: "Category Pages", value: "/categories/*" },
+  { label: "Home Page", value: "/" },
+]
 
 export default function AdminSettingsCustomerEventsPage() {
+  const [activeTab, setActiveTab] = useState<"schemas" | "code" | "simulator">("schemas")
+
+  const [schemas, setSchemas] = useState<SavedSchema[]>([])
+  const [loadingSchemas, setLoadingSchemas] = useState(true)
+  const [showSchemaModal, setShowSchemaModal] = useState(false)
+  const [editingSchema, setEditingSchema] = useState<SavedSchema | null>(null)
+  const [schemaName, setSchemaName] = useState("")
+  const [schemaType, setSchemaType] = useState("custom")
+  const [schemaTargetPages, setSchemaTargetPages] = useState("/*")
+  const [schemaJson, setSchemaJson] = useState("")
+  const [savingSchema, setSavingSchema] = useState(false)
+
   const DEFAULT_HEADER_SCRIPTS = `<!-- Microsoft Clarity Session Recorder -->
 <script type="text/javascript">
     (function(c,l,a,r,i,t,y){
@@ -40,893 +82,242 @@ export default function AdminSettingsCustomerEventsPage() {
 </script>`
 
   const [headerScripts, setHeaderScripts] = useState(DEFAULT_HEADER_SCRIPTS)
-  const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<"pixels" | "code" | "simulator" | "schema">("schema")
-  const [schemaMode, setSchemaMode] = useState<"product" | "category" | "blog">("product")
+  const [savingScripts, setSavingScripts] = useState(false)
   const [simulationRunning, setSimulationRunning] = useState(false)
   const [detectedTags, setDetectedTags] = useState<Array<{ name: string; type: string; status: string; id: string }>>([])
-  const [copied, setCopied] = useState(false)
 
-  // Modal State for Adding Custom Web Pixel / Script
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [newPixelType, setNewPixelType] = useState<"ga4" | "ms_clarity" | "fb_pixel" | "custom">("custom")
-  const [newPixelName, setNewPixelName] = useState("TikTok Pixel")
-  const [newPixelCode, setNewPixelCode] = useState(`<script>\n  console.log("Custom Tracking Pixel Loaded!");\n</script>`)
+  const [dataLoaded, setDataLoaded] = useState(false)
 
-  // Product Schema State
-  const [schemaData, setSchemaData] = useState({
-    productName: "ARDOR - Handmade Leather Card Holder Wallet",
-    productSku: "ELIGO-ARDOR-01",
-    productPrice: "1699",
-    productCurrency: "PKR",
-    productBrand: "Eligo Leather",
-    productDesc: "Handcrafted top-grain real leather card holder wallet with 2 slots and minimalist design.",
-    productImage: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=1200",
-    ratingValue: "4.8",
-    reviewCount: "1520",
-    orgName: "Eligo Leather Official Store",
-    orgUrl: "https://eligoleather.com",
-    orgLogo: "https://eligoleather.com/logo.png",
-    facebookUrl: "https://facebook.com/eligoleather",
-    instagramUrl: "https://instagram.com/eligoleather",
-    faq1Q: "Is this wallet made of 100% genuine real leather?",
-    faq1A: "Yes! All Eligo Leather products are handcrafted from 100% genuine top-grain cowhide leather.",
-    faq2Q: "What is the return and exchange policy?",
-    faq2A: "We offer a 7-Day Easy Exchange policy on all orders across Pakistan.",
-  })
-
-  // Category / Collection Schema State
-  const [categorySchemaData, setCategorySchemaData] = useState({
-    categoryTitle: "Men's Handcrafted Leather Wallets & Cardholders",
-    categorySlug: "wallets",
-    categoryDesc: "Explore handcrafted top-grain real leather wallets, cardholders, and billfolds.",
-    itemCount: "12",
-    sampleProduct1: "ARDOR - Handmade Leather Card Holder Wallet",
-    sampleProduct2: "ROYAL - Premium Leather Bi-Fold Wallet",
-    sampleProduct3: "VANGUARD - Executive Long Leather Wallet",
-  })
-
-  // Blog Post Schema State (Multi-Image 2 or 3 pictures support)
-  const [blogSchemaData, setBlogSchemaData] = useState({
-    postTitle: "Luxury Leather Care: How to Maintain Top-Grain Goods",
-    postSlug: "luxury-leather-care-guide",
-    postExcerpt: "Learn how master artisans clean, condition, and protect genuine leather wallets and bags.",
-    postAuthor: "Bilal Hussain Abbasi",
-    postCategory: "News & Style Guides",
-    image1: "https://images.unsplash.com/photo-1591561954557-26941169b49e?auto=format&fit=crop&q=80&w=1200",
-    image2: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&q=80&w=1200",
-    image3: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&q=80&w=1200",
-    faq1Q: "How often should I condition my leather wallet?",
-    faq1A: "Apply leather conditioner every 3 to 6 months to preserve softness and natural shine.",
-    faq2Q: "Can genuine leather survive rain and moisture?",
-    faq2A: "Wipe water drops immediately with a dry microfiber cloth and let air dry naturally.",
-  })
-
-  const [mounted, setMounted] = useState(false)
+  const { reset } = useFormDirty(
+    {
+      schemaName,
+      schemaType,
+      schemaTargetPages,
+      schemaJson,
+      headerScripts,
+    },
+    dataLoaded
+  )
 
   useEffect(() => {
-    setMounted(true)
+    fetchSchemas()
+    fetchHeaderScripts()
+    runScriptSimulation()
   }, [])
 
-  // Load from localStorage with fallback defaults
-  useEffect(() => {
-    if (!mounted) return
+  const fetchSchemas = async () => {
+    setLoadingSchemas(true)
     try {
-      const stored = localStorage.getItem("eligo_store_header_scripts")
-      if (stored) {
-        setHeaderScripts(stored)
-      }
-    } catch (e) {
-      console.warn(e)
+      const res = await fetch(`${API}/schemas`)
+      if (res.ok) setSchemas(await res.json())
+    } catch {} finally {
+      setLoadingSchemas(false)
+      setDataLoaded(true)
     }
-  }, [mounted])
-
-  // Build JSON-LD Script payload (Product or Category)
-  const generateSchemaScript = () => {
-    if (schemaMode === "category") {
-      const categoryJsonLd = {
-        "@context": "https://schema.org",
-        "@graph": [
-          {
-            "@type": "CollectionPage",
-            "name": categorySchemaData.categoryTitle,
-            "url": `${schemaData.orgUrl}/categories/${categorySchemaData.categorySlug}`,
-            "description": categorySchemaData.categoryDesc,
-            "mainEntity": {
-              "@type": "ItemList",
-              "numberOfItems": parseInt(categorySchemaData.itemCount, 10) || 12,
-              "itemListElement": [
-                {
-                  "@type": "ListItem",
-                  "position": 1,
-                  "name": categorySchemaData.sampleProduct1,
-                  "url": `${schemaData.orgUrl}/products/ardor-wallet`,
-                },
-                {
-                  "@type": "ListItem",
-                  "position": 2,
-                  "name": categorySchemaData.sampleProduct2,
-                  "url": `${schemaData.orgUrl}/products/royal-wallet`,
-                },
-                {
-                  "@type": "ListItem",
-                  "position": 3,
-                  "name": categorySchemaData.sampleProduct3,
-                  "url": `${schemaData.orgUrl}/products/vanguard-wallet`,
-                },
-              ],
-            },
-          },
-          {
-            "@type": "BreadcrumbList",
-            "itemListElement": [
-              {
-                "@type": "ListItem",
-                "position": 1,
-                "name": "Home",
-                "item": schemaData.orgUrl,
-              },
-              {
-                "@type": "ListItem",
-                "position": 2,
-                "name": "Categories",
-                "item": `${schemaData.orgUrl}/categories`,
-              },
-              {
-                "@type": "ListItem",
-                "position": 3,
-                "name": categorySchemaData.categoryTitle,
-                "item": `${schemaData.orgUrl}/categories/${categorySchemaData.categorySlug}`,
-              },
-            ],
-          },
-          {
-            "@type": "Organization",
-            "name": schemaData.orgName,
-            "url": schemaData.orgUrl,
-            "logo": schemaData.orgLogo,
-            "sameAs": [schemaData.facebookUrl, schemaData.instagramUrl],
-          },
-        ],
-      }
-      return `<script type="application/ld+json">\n${JSON.stringify(categoryJsonLd, null, 2)}\n</script>`
-    }
-
-    if (schemaMode === "blog") {
-      const blogJsonLd = {
-        "@context": "https://schema.org",
-        "@graph": [
-          {
-            "@type": "BlogPosting",
-            "@id": `https://eligoleather.com/blog/${blogSchemaData.postSlug}/#blogposting`,
-            "headline": blogSchemaData.postTitle,
-            "description": blogSchemaData.postExcerpt,
-            "image": [blogSchemaData.image1, blogSchemaData.image2, blogSchemaData.image3].filter(Boolean),
-            "datePublished": "2026-02-04T08:00:00+05:00",
-            "dateModified": new Date().toISOString(),
-            "author": {
-              "@type": "Person",
-              "name": blogSchemaData.postAuthor,
-              "url": `${schemaData.orgUrl}/authors/bilal-abbasi`
-            },
-            "publisher": {
-              "@type": "Organization",
-              "name": schemaData.orgName,
-              "url": schemaData.orgUrl,
-              "logo": {
-                "@type": "ImageObject",
-                "url": schemaData.orgLogo
-              }
-            },
-            "mainEntityOfPage": {
-              "@type": "WebPage",
-              "@id": `https://eligoleather.com/blog/${blogSchemaData.postSlug}`
-            }
-          },
-          {
-            "@type": "BreadcrumbList",
-            "itemListElement": [
-              { "@type": "ListItem", "position": 1, "name": "Home", "item": schemaData.orgUrl },
-              { "@type": "ListItem", "position": 2, "name": "Blogs", "item": `${schemaData.orgUrl}/blogs` },
-              { "@type": "ListItem", "position": 3, "name": blogSchemaData.postTitle, "item": `${schemaData.orgUrl}/blog/${blogSchemaData.postSlug}` }
-            ]
-          },
-          {
-            "@type": "Organization",
-            "name": schemaData.orgName,
-            "url": schemaData.orgUrl,
-            "logo": schemaData.orgLogo,
-            "sameAs": [schemaData.facebookUrl, schemaData.instagramUrl]
-          },
-          {
-            "@type": "FAQPage",
-            "mainEntity": [
-              {
-                "@type": "Question",
-                "name": blogSchemaData.faq1Q,
-                "acceptedAnswer": { "@type": "Answer", "text": blogSchemaData.faq1A }
-              },
-              {
-                "@type": "Question",
-                "name": blogSchemaData.faq2Q,
-                "acceptedAnswer": { "@type": "Answer", "text": blogSchemaData.faq2A }
-              }
-            ]
-          }
-        ]
-      }
-      return `<script type="application/ld+json">\n${JSON.stringify(blogJsonLd, null, 2)}\n</script>`
-    }
-
-    const productJsonLd = {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "Product",
-          "name": schemaData.productName,
-          "image": schemaData.productImage,
-          "description": schemaData.productDesc,
-          "sku": schemaData.productSku,
-          "brand": {
-            "@type": "Brand",
-            "name": schemaData.productBrand,
-          },
-          "offers": {
-            "@type": "Offer",
-            "url": `${schemaData.orgUrl}/products/${schemaData.productSku.toLowerCase()}`,
-            "priceCurrency": schemaData.productCurrency,
-            "price": schemaData.productPrice,
-            "availability": "https://schema.org/InStock",
-            "itemCondition": "https://schema.org/NewCondition",
-          },
-          "aggregateRating": {
-            "@type": "AggregateRating",
-            "ratingValue": schemaData.ratingValue,
-            "reviewCount": schemaData.reviewCount,
-          },
-        },
-        {
-          "@type": "Organization",
-          "name": schemaData.orgName,
-          "url": schemaData.orgUrl,
-          "logo": schemaData.orgLogo,
-          "sameAs": [schemaData.facebookUrl, schemaData.instagramUrl],
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": schemaData.orgUrl,
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Products",
-              "item": `${schemaData.orgUrl}/products`,
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": schemaData.productName,
-              "item": `${schemaData.orgUrl}/products/${schemaData.productSku.toLowerCase()}`,
-            },
-          ],
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-            {
-              "@type": "Question",
-              "name": schemaData.faq1Q,
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": schemaData.faq1A,
-              },
-            },
-            {
-              "@type": "Question",
-              "name": schemaData.faq2Q,
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": schemaData.faq2A,
-              },
-            },
-          ],
-        },
-      ],
-    }
-
-    return `<script type="application/ld+json">\n${JSON.stringify(productJsonLd, null, 2)}\n</script>`
   }
 
-  const generatedScriptSnippet = generateSchemaScript()
+  const fetchHeaderScripts = async () => {
+    try {
+      const res = await fetch(`${API}/header-scripts`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.header_scripts) setHeaderScripts(data.header_scripts)
+      }
+    } catch {
+      const stored = localStorage.getItem("eligo_store_header_scripts")
+      if (stored) setHeaderScripts(stored)
+    }
+  }
 
-  const handleCopySchemaScript = () => {
-    navigator.clipboard.writeText(generatedScriptSnippet)
-    setCopied(true)
-    toast.success(`JSON-LD ${schemaMode.toUpperCase()} Schema snippet copied!`)
-    setTimeout(() => setCopied(false), 2000)
+  const openAddSchema = () => {
+    setEditingSchema(null)
+    setSchemaName("")
+    setSchemaType("custom")
+    setSchemaTargetPages("/*")
+    setSchemaJson("")
+    setShowSchemaModal(true)
+  }
+
+  const openEditSchema = (schema: SavedSchema) => {
+    setEditingSchema(schema)
+    setSchemaName(schema.name)
+    setSchemaType(schema.schema_type)
+    setSchemaTargetPages(schema.target_pages)
+    setSchemaJson(schema.schema_json)
+    setShowSchemaModal(true)
+  }
+
+  const handleSaveSchema = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!schemaName.trim() || !schemaJson.trim()) {
+      toast.error("Name and Schema JSON are required")
+      return
+    }
+    setSavingSchema(true)
+    try {
+      const body = { name: schemaName, schema_type: schemaType, target_pages: schemaTargetPages, schema_json: schemaJson, is_active: true }
+      let res: Response
+      if (editingSchema) {
+        res = await fetch(`${API}/schemas/${editingSchema.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      } else {
+        res = await fetch(`${API}/schemas`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      }
+      if (res.ok) { toast.success(editingSchema ? "Schema updated!" : "Schema created!"); setShowSchemaModal(false); fetchSchemas(); reset() }
+      else { const err = await res.json(); toast.error(err.detail || "Failed to save schema") }
+    } catch { toast.error("Network error saving schema") } finally { setSavingSchema(false) }
+  }
+
+  const handleDeleteSchema = async (schema: SavedSchema) => {
+    if (!confirm(`Delete schema "${schema.name}"?`)) return
+    try {
+      const res = await fetch(`${API}/schemas/${schema.id}`, { method: "DELETE" })
+      if (res.ok) { toast.success("Schema deleted"); fetchSchemas() }
+    } catch { toast.error("Failed to delete schema") }
+  }
+
+  const handleToggleActive = async (schema: SavedSchema) => {
+    try {
+      const res = await fetch(`${API}/schemas/${schema.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: !schema.is_active }) })
+      if (res.ok) fetchSchemas()
+    } catch { toast.error("Failed to toggle schema") }
   }
 
   const saveScriptsToDatabase = async (scripts: string) => {
     try {
-      await fetch("http://127.0.0.1:8000/api/v1/store/header-scripts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ header_scripts: scripts }),
-      })
-    } catch (e) {
-      console.warn("Backend DB header scripts save endpoint fallback:", e)
-    }
+      await fetch(`${API}/header-scripts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ header_scripts: scripts }) })
+      localStorage.setItem("eligo_store_header_scripts", scripts)
+    } catch { localStorage.setItem("eligo_store_header_scripts", scripts) }
   }
-
-  const handlePublishSchemaToPages = async () => {
-    const routePrefix = schemaMode === "category" ? "/categories" : schemaMode === "blog" ? "/blog" : "/products"
-    const targetName = schemaMode === "category" ? "Category Pages (/categories/*)" : schemaMode === "blog" ? "Blog Pages (/blog/*)" : "Product Pages (/products/*)"
-
-    const scriptWrapper = `<!-- ${schemaMode.toUpperCase()} Page Target Script -->\n<script>\nif (window.location.pathname.startsWith('${routePrefix}')) {\n  const script = document.createElement('script');\n  script.type = 'application/ld+json';\n  script.text = JSON.stringify(${JSON.stringify(JSON.parse(generatedScriptSnippet.replace(/<script[^>]*>/, '').replace(/<\/script>/, '')), null, 2)});\n  document.head.appendChild(script);\n}\n</script>`
-
-    localStorage.setItem(`eligo_${schemaMode}_schema_script`, generatedScriptSnippet)
-
-    const updatedScripts = headerScripts + "\n\n" + scriptWrapper
-    setHeaderScripts(updatedScripts)
-    localStorage.setItem("eligo_store_header_scripts", updatedScripts)
-
-    await saveScriptsToDatabase(updatedScripts)
-
-    toast.success(`Schema script saved to Database & published! Running strictly on ${targetName}.`)
-  }
-
-  // Run Visual Simulator
-  const runScriptSimulation = () => {
-    setSimulationRunning(true)
-
-    setTimeout(() => {
-      const tags: Array<{ name: string; type: string; status: string; id: string }> = []
-
-      if (headerScripts.includes("CollectionPage") || headerScripts.includes("categories")) {
-        tags.push({
-          name: "JSON-LD Category & ItemList Schema",
-          type: "Structured Data (Collection Search Snippets)",
-          status: "Executing on /categories/* only",
-          id: "schema_category_jsonld",
-        })
-      }
-
-      if (headerScripts.includes("application/ld+json") || headerScripts.includes("Product")) {
-        tags.push({
-          name: "JSON-LD Product & FAQ Schema",
-          type: "Structured Data (Google Rich Results)",
-          status: "Executing on /products/* only",
-          id: "schema_product_jsonld",
-        })
-      }
-
-      if (headerScripts.includes("clarity.ms") || headerScripts.includes("clarity")) {
-        tags.push({
-          name: "Microsoft Clarity",
-          type: "Session Recording & Heatmaps",
-          status: "Executing in <head>",
-          id: "clarity_k8492019482",
-        })
-      }
-
-      if (headerScripts.includes("googletagmanager.com") || headerScripts.includes("gtag")) {
-        tags.push({
-          name: "Google Analytics 4 (GA4)",
-          type: "Traffic Analytics",
-          status: "Executing in <head>",
-          id: "gtag_G-ELIGO94821",
-        })
-      }
-
-      if (tags.length === 0) {
-        tags.push({
-          name: "Custom HTML/JS Script",
-          type: "Custom Storefront Script",
-          status: "Executing in DOM",
-          id: "custom_script_01",
-        })
-      }
-
-      setDetectedTags(tags)
-      setSimulationRunning(false)
-    }, 600)
-  }
-
-  useEffect(() => {
-    runScriptSimulation()
-  }, [])
 
   const handleSaveScripts = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSaving(true)
-    localStorage.setItem("eligo_store_header_scripts", headerScripts)
+    setSavingScripts(true)
     await saveScriptsToDatabase(headerScripts)
-    setTimeout(() => {
-      setSaving(false)
-      toast.success("Header scripts saved to Database & published live to storefront <head>!")
-      runScriptSimulation()
-    }, 650)
+    setTimeout(() => { setSavingScripts(false); toast.success("Header scripts saved & published!"); runScriptSimulation(); reset() }, 400)
   }
 
-  const handleAddPixelSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    let codeToAdd = newPixelCode
-    if (newPixelType === "ga4") {
-      codeToAdd = `\n<!-- Google Analytics 4 -->\n<script async src="https://www.googletagmanager.com/gtag/js?id=G-GA4ID"></script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n  gtag('config', 'G-GA4ID');\n</script>\n`
-    }
-
-    const updated = headerScripts + `\n\n<!-- Custom Pixel: ${newPixelName} -->\n` + codeToAdd
-    setHeaderScripts(updated)
-    localStorage.setItem("eligo_store_header_scripts", updated)
-
-    setShowAddModal(false)
-    toast.success(`Connected '${newPixelName}' and saved script to storefront!`)
-    runScriptSimulation()
+  const runScriptSimulation = () => {
+    setSimulationRunning(true)
+    setTimeout(() => {
+      const tags: Array<{ name: string; type: string; status: string; id: string }> = []
+      if (headerScripts.includes("clarity.ms") || headerScripts.includes("clarity")) tags.push({ name: "Microsoft Clarity", type: "Session Recording & Heatmaps", status: "Executing in <head>", id: "clarity_k8492019482" })
+      if (headerScripts.includes("googletagmanager.com") || headerScripts.includes("gtag")) tags.push({ name: "Google Analytics 4", type: "Traffic & Page View Tracking", status: "Active (G-ELIGO94821)", id: "gtag_G-ELIGO94821" })
+      if (headerScripts.includes("connect.facebook.net") || headerScripts.includes("fbq")) tags.push({ name: "Facebook Meta Pixel", type: "Conversion & Retargeting", status: "Active", id: "fb_pixel" })
+      if (tags.length === 0) tags.push({ name: "Custom HTML/JS Script Tag", type: "Header Injection", status: "Executing in DOM", id: "custom_script_01" })
+      setDetectedTags(tags)
+      setSimulationRunning(false)
+    }, 500)
   }
 
   return (
     <div className="space-y-6 font-sans max-w-6xl">
-      {/* Page Header */}
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4 text-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-amber-800 uppercase tracking-widest mb-1">
               <Sliders className="w-4 h-4 text-amber-800" />
-              <span>Customer Events &amp; SEO Schemas</span>
+              <span>Customer Events &amp; SEO Schema Manager</span>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Customer Events &amp; SEO Schemas</h1>
-            <p className="text-xs text-gray-500 mt-1">
-              Generate Product &amp; Category JSON-LD schemas and manage database tracking scripts.
-            </p>
+            <h1 className="text-2xl font-bold text-gray-900">Customer Events &amp; Schema Manager</h1>
+            <p className="text-xs text-gray-500 mt-1">Manage JSON-LD schemas per page type, edit storefront tracking scripts, and preview script execution.</p>
           </div>
-
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors inline-flex items-center gap-2 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Custom Pixel</span>
-            </button>
-
-            <button
-              onClick={handleSaveScripts}
-              disabled={saving}
-              className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold text-xs rounded-xl border border-gray-300 transition-colors inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <FloppyDisk className="w-4 h-4 text-amber-800" />
-              <span>{saving ? "Publishing..." : "Save All Scripts"}</span>
-            </button>
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1.5">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Storefront Scripts Live</span>
+            </span>
           </div>
         </div>
 
-        {/* Tab Switcher */}
         <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
-          <button
-            onClick={() => setActiveTab("schema")}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer ${
-              activeTab === "schema" ? "bg-amber-800 text-white shadow-2xs" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Sparkle className="w-4 h-4" />
-            <span>SEO Schema Generator</span>
+          <button onClick={() => setActiveTab("schemas")} className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer ${activeTab === "schemas" ? "bg-amber-800 text-white shadow-2xs" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+            <Sparkle className="w-4 h-4" /><span>SEO Schema Manager ({schemas.length})</span>
           </button>
-
-          <button
-            onClick={() => setActiveTab("pixels")}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer ${
-              activeTab === "pixels" ? "bg-amber-800 text-white shadow-2xs" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Eye className="w-4 h-4" />
-            <span>Active Web Pixels ({detectedTags.length})</span>
+          <button onClick={() => setActiveTab("code")} className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer ${activeTab === "code" ? "bg-amber-800 text-white shadow-2xs" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+            <Code className="w-4 h-4" /><span>Header Script Editor</span>
           </button>
-
-          <button
-            onClick={() => setActiveTab("code")}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer ${
-              activeTab === "code" ? "bg-amber-800 text-white shadow-2xs" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Code className="w-4 h-4" />
-            <span>Header Script Editor</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("simulator")}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer ${
-              activeTab === "simulator" ? "bg-amber-800 text-white shadow-2xs" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Play className="w-4 h-4" />
-            <span>Script Simulator</span>
+          <button onClick={() => setActiveTab("simulator")} className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer ${activeTab === "simulator" ? "bg-amber-800 text-white shadow-2xs" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+            <Play className="w-4 h-4" /><span>Script Simulator</span>
           </button>
         </div>
       </div>
 
-      {/* Tab 0: Product & Category SEO Schema Generator (JSON-LD) */}
-      {activeTab === "schema" && (
-        <div className="space-y-6">
-          {/* Mode Switcher: Product Schema vs Category Schema */}
-          <div className="flex items-center gap-3 bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs">
-            <span className="font-bold text-gray-900 text-xs mr-2">Target Page Type:</span>
-            <button
-              type="button"
-              onClick={() => setSchemaMode("product")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                schemaMode === "product" ? "bg-black text-white shadow-xs" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              <Sparkle className="w-4 h-4" />
-              <span>Product Page Schema (@type: Product)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSchemaMode("category")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                schemaMode === "category" ? "bg-black text-white shadow-xs" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              <FolderSimple className="w-4 h-4" />
-              <span>Category / Collection Schema (@type: CollectionPage &amp; ItemList)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSchemaMode("blog")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                schemaMode === "blog" ? "bg-black text-white shadow-xs" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              <Code className="w-4 h-4" />
-              <span>Blog Post Schema (@type: BlogPosting)</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Inputs (7 columns) */}
-            <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-6 text-xs">
-              <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
-                <span className="font-bold text-gray-900 flex items-center gap-2 text-sm">
-                  {schemaMode === "category" ? <FolderSimple className="w-4 h-4 text-amber-800" /> : <Sparkle className="w-4 h-4 text-amber-800" />}
-                  <span>{schemaMode === "category" ? "Category Schema Fields" : "Product Schema Fields"}</span>
-                </span>
-                <span className="px-2.5 py-1 bg-amber-50 text-amber-800 font-bold rounded-full text-[10px] border border-amber-200">
-                  Google Rich Results Ready
-                </span>
-              </div>
-
-              {schemaMode === "blog" ? (
-                /* Blog Schema Fields */
-                <div className="space-y-4">
-                  <span className="font-bold text-gray-900 uppercase tracking-wide text-[11px] text-amber-800 block">
-                    Blog Post Page Fields (@type: BlogPosting, Breadcrumb, FAQs)
-                  </span>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-gray-700 mb-1">Blog Post Title</label>
-                      <input
-                        type="text"
-                        value={blogSchemaData.postTitle}
-                        onChange={(e) => setBlogSchemaData({ ...blogSchemaData, postTitle: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-gray-700 mb-1">Post URL Handle / Slug</label>
-                      <input
-                        type="text"
-                        value={blogSchemaData.postSlug}
-                        onChange={(e) => setBlogSchemaData({ ...blogSchemaData, postSlug: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">Author Name</label>
-                    <input
-                      type="text"
-                      value={blogSchemaData.postAuthor}
-                      onChange={(e) => setBlogSchemaData({ ...blogSchemaData, postAuthor: e.target.value })}
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-bold"
-                    />
-                  </div>
-
-                  <div className="space-y-2 pt-2 border-t border-gray-100">
-                    <span className="font-bold text-gray-900 uppercase tracking-wide text-[10px] text-amber-900 block">
-                      Multi-Image Gallery (2 or 3 Picture URLs for Google Discover &amp; Schema)
-                    </span>
-                    <div>
-                      <label className="block font-semibold text-gray-600 text-[10px] mb-0.5">Image 1 URL (Primary)</label>
-                      <input
-                        type="text"
-                        value={blogSchemaData.image1}
-                        onChange={(e) => setBlogSchemaData({ ...blogSchemaData, image1: e.target.value })}
-                        className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-xs font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-gray-600 text-[10px] mb-0.5">Image 2 URL (Secondary)</label>
-                      <input
-                        type="text"
-                        value={blogSchemaData.image2}
-                        onChange={(e) => setBlogSchemaData({ ...blogSchemaData, image2: e.target.value })}
-                        className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-xs font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-gray-600 text-[10px] mb-0.5">Image 3 URL (Gallery)</label>
-                      <input
-                        type="text"
-                        value={blogSchemaData.image3}
-                        onChange={(e) => setBlogSchemaData({ ...blogSchemaData, image3: e.target.value })}
-                        className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-xs font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : schemaMode === "category" ? (
-                /* Category Schema Fields */
-                <div className="space-y-4">
-                  <span className="font-bold text-gray-900 uppercase tracking-wide text-[11px] text-amber-800 block">
-                    Category Page Fields (@type: CollectionPage &amp; ItemList)
-                  </span>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-gray-700 mb-1">Category Title</label>
-                      <input
-                        type="text"
-                        value={categorySchemaData.categoryTitle}
-                        onChange={(e) => setCategorySchemaData({ ...categorySchemaData, categoryTitle: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-gray-700 mb-1">Category Slug</label>
-                      <input
-                        type="text"
-                        value={categorySchemaData.categorySlug}
-                        onChange={(e) => setCategorySchemaData({ ...categorySchemaData, categorySlug: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">Category SEO Description</label>
-                    <textarea
-                      rows={2}
-                      value={categorySchemaData.categoryDesc}
-                      onChange={(e) => setCategorySchemaData({ ...categorySchemaData, categoryDesc: e.target.value })}
-                      className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-2 pt-2 border-t border-gray-100">
-                    <span className="font-bold text-gray-900 text-xs block">Sample Featured Products in Collection</span>
-                    <div>
-                      <label className="block text-gray-500 mb-1">Product #1</label>
-                      <input
-                        type="text"
-                        value={categorySchemaData.sampleProduct1}
-                        onChange={(e) => setCategorySchemaData({ ...categorySchemaData, sampleProduct1: e.target.value })}
-                        className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-500 mb-1">Product #2</label>
-                      <input
-                        type="text"
-                        value={categorySchemaData.sampleProduct2}
-                        onChange={(e) => setCategorySchemaData({ ...categorySchemaData, sampleProduct2: e.target.value })}
-                        className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* Product Schema Fields */
-                <div className="space-y-3">
-                  <span className="font-bold text-gray-900 uppercase tracking-wide text-[11px] text-amber-800 block">
-                    Product Schema Fields (@type: Product)
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-gray-700 mb-1">Product Title</label>
-                      <input
-                        type="text"
-                        value={schemaData.productName}
-                        onChange={(e) => setSchemaData({ ...schemaData, productName: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-gray-700 mb-1">SKU / Model</label>
-                      <input
-                        type="text"
-                        value={schemaData.productSku}
-                        onChange={(e) => setSchemaData({ ...schemaData, productSku: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block font-bold text-gray-700 mb-1">Price (PKR)</label>
-                      <input
-                        type="text"
-                        value={schemaData.productPrice}
-                        onChange={(e) => setSchemaData({ ...schemaData, productPrice: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-gray-700 mb-1">Rating</label>
-                      <input
-                        type="text"
-                        value={schemaData.ratingValue}
-                        onChange={(e) => setSchemaData({ ...schemaData, ratingValue: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-gray-700 mb-1">Review Count</label>
-                      <input
-                        type="text"
-                        value={schemaData.reviewCount}
-                        onChange={(e) => setSchemaData({ ...schemaData, reviewCount: e.target.value })}
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">Product Description</label>
-                    <textarea
-                      rows={2}
-                      value={schemaData.productDesc}
-                      onChange={(e) => setSchemaData({ ...schemaData, productDesc: e.target.value })}
-                      className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right Live JSON-LD Code Output & Actions (5 columns) */}
-            <div className="lg:col-span-5 bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs flex flex-col justify-between space-y-4 text-xs">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                  <span className="font-bold text-gray-900 flex items-center gap-2">
-                    <Code className="w-4 h-4 text-amber-800" />
-                    <span>Generated JSON-LD Script</span>
-                  </span>
-
-                  <button
-                    onClick={handleCopySchemaScript}
-                    className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold rounded-lg border border-amber-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-                  >
-                    {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                    <span>{copied ? "Copied!" : "Copy Script"}</span>
-                  </button>
-                </div>
-
-                <div className="relative">
-                  <pre className="p-4 bg-gray-950 text-emerald-400 font-mono text-[11px] rounded-xl border border-gray-800 max-h-[460px] overflow-y-auto leading-relaxed shadow-inner">
-                    <code>{generatedScriptSnippet}</code>
-                  </pre>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-gray-100 space-y-2">
-                <button
-                  type="button"
-                  onClick={handlePublishSchemaToPages}
-                  className="w-full py-3 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors inline-flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <ShareNetwork className="w-4 h-4" />
-                  <span>
-                    Publish Schema to {schemaMode === "category" ? "Category Pages (/categories/*)" : "Product Pages (/products/*)"}
-                  </span>
-                </button>
-                <p className="text-[11px] text-gray-500 text-center">
-                  Saves to Database &amp; updates {schemaMode === "category" ? "category" : "product"} pages on storefront in real-time.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 1: Active Connected Web Pixels */}
-      {activeTab === "pixels" && (
+      {/* TAB: Schema Manager */}
+      {activeTab === "schemas" && (
         <div className="space-y-4">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4 text-xs">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <span className="font-bold text-gray-900 flex items-center gap-2 text-sm">
-                <Eye className="w-4 h-4 text-amber-800" />
-                <span>Connected Web Pixels &amp; Telemetry Tags</span>
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setShowAddModal(true)}
-                className="px-3.5 py-1.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Custom Pixel</span>
+          <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs flex items-center justify-between">
+            <span className="text-xs text-gray-500">Schemas are injected into storefront pages via the <code className="font-mono text-amber-900 font-bold">SchemaInjector</code> component.</span>
+            <div className="flex items-center gap-2">
+              <button onClick={fetchSchemas} className="px-3 py-2 text-xs text-gray-600 hover:text-gray-900 inline-flex items-center gap-1.5 cursor-pointer">
+                <ArrowClockwise className="w-3.5 h-3.5" />Refresh
+              </button>
+              <button onClick={openAddSchema} className="px-4 py-2 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors inline-flex items-center gap-2 cursor-pointer">
+                <Plus className="w-4 h-4" /><span>Add New Schema</span>
               </button>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {detectedTags.map((tag, idx) => (
-                <div key={idx} className="p-4 bg-gray-50/80 rounded-2xl border border-gray-200 flex items-center justify-between space-y-1">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-gray-900 text-sm">{tag.name}</span>
-                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-full border border-emerald-200">
-                        {tag.status}
-                      </span>
-                    </div>
-                    <span className="text-gray-500 text-xs block mt-0.5">{tag.type}</span>
-                    <span className="text-amber-800 font-mono text-[11px] block mt-0.5">Tag ID: {tag.id}</span>
-                  </div>
-
-                  <button
-                    onClick={() => setActiveTab("code")}
-                    className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-800 font-bold border border-gray-300 rounded-xl text-xs transition-colors"
-                  >
-                    Edit Code
-                  </button>
-                </div>
-              ))}
-            </div>
           </div>
+
+          {loadingSchemas && <div className="bg-white p-12 rounded-2xl border border-gray-200 shadow-2xs text-center"><span className="text-xs text-gray-400">Loading schemas from database...</span></div>}
+
+          {!loadingSchemas && schemas.length === 0 && (
+            <div className="bg-white p-12 rounded-2xl border border-gray-200 shadow-2xs text-center space-y-3">
+              <Sparkle className="w-8 h-8 text-amber-300 mx-auto" />
+              <p className="text-sm font-bold text-gray-900">No Schemas Yet</p>
+              <p className="text-xs text-gray-500 max-w-md mx-auto">Click "Add New Schema" to paste a JSON-LD snippet and assign it to specific storefront pages.</p>
+              <button onClick={openAddSchema} className="px-5 py-2 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl shadow-2xs inline-flex items-center gap-2 cursor-pointer">
+                <Plus className="w-4 h-4" />Add First Schema
+              </button>
+            </div>
+          )}
+
+          {!loadingSchemas && schemas.length > 0 && (
+            <div className="space-y-3">
+              {schemas.map((schema) => {
+                const badge = TYPE_BADGES[schema.schema_type] || TYPE_BADGES.custom
+                return (
+                  <div key={schema.id} className={`bg-white p-4 rounded-2xl border shadow-2xs transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${schema.is_active ? "border-gray-200" : "border-gray-200 opacity-60"}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="font-bold text-gray-900 text-sm">{schema.name}</span>
+                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${badge.color}`}>{badge.label}</span>
+                        <span className="text-[10px] font-mono bg-gray-100 text-gray-600 px-2 py-0.5 rounded border border-gray-200">{schema.target_pages}</span>
+                        {!schema.is_active && <span className="text-[10px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded border border-red-200">Inactive</span>}
+                      </div>
+                      <span className="text-[11px] text-gray-400 font-mono block mt-0.5 truncate">{schema.schema_json.substring(0, 120)}...</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button onClick={() => handleToggleActive(schema)} title={schema.is_active ? "Deactivate" : "Activate"} className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition-colors ${schema.is_active ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}>
+                        {schema.is_active ? "Active" : "Inactive"}
+                      </button>
+                      <button onClick={() => openEditSchema(schema)} className="px-2.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 font-semibold rounded-lg text-xs inline-flex items-center gap-1 cursor-pointer">
+                        <PencilSimple className="w-3.5 h-3.5" />Edit
+                      </button>
+                      <button onClick={() => handleDeleteSchema(schema)} className="px-2.5 py-1.5 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-300 hover:text-red-700 text-gray-700 font-semibold rounded-lg text-xs inline-flex items-center gap-1 cursor-pointer">
+                        <Trash className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Tab 2: Code Editor & Presets */}
+      {/* TAB: Header Script Editor */}
       {activeTab === "code" && (
         <div className="space-y-4">
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4 text-xs">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-gray-900 flex items-center gap-2">
-                <Code className="w-4 h-4 text-amber-800" />
-                <span>Storefront HTML &lt;head&gt; Scripts Editor</span>
-              </span>
+              <span className="font-bold text-gray-900 flex items-center gap-2"><Code className="w-4 h-4 text-amber-800" /><span>Storefront &lt;head&gt; Scripts Editor</span></span>
+              <span className="text-gray-400 font-mono text-[11px]">Backend: /api/v1/store/header-scripts</span>
             </div>
-
             <form onSubmit={handleSaveScripts} className="space-y-3">
-              <textarea
-                rows={12}
-                value={headerScripts}
-                onChange={(e) => setHeaderScripts(e.target.value)}
-                placeholder="Paste <script> tags here..."
-                className="w-full p-4 bg-gray-950 text-emerald-400 font-mono text-xs rounded-xl border border-gray-800 focus:outline-hidden leading-relaxed shadow-inner"
-              />
-
+              <textarea rows={14} value={headerScripts} onChange={(e) => setHeaderScripts(e.target.value)} placeholder="Paste script tags here..." className="w-full p-4 bg-gray-950 text-emerald-400 font-mono text-xs rounded-xl border border-gray-800 focus:outline-hidden leading-relaxed shadow-inner" />
               <div className="flex items-center justify-between pt-2">
-                <span className="text-gray-500 text-[11px]">
-                  Scripts saved here execute on storefront head script injection.
-                </span>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-5 py-2.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <FloppyDisk className="w-4 h-4" />
-                  <span>{saving ? "Publishing..." : "Save & Publish Header Scripts"}</span>
+                <span className="text-gray-500 text-[11px]">Saved scripts execute on every storefront page via head injection.</span>
+                <button type="submit" disabled={savingScripts} className="px-5 py-2.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50">
+                  <FloppyDisk className="w-4 h-4" /><span>{savingScripts ? "Saving..." : "Save & Publish Scripts"}</span>
                 </button>
               </div>
             </form>
@@ -934,32 +325,21 @@ export default function AdminSettingsCustomerEventsPage() {
         </div>
       )}
 
-      {/* Tab 3: Visual Execution Simulator */}
+      {/* TAB: Script Simulator */}
       {activeTab === "simulator" && (
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-2xs space-y-4 text-xs">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <div>
-              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                <Play className="w-4 h-4 text-amber-800" />
-                <span>Storefront Script Execution Simulator</span>
-              </h3>
-              <p className="text-[11px] text-gray-500 mt-0.5">
-                Simulates dynamic HTML &lt;head&gt; DOM injection and script tag execution.
-              </p>
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2"><Play className="w-4 h-4 text-amber-800" /><span>Storefront Script Execution Simulator</span></h3>
+              <p className="text-[11px] text-gray-500 mt-0.5">Simulates dynamic head DOM injection and script tag execution.</p>
             </div>
-            <button
-              onClick={runScriptSimulation}
-              disabled={simulationRunning}
-              className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-xl border border-gray-300 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <Lightning className="w-4 h-4 text-amber-800" />
-              <span>{simulationRunning ? "Simulating..." : "Re-Run Simulator"}</span>
+            <button onClick={runScriptSimulation} disabled={simulationRunning} className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-xl border border-gray-300 transition-colors inline-flex items-center gap-1.5 cursor-pointer">
+              <Lightning className="w-4 h-4 text-amber-800" /><span>{simulationRunning ? "Simulating..." : "Re-Run"}</span>
             </button>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-3">
-              <span className="font-bold text-gray-900 block text-xs">Detected Active Tags in DOM ({detectedTags.length})</span>
+              <span className="font-bold text-gray-900 block text-xs">Detected Active Tags ({detectedTags.length})</span>
               {detectedTags.map((tag, idx) => (
                 <div key={idx} className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
                   <div className="space-y-0.5">
@@ -968,83 +348,81 @@ export default function AdminSettingsCustomerEventsPage() {
                     <span className="text-amber-800 font-mono text-[10px] block">ID: {tag.id}</span>
                   </div>
                   <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded-full text-[10px] border border-emerald-200 inline-flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" />
-                    <span>{tag.status}</span>
+                    <CheckCircle className="w-3 h-3" /><span>{tag.status}</span>
                   </span>
                 </div>
               ))}
             </div>
-
             <div className="space-y-2 font-mono">
               <span className="font-bold text-gray-900 block text-xs font-sans">DOM Console Log</span>
               <div className="p-4 bg-gray-950 text-emerald-400 rounded-xl text-[11px] space-y-1.5 h-44 overflow-y-auto border border-gray-800">
                 <div className="text-gray-500">&gt; GET /api/v1/store/public/header-scripts</div>
-                <div className="text-gray-400">&gt; HTTP 200 OK - Received published header scripts payload</div>
-                <div className="text-emerald-400">&gt; DOM &lt;head&gt; injection initiated...</div>
-                {detectedTags.map((t, i) => (
-                  <div key={i} className="text-amber-300">
-                    &gt; Executed script: {t.name} [{t.id}]
-                  </div>
-                ))}
-                <div className="text-emerald-300 font-bold">&gt; Ready: Storefront telemetry tracking initialized cleanly.</div>
+                <div className="text-gray-400">&gt; HTTP 200 OK - Received header scripts payload</div>
+                <div className="text-emerald-400">&gt; DOM head injection initiated...</div>
+                {detectedTags.map((t, i) => (<div key={i} className="text-amber-300">&gt; Executed script: {t.name} [{t.id}]</div>))}
+                <div className="text-emerald-300 font-bold">&gt; Ready: Storefront telemetry tracking initialized.</div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add Custom Pixel Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 text-xs font-sans">
-              <div className="flex items-center gap-2">
-                <Plus className="w-4 h-4 text-amber-800" />
-                <h3 className="text-base font-bold text-gray-900">Add Custom Pixel / Customer Event</h3>
+      {/* Schema Add/Edit Modal */}
+      {showSchemaModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-gray-200 p-6 space-y-4 text-xs font-sans max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2 text-[10px] font-bold text-amber-800 uppercase tracking-wider">
+                  <Sparkle className="w-3.5 h-3.5" />
+                  <span>JSON-LD Schema Editor</span>
+                </div>
+                <h3 className="text-base font-bold text-gray-900">{editingSchema ? "Edit Schema" : "Add New Schema"}</h3>
               </div>
-              <button onClick={() => setShowAddModal(false)} className="p-1 text-gray-400 hover:text-black cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setShowSchemaModal(false)} className="p-1 text-gray-400 hover:text-black cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
 
-            <form onSubmit={handleAddPixelSubmit} className="p-6 space-y-4 text-xs font-sans">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Pixel Name</label>
-                <input
-                  type="text"
-                  required
-                  value={newPixelName}
-                  onChange={(e) => setNewPixelName(e.target.value)}
-                  placeholder="e.g. TikTok Pixel or Checkout Tracker"
-                  className="w-full h-10 px-3 bg-gray-50 border border-gray-300 rounded-xl font-semibold text-gray-900 focus:outline-hidden"
-                />
+            <form onSubmit={handleSaveSchema} className="flex-1 overflow-y-auto space-y-4 pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="font-bold text-gray-900 block mb-1">Schema Name</label>
+                  <input type="text" required value={schemaName} onChange={(e) => setSchemaName(e.target.value)} placeholder="e.g. Product Page Schema" className="w-full h-9 px-3 bg-gray-50 border border-gray-300 rounded-xl text-xs font-bold focus:outline-hidden" />
+                </div>
+                <div>
+                  <label className="font-bold text-gray-900 block mb-1">Schema Type</label>
+                  <select value={schemaType} onChange={(e) => setSchemaType(e.target.value)} className="w-full h-9 px-3 bg-gray-50 border border-gray-300 rounded-xl text-xs font-bold focus:outline-hidden">
+                    <option value="product">Product</option>
+                    <option value="blog">Blog</option>
+                    <option value="category">Category</option>
+                    <option value="global">Global (All Pages)</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Script Tag Code (`&lt;script&gt;...&lt;/script&gt;`)</label>
-                <textarea
-                  rows={6}
-                  required
-                  value={newPixelCode}
-                  onChange={(e) => setNewPixelCode(e.target.value)}
-                  placeholder="Paste your tracking script snippet here..."
-                  className="w-full p-3 bg-gray-950 text-emerald-400 font-mono text-xs rounded-xl border border-gray-800 focus:outline-hidden"
-                />
+                <label className="font-bold text-gray-900 block mb-1">Target Pages</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {PRESET_TARGETS.map((p) => (
+                    <button key={p.value} type="button" onClick={() => setSchemaTargetPages(p.value)} className={`px-3 py-1 rounded-lg text-[11px] font-bold border cursor-pointer transition-colors ${schemaTargetPages === p.value ? "bg-amber-800 text-white border-amber-800" : "bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100"}`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <input type="text" value={schemaTargetPages} onChange={(e) => setSchemaTargetPages(e.target.value)} placeholder="/products/*" className="w-full h-9 px-3 bg-gray-50 border border-gray-300 rounded-xl text-xs font-mono focus:outline-hidden" />
+                <p className="text-[10px] text-gray-400 mt-1">Use * as wildcard. Comma-separate multiple patterns: /products/*,/categories/*</p>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-xl text-xs transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-amber-800 hover:bg-amber-900 text-white font-bold rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
-                >
-                  Save &amp; Connect Web Pixel
+              <div>
+                <label className="font-bold text-gray-900 block mb-1">Schema JSON-LD Code</label>
+                <textarea rows={14} required value={schemaJson} onChange={(e) => setSchemaJson(e.target.value)} placeholder={'<script type="application/ld+json">\n{\n  "@context": "https://schema.org",\n  "@type": "Product",\n  ...\n}\n</script>'} className="w-full p-3 bg-gray-900 text-amber-200 border border-gray-800 rounded-xl text-xs font-mono focus:outline-hidden leading-relaxed" />
+                <p className="text-[10px] text-gray-400 mt-1">Paste the full script tag or just the JSON object. Both work.</p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+                <button type="button" onClick={() => setShowSchemaModal(false)} className="px-4 py-2 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-pointer hover:bg-gray-200">Cancel</button>
+                <button type="submit" disabled={savingSchema} className="px-5 py-2 bg-amber-800 text-white rounded-xl font-semibold hover:bg-amber-900 cursor-pointer disabled:opacity-50">
+                  {savingSchema ? "Saving..." : editingSchema ? "Update Schema" : "Save & Publish Schema"}
                 </button>
               </div>
             </form>

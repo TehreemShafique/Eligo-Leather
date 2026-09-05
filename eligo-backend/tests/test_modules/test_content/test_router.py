@@ -42,9 +42,10 @@ async def test_content_overview(client, auth_headers, db_session):
 # Metaobject Definitions
 # ---------------------------------------------------------------------------
 
-async def test_metaobject_definitions_requires_auth(client):
+async def test_metaobject_definitions_accessible_without_auth(client):
     resp = await client.get("/api/v1/metaobject-definitions/")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 async def test_metaobject_definitions_full_crud(client, auth_headers):
@@ -203,7 +204,9 @@ async def test_files_full_crud(client, auth_headers):
     resp = await client.post("/api/v1/files/", json=payload, headers=auth_headers)
     assert resp.status_code == 201
     body = resp.json()
-    assert body["filename"] == "hero.png"
+    assert body["filename"] == "hero.webp"
+    assert body["original_filename"] == "hero.png"
+    assert body["mime_type"] == "image/webp"
     assert body["file_size"] == 0
     file_id = body["id"]
 
@@ -211,12 +214,12 @@ async def test_files_full_crud(client, auth_headers):
     assert resp.status_code == 200
     assert len(resp.json()) == 1
 
-    resp = await client.get("/api/v1/files/", params={"mime_type": "image/png"}, headers=auth_headers)
+    resp = await client.get("/api/v1/files/", params={"mime_type": "image/webp"}, headers=auth_headers)
     assert len(resp.json()) == 1
 
     resp = await client.get(f"/api/v1/files/{file_id}", headers=auth_headers)
     assert resp.status_code == 200
-    assert resp.json()["mime_type"] == "image/png"
+    assert resp.json()["mime_type"] == "image/webp"
 
     resp = await client.patch(f"/api/v1/files/{file_id}", json={"alt_text": "New Hero"}, headers=auth_headers)
     assert resp.status_code == 200
@@ -249,9 +252,10 @@ async def test_files_invalid_body_422(client, auth_headers):
 # Menus & Menu Items
 # ---------------------------------------------------------------------------
 
-async def test_menus_requires_auth(client):
+async def test_menus_accessible_without_auth(client):
     resp = await client.get("/api/v1/menus/")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 async def test_menus_full_crud(client, auth_headers):
@@ -420,9 +424,10 @@ async def test_url_redirects_invalid_body_422(client, auth_headers):
 # Blog Posts
 # ---------------------------------------------------------------------------
 
-async def test_blog_posts_requires_auth(client):
+async def test_blog_posts_accessible_without_auth(client):
     resp = await client.get("/api/v1/blog-posts/")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 async def test_blog_posts_full_crud(client, auth_headers):
@@ -478,67 +483,4 @@ async def test_blog_posts_invalid_body_422(client, auth_headers):
     assert resp.status_code == 422
 
 
-# ---------------------------------------------------------------------------
-# Blog Comments
-# ---------------------------------------------------------------------------
 
-async def test_blog_comments_requires_auth(client):
-    resp = await client.get("/api/v1/blog-comments/")
-    assert resp.status_code == 401
-
-
-async def test_blog_comments_full_crud(client, auth_headers, db_session):
-    post = BlogPost(title="Post", handle="post-1")
-    db_session.add(post)
-    await db_session.commit()
-    await db_session.refresh(post)
-
-    resp = await client.post(
-        "/api/v1/blog-comments/",
-        json={"post_id": post.id, "author_name": "A", "author_email": "a@b.com", "content": "Nice"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body["author_name"] == "A"
-    assert body["status"] == "pending"
-    comment_id = body["id"]
-
-    resp = await client.get("/api/v1/blog-comments/", headers=auth_headers)
-    assert resp.status_code == 200
-    assert len(resp.json()) == 1
-
-    resp = await client.get("/api/v1/blog-comments/", params={"post_id": post.id}, headers=auth_headers)
-    assert len(resp.json()) == 1
-
-    resp = await client.get(f"/api/v1/blog-comments/{comment_id}", headers=auth_headers)
-    assert resp.status_code == 200
-    assert resp.json()["content"] == "Nice"
-
-    resp = await client.patch(
-        f"/api/v1/blog-comments/{comment_id}", json={"status": "approved"}, headers=auth_headers,
-    )
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "approved"
-
-    resp = await client.delete(f"/api/v1/blog-comments/{comment_id}", headers=auth_headers)
-    assert resp.status_code == 204
-
-
-async def test_blog_comments_missing_404(client, auth_headers):
-    resp = await client.get("/api/v1/blog-comments/99999", headers=auth_headers)
-    assert resp.status_code == 404
-    assert resp.json()["detail"] == "Blog comment not found"
-
-    resp = await client.patch("/api/v1/blog-comments/99999", json={"content": "x"}, headers=auth_headers)
-    assert resp.status_code == 404
-    assert resp.json()["detail"] == "Blog comment not found"
-
-    resp = await client.delete("/api/v1/blog-comments/99999", headers=auth_headers)
-    assert resp.status_code == 404
-    assert resp.json()["detail"] == "Blog comment not found"
-
-
-async def test_blog_comments_invalid_body_422(client, auth_headers):
-    resp = await client.post("/api/v1/blog-comments/", json={}, headers=auth_headers)
-    assert resp.status_code == 422
